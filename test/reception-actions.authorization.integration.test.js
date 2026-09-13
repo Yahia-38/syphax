@@ -26,7 +26,9 @@ const { RequestCookies } = await import(
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
-const { listReceptions } = await import('../lib/reception-records.js');
+const { getReceptionById, listReceptions } = await import(
+  '../lib/reception-records.js'
+);
 const { createReception } = await import(
   '../app/(protected)/receptions/actions.js'
 );
@@ -127,10 +129,40 @@ test('refuse un appel direct sans receptions.create', async () => {
   assert.equal(await database.collection('receptions').countDocuments({}), 0);
 });
 
+test('refuse la lecture d’une réception sans receptions.read', async () => {
+  const { userId } = await createUserSession('sans-lecture-reception', [
+    'receptions.create',
+  ]);
+
+  await assert.rejects(
+    getReceptionById(new ObjectId().toString(), { userId: userId.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'receptions.read',
+  );
+  await assert.rejects(
+    listReceptions({ userId: userId.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'receptions.read',
+  );
+});
+
+test('renvoie une absence pour un identifiant invalide ou inconnu', async () => {
+  const { userId } = await createUserSession('lecture-reception-absente', [
+    'receptions.read',
+  ]);
+  const options = { userId: userId.toString() };
+
+  assert.equal(await getReceptionById('identifiant-invalide', options), null);
+  assert.equal(
+    await getReceptionById(new ObjectId().toString(), options),
+    null,
+  );
+});
+
 test('enregistre une réception et la rend disponible dans l’historique', async () => {
   const { token, userId } = await createUserSession(
     'creation-reception-autorisee',
-    ['receptions.create'],
+    ['receptions.create', 'receptions.read'],
   );
   const supplierId = new ObjectId();
   const productId = new ObjectId();
@@ -169,7 +201,29 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
   const storedReception = await database.collection('receptions').findOne({
     supplierReference: 'BL-2026-0042',
   });
-  const receptions = await listReceptions();
+  const receptions = await listReceptions({ userId: userId.toString() });
+
+  await Promise.all([
+    database.collection('suppliers').updateOne(
+      { _id: supplierId },
+      { $set: { name: 'Distribution Atlas renommée' } },
+    ),
+    database.collection('products').updateOne(
+      { _id: productId },
+      {
+        $set: {
+          code: 'EAU-1L-NOUVEAU',
+          designation: 'Eau renommée',
+          'packagings.0.label': 'Nouveau pack',
+          'packagings.0.quantity': 12,
+        },
+      },
+    ),
+  ]);
+  const receptionDetail = await getReceptionById(
+    storedReception._id.toString(),
+    { userId: userId.toString() },
+  );
 
   assert.equal(
     result.message,
@@ -197,6 +251,81 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
       }],
     },
   ]);
+  assert.deepEqual(receptionDetail, {
+    id: storedReception._id.toString(),
+    supplierId: supplierId.toString(),
+    supplierName: 'Distribution Atlas',
+    receptionDate: '2026-09-13',
+    supplierReference: 'BL-2026-0042',
+    createdAt: storedReception.createdAt.toISOString(),
+    createdBy: 'creation-reception-autorisee',
+    totalAmountInCentimes: null,
+    lines: [{
+      id: storedReception.lines[0]._id.toString(),
+      productId: productId.toString(),
+      productCode: 'EAU-1L',
+      productDesignation: 'Eau 1 L',
+      baseUnit: 'BOUTEILLE',
+      quantityMode: 'PACKAGING',
+      quantityInBaseUnits: 60,
+      directQuantity: null,
+      amountInCentimes: null,
+      packaging: {
+        packagingId: packagingId.toString(),
+        label: 'Pack de 6',
+        quantity: 6,
+        count: 10,
+      },
+    }],
+  });
+});
+
+test('conserve zéro comme montant renseigné et distingue un montant absent', async () => {
+  const { userId } = await createUserSession('lecture-montants-reception', [
+    'receptions.read',
+  ]);
+  const receptionId = new ObjectId();
+
+  await database.collection('receptions').insertOne({
+    _id: receptionId,
+    supplierId: new ObjectId(),
+    supplierName: 'Fournisseur historique',
+    receptionDate: new Date('2026-09-13T00:00:00.000Z'),
+    supplierReference: 'BL-MONTANTS',
+    createdAt: new Date('2026-09-13T08:00:00.000Z'),
+    createdBy: userId,
+    totalAmountInCentimes: 0,
+    lines: [
+      {
+        _id: new ObjectId(),
+        productId: new ObjectId(),
+        productCode: 'ZERO',
+        productDesignation: 'Montant nul',
+        baseUnit: 'PIECE',
+        quantityMode: 'DIRECT',
+        quantityInBaseUnits: 5,
+        amountInCentimes: 0,
+      },
+      {
+        _id: new ObjectId(),
+        productId: new ObjectId(),
+        productCode: 'ABSENT',
+        productDesignation: 'Montant absent',
+        baseUnit: 'PIECE',
+        quantityMode: 'DIRECT',
+        quantityInBaseUnits: 2,
+      },
+    ],
+  });
+  const reception = await getReceptionById(receptionId.toString(), {
+    userId: userId.toString(),
+  });
+
+  assert.equal(reception.totalAmountInCentimes, 0);
+  assert.equal(reception.lines[0].amountInCentimes, 0);
+  assert.equal(reception.lines[0].directQuantity, 5);
+  assert.equal(reception.lines[1].amountInCentimes, null);
+  assert.equal(reception.lines[1].quantityInBaseUnits, 2);
 });
 
 test('refuse un fournisseur désactivé sans créer de réception', async () => {

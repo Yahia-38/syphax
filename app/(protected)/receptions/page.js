@@ -1,11 +1,16 @@
 import Link from 'next/link';
 
 import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
+import { BASE_UNITS, listProducts } from '../../../lib/products.js';
 import { listReceptions } from '../../../lib/reception-records.js';
-import { getMissingReceptionFormPermissions } from '../../../lib/receptions.js';
+import {
+  formatReceptionDateInput,
+  getMissingReceptionFormPermissions,
+  readReceptionHistoryState,
+} from '../../../lib/receptions.js';
 import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
-import ReceptionList from './reception-list.js';
+import ReceptionWorkspace from './reception-workspace.js';
 import SupplierWorkspace from './supplier-workspace.js';
 
 export const metadata = {
@@ -50,13 +55,20 @@ const ReceptionsPage = async ({ searchParams }) => {
     : canReadReceptions
       ? 'receptions'
       : 'fournisseurs';
+  const historyState = readReceptionHistoryState(query);
   let suppliers = [];
+  let products = [];
   let receptions = [];
 
   if (activeTab === 'fournisseurs') {
     suppliers = await listSuppliers();
   } else {
-    receptions = await listReceptions();
+    [receptions, suppliers, products] = await Promise.all([
+      listReceptions({ userId: session.userId }),
+      canCreateReception ? listSuppliers() : [],
+      canCreateReception ? listProducts({ includePackagings: true }) : [],
+    ]);
+    suppliers = suppliers.filter(({ active }) => active);
   }
 
   return (
@@ -99,27 +111,17 @@ const ReceptionsPage = async ({ searchParams }) => {
           suppliers={suppliers}
         />
       ) : (
-        <div role='tabpanel'>
-          <div className='mt-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-            <div>
-              <h2 className='text-xl font-semibold text-slate-900'>
-                Réceptions de marchandises
-              </h2>
-              <p className='mt-1 text-sm leading-6 text-slate-600'>
-                Consultez les réceptions enregistrées et leurs quantités.
-              </p>
-            </div>
-            {canCreateReception && (
-              <Link
-                className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                href='/receptions/nouvelle'
-              >
-                Nouvelle réception
-              </Link>
-            )}
-          </div>
-          <ReceptionList receptions={receptions} />
-        </div>
+        <ReceptionWorkspace
+          baseUnits={BASE_UNITS}
+          canCreateReception={canCreateReception}
+          initialDate={formatReceptionDateInput(new Date())}
+          initialHistoryPage={historyState.page}
+          initialHistoryQuery={historyState.query}
+          initialHistorySupplierId={historyState.supplierId}
+          products={products}
+          receptions={receptions}
+          suppliers={suppliers}
+        />
       )}
     </main>
   );

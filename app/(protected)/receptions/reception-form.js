@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useActionState, useMemo, useRef, useState } from 'react';
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   calculateReceptionLine,
@@ -43,17 +42,6 @@ const ReceptionLineForm = ({
 }) => {
   const product = getProduct(products, line.productId);
   const unitLabel = getUnitLabel(baseUnits, product);
-  const normalizedQuery = line.productQuery.trim().toLocaleLowerCase('fr');
-  const matchingProducts = products.filter((candidate) => {
-    if (candidate.id === line.productId) {
-      return true;
-    }
-
-    const searchableText = `${candidate.code} ${candidate.designation}`
-      .toLocaleLowerCase('fr');
-
-    return !normalizedQuery || searchableText.includes(normalizedQuery);
-  });
   const hasPackagings = Boolean(product?.packagings.length);
   const lowerUnitLabel = unitLabel.toLocaleLowerCase('fr');
 
@@ -73,21 +61,6 @@ const ReceptionLineForm = ({
         <div className='lg:col-span-2'>
           <label
             className='block text-sm font-medium text-slate-700'
-            htmlFor={`${line.id}-product-search`}
-          >
-            Rechercher dans le catalogue
-          </label>
-          <input
-            className={INPUT_CLASS}
-            id={`${line.id}-product-search`}
-            maxLength={100}
-            onChange={(event) => onChange({ productQuery: event.target.value })}
-            placeholder='Code ou désignation du produit'
-            type='search'
-            value={line.productQuery}
-          />
-          <label
-            className='mt-3 block text-sm font-medium text-slate-700'
             htmlFor={`${line.id}-product`}
           >
             Produit
@@ -102,7 +75,7 @@ const ReceptionLineForm = ({
             value={line.productId}
           >
             <option value=''>Sélectionnez un produit</option>
-            {matchingProducts.map((candidate) => (
+            {products.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
                 {candidate.code} — {candidate.designation}
               </option>
@@ -113,10 +86,6 @@ const ReceptionLineForm = ({
               {errors.product}
             </p>
           )}
-          <p className='mt-2 text-xs text-slate-500'>
-            {matchingProducts.length} produit{matchingProducts.length > 1 ? 's' : ''}
-            {' '}proposé{matchingProducts.length > 1 ? 's' : ''}.
-          </p>
         </div>
 
         <div className='lg:col-span-2'>
@@ -351,7 +320,7 @@ const ReceptionLineSummary = ({
 const ReceptionDraftForm = ({
   baseUnits,
   initialDate,
-  onStartAnother,
+  onSuccess,
   products,
   suppliers,
 }) => {
@@ -374,6 +343,12 @@ const ReceptionDraftForm = ({
       : null,
     [lineDraft, lineDraftProduct],
   );
+
+  useEffect(() => {
+    if (state.message) {
+      onSuccess(state.message);
+    }
+  }, [onSuccess, state.message]);
 
   const updateLineDraft = (changes) => {
     setLineDraft((currentLine) => ({ ...currentLine, ...changes }));
@@ -451,31 +426,7 @@ const ReceptionDraftForm = ({
   };
 
   if (state.message) {
-    return (
-      <section className='mt-6 rounded-2xl border border-green-200 bg-green-50 p-5 sm:p-6'>
-        <p className='font-semibold text-green-900' role='status'>
-          {state.message}
-        </p>
-        <p className='mt-1 text-sm leading-6 text-green-800'>
-          Elle est maintenant disponible dans l’historique des réceptions.
-        </p>
-        <div className='mt-4 flex flex-wrap gap-3'>
-          <Link
-            className='rounded-lg bg-green-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-green-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700'
-            href='/receptions'
-          >
-            Voir les réceptions
-          </Link>
-          <button
-            className='rounded-lg border border-green-300 bg-white px-4 py-2.5 text-sm font-medium text-green-800 transition hover:bg-green-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700'
-            onClick={onStartAnother}
-            type='button'
-          >
-            Saisir une autre réception
-          </button>
-        </div>
-      </section>
-    );
+    return null;
   }
 
   return (
@@ -672,19 +623,4 @@ const ReceptionDraftForm = ({
   );
 };
 
-const ReceptionForm = ({ baseUnits, initialDate, products, suppliers }) => {
-  const [draftKey, setDraftKey] = useState(0);
-
-  return (
-    <ReceptionDraftForm
-      baseUnits={baseUnits}
-      initialDate={initialDate}
-      key={draftKey}
-      onStartAnother={() => setDraftKey((currentKey) => currentKey + 1)}
-      products={products}
-      suppliers={suppliers}
-    />
-  );
-};
-
-export default ReceptionForm;
+export default ReceptionDraftForm;

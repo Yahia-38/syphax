@@ -1,6 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
+
+import {
+  buildReceptionHistoryHref,
+  formatReceptionDate,
+} from '../../../lib/receptions.js';
 
 const RECEPTIONS_PER_PAGE = 10;
 
@@ -10,18 +16,6 @@ const BASE_UNIT_LABELS = new Map([
   ['BOITE', 'boîtes'],
   ['SACHET', 'sachets'],
 ]);
-
-const formatReceptionDate = (value) => {
-  if (!value) {
-    return 'Date non renseignée';
-  }
-
-  return new Intl.DateTimeFormat('fr-DZ', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(`${value}T12:00:00.000Z`));
-};
 
 const formatLineSummary = (line) => {
   const product = line.productDesignation
@@ -37,10 +31,15 @@ const formatLineSummary = (line) => {
   return `${product} (${line.quantityInBaseUnits} ${unit})`;
 };
 
-const ReceptionList = ({ receptions }) => {
-  const [query, setQuery] = useState('');
-  const [supplierId, setSupplierId] = useState('ALL');
-  const [currentPage, setCurrentPage] = useState(1);
+const ReceptionList = ({
+  initialPage = 1,
+  initialQuery = '',
+  initialSupplierId = 'ALL',
+  receptions,
+}) => {
+  const [query, setQuery] = useState(initialQuery);
+  const [supplierId, setSupplierId] = useState(initialSupplierId);
+  const [currentPage, setCurrentPage] = useState(initialPage);
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
   const filtersActive = Boolean(normalizedQuery || supplierId !== 'ALL');
   const supplierOptions = useMemo(() => {
@@ -80,6 +79,17 @@ const ReceptionList = ({ receptions }) => {
     firstReceptionIndex,
     firstReceptionIndex + RECEPTIONS_PER_PAGE,
   );
+  const historyHref = buildReceptionHistoryHref({
+    page: activePage,
+    query,
+    supplierId,
+  });
+
+  const getReceptionHref = (receptionId) => {
+    const parameters = new URLSearchParams({ retour: historyHref });
+
+    return `/receptions/${receptionId}?${parameters.toString()}`;
+  };
 
   const resetFilters = () => {
     setQuery('');
@@ -168,9 +178,12 @@ const ReceptionList = ({ receptions }) => {
               <article className='p-5 sm:p-6' key={reception.id}>
                 <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
                   <div className='min-w-0'>
-                    <p className='break-words font-semibold text-slate-900'>
+                    <Link
+                      className='break-words font-semibold text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                      href={getReceptionHref(reception.id)}
+                    >
                       {reception.supplierReference}
-                    </p>
+                    </Link>
                     <p className='mt-1 text-sm text-slate-600'>
                       {reception.supplierName}
                     </p>
@@ -187,6 +200,13 @@ const ReceptionList = ({ receptions }) => {
                     ? reception.lines.map(formatLineSummary).join(' · ')
                     : 'Aucune ligne enregistrée'}
                 </p>
+                <Link
+                  className='mt-4 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                  href={getReceptionHref(reception.id)}
+                >
+                  Voir la fiche
+                  <span aria-hidden='true' className='ml-1'>→</span>
+                </Link>
               </article>
             ))}
           </div>
