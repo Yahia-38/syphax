@@ -21,6 +21,16 @@ const formatMoney = (amountInCentimes) =>
     minimumFractionDigits: 0,
   }).format(amountInCentimes / 100)} DA`;
 
+const formatStockQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
+  maximumFractionDigits: 0,
+}).format(quantity);
+
+const getStockTextClass = (quantity) => quantity < 0
+  ? 'text-red-700'
+  : quantity > 0
+    ? 'text-emerald-700'
+    : 'text-slate-600';
+
 const SortableHeader = ({
   align = 'left',
   className = '',
@@ -58,6 +68,7 @@ const ProductTable = ({
 }) => {
   const searchRef = useRef(null);
   const [query, setQuery] = useState(initialQuery);
+  const [stockStatus, setStockStatus] = useState('ALL');
   const [unit, setUnit] = useState('ALL');
   const [onlyMissingPrice, setOnlyMissingPrice] = useState(false);
   const [sortKey, setSortKey] = useState('code');
@@ -76,9 +87,23 @@ const ProductTable = ({
       : 0,
     [canReadPricing, products],
   );
+  const stockCounts = useMemo(() => ({
+    negative: products.filter(
+      (product) => product.stockQuantityInBaseUnits < 0,
+    ).length,
+    positive: products.filter(
+      (product) => product.stockQuantityInBaseUnits > 0,
+    ).length,
+    zero: products.filter(
+      (product) => product.stockQuantityInBaseUnits === 0,
+    ).length,
+  }), [products]);
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
   const filtersActive = Boolean(
-    normalizedQuery || unit !== 'ALL' || onlyMissingPrice,
+    normalizedQuery
+    || stockStatus !== 'ALL'
+    || unit !== 'ALL'
+    || onlyMissingPrice,
   );
   const filteredProducts = useMemo(() => {
     const matchingProducts = products.filter((product) => {
@@ -88,12 +113,26 @@ const ProductTable = ({
       const matchesUnit = unit === 'ALL' || product.baseUnit === unit;
       const matchesPrice = !onlyMissingPrice
         || !Number.isSafeInteger(product.salePriceCentimes);
+      const matchesStock = stockStatus === 'ALL'
+        || (stockStatus === 'POSITIVE'
+          && product.stockQuantityInBaseUnits > 0)
+        || (stockStatus === 'ZERO'
+          && product.stockQuantityInBaseUnits === 0)
+        || (stockStatus === 'NEGATIVE'
+          && product.stockQuantityInBaseUnits < 0);
 
-      return matchesQuery && matchesUnit && matchesPrice;
+      return matchesQuery && matchesUnit && matchesPrice && matchesStock;
     });
     const direction = sortDir === 'asc' ? 1 : -1;
 
     return matchingProducts.sort((firstProduct, secondProduct) => {
+      if (sortKey === 'stockQuantityInBaseUnits') {
+        return (
+          firstProduct.stockQuantityInBaseUnits
+          - secondProduct.stockQuantityInBaseUnits
+        ) * direction;
+      }
+
       if (sortKey === 'salePriceCentimes') {
         const firstPriceMissing = !Number.isSafeInteger(
           firstProduct.salePriceCentimes,
@@ -124,7 +163,15 @@ const ProductTable = ({
 
       return firstValue.localeCompare(secondValue, 'fr') * direction;
     });
-  }, [normalizedQuery, onlyMissingPrice, products, sortDir, sortKey, unit]);
+  }, [
+    normalizedQuery,
+    onlyMissingPrice,
+    products,
+    sortDir,
+    sortKey,
+    stockStatus,
+    unit,
+  ]);
   const totalPages = Math.max(
     1,
     Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE),
@@ -163,6 +210,7 @@ const ProductTable = ({
 
   const resetFilters = () => {
     setQuery('');
+    setStockStatus('ALL');
     setUnit('ALL');
     setOnlyMissingPrice(false);
     setCurrentPage(1);
@@ -263,6 +311,54 @@ const ProductTable = ({
                 Sans prix ({missingPriceCount})
               </button>
             )}
+
+            <div
+              aria-label='Filtrer selon le stock'
+              className='flex flex-wrap gap-2'
+              role='group'
+            >
+              <button
+                aria-pressed={stockStatus === 'POSITIVE'}
+                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${stockStatus === 'POSITIVE' ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100'}`}
+                onClick={() => {
+                  setStockStatus((currentStatus) => (
+                    currentStatus === 'POSITIVE' ? 'ALL' : 'POSITIVE'
+                  ));
+                  setCurrentPage(1);
+                }}
+                type='button'
+              >
+                En stock ({stockCounts.positive})
+              </button>
+              <button
+                aria-pressed={stockStatus === 'ZERO'}
+                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${stockStatus === 'ZERO' ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100'}`}
+                onClick={() => {
+                  setStockStatus((currentStatus) => (
+                    currentStatus === 'ZERO' ? 'ALL' : 'ZERO'
+                  ));
+                  setCurrentPage(1);
+                }}
+                type='button'
+              >
+                Stock nul ({stockCounts.zero})
+              </button>
+              {stockCounts.negative > 0 && (
+                <button
+                  aria-pressed={stockStatus === 'NEGATIVE'}
+                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${stockStatus === 'NEGATIVE' ? 'border-red-700 bg-red-700 text-white' : 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'}`}
+                  onClick={() => {
+                    setStockStatus((currentStatus) => (
+                      currentStatus === 'NEGATIVE' ? 'ALL' : 'NEGATIVE'
+                    ));
+                    setCurrentPage(1);
+                  }}
+                  type='button'
+                >
+                  Stock négatif ({stockCounts.negative})
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -291,7 +387,7 @@ const ProductTable = ({
             <thead>
               <tr>
                 <SortableHeader
-                  className='w-[30%] sm:w-[24%]'
+                  className='w-[30%] sm:w-[22%] lg:w-[18%]'
                   label='Code'
                   onSort={() => updateSort('code')}
                   sortDir={sortDir}
@@ -305,16 +401,24 @@ const ProductTable = ({
                   sorted={sortKey === 'designation'}
                 />
                 <SortableHeader
-                  className='hidden w-[18%] md:table-cell'
+                  className='hidden w-[15%] lg:table-cell'
                   label='Unité de base'
                   onSort={() => updateSort('baseUnit')}
                   sortDir={sortDir}
                   sorted={sortKey === 'baseUnit'}
                 />
+                <SortableHeader
+                  align='right'
+                  className='hidden w-[18%] sm:table-cell'
+                  label='Stock'
+                  onSort={() => updateSort('stockQuantityInBaseUnits')}
+                  sortDir={sortDir}
+                  sorted={sortKey === 'stockQuantityInBaseUnits'}
+                />
                 {canReadPricing && (
                   <SortableHeader
                     align='right'
-                    className='hidden w-[20%] sm:table-cell'
+                    className='hidden w-[18%] md:table-cell'
                     label='Prix de vente TTC'
                     onSort={() => updateSort('salePriceCentimes')}
                     sortDir={sortDir}
@@ -347,13 +451,13 @@ const ProductTable = ({
                       href={`/produits/${product.id}`}
                     >
                       <span>{product.designation}</span>
-                      <span className='mt-1 flex flex-wrap items-center gap-1.5 md:hidden'>
+                      <span className='mt-1 flex flex-wrap items-center gap-1.5 lg:hidden'>
                         <span className='rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600'>
                           {BASE_UNIT_LABELS.get(product.baseUnit)
                             ?? product.baseUnit}
                         </span>
                         {canReadPricing && (
-                          <span className='sm:hidden'>
+                          <span className='md:hidden'>
                             {Number.isSafeInteger(
                               product.salePriceCentimes,
                             ) ? (
@@ -367,16 +471,34 @@ const ProductTable = ({
                             )}
                           </span>
                         )}
+                        <span
+                          className={`text-xs font-semibold tabular-nums sm:hidden ${getStockTextClass(product.stockQuantityInBaseUnits)}`}
+                        >
+                          Stock : {formatStockQuantity(
+                            product.stockQuantityInBaseUnits,
+                          )}
+                        </span>
                       </span>
                     </Link>
                   </td>
-                  <td className='hidden px-4 py-3 sm:px-6 md:table-cell'>
+                  <td className='hidden px-4 py-3 sm:px-6 lg:table-cell'>
                     <span className='rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600'>
                       {BASE_UNIT_LABELS.get(product.baseUnit) ?? product.baseUnit}
                     </span>
                   </td>
+                  <td className='hidden px-4 py-3 text-right sm:table-cell sm:px-6'>
+                    <span
+                      className={`font-semibold tabular-nums ${getStockTextClass(product.stockQuantityInBaseUnits)}`}
+                    >
+                      {formatStockQuantity(product.stockQuantityInBaseUnits)}
+                    </span>
+                    <span className='mt-0.5 block text-[11px] text-slate-500'>
+                      {BASE_UNIT_LABELS.get(product.baseUnit)
+                        ?? product.baseUnit}
+                    </span>
+                  </td>
                   {canReadPricing && (
-                    <td className='hidden px-4 py-3 text-right sm:table-cell sm:px-6'>
+                    <td className='hidden px-4 py-3 text-right md:table-cell sm:px-6'>
                       {Number.isSafeInteger(product.salePriceCentimes) ? (
                         <span className='font-semibold tabular-nums text-slate-900'>
                           {formatMoney(product.salePriceCentimes)}

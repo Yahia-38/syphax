@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 const TABS = [
+  { label: 'Stock', section: 'stock' },
   { label: 'Identification & traçabilité', section: 'identification' },
   { label: 'Tarification', section: 'tarification' },
   { label: 'Conditionnements', section: 'conditionnements' },

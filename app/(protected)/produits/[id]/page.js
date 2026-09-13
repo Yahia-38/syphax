@@ -17,6 +17,7 @@ export const metadata = {
 
 const SECTIONS = new Set([
   'identification',
+  'stock',
   'tarification',
   'conditionnements',
 ]);
@@ -39,6 +40,95 @@ const formatPriceInput = (amountInCentimes) => {
   }
 
   return (amountInCentimes / 100).toFixed(2).replace(/\.00$/u, '');
+};
+
+const formatStockQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
+  maximumFractionDigits: 0,
+}).format(quantity);
+
+const StockSection = ({ baseUnitLabel, product }) => {
+  const { stock } = product;
+  const stockTone = stock.quantityInBaseUnits < 0
+    ? 'border-red-200 bg-red-50 text-red-800'
+    : stock.quantityInBaseUnits > 0
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : 'border-slate-200 bg-slate-50 text-slate-700';
+
+  return (
+    <div
+      aria-labelledby='stock-tab'
+      className='space-y-6'
+      id='stock-panel'
+      role='tabpanel'
+    >
+      <section
+        aria-labelledby='current-stock-title'
+        className={`rounded-2xl border p-6 shadow-sm ${stockTone}`}
+      >
+        <h2
+          className='text-sm font-bold uppercase tracking-[0.08em]'
+          id='current-stock-title'
+        >
+          Stock actuel
+        </h2>
+        <p className='mt-3 text-4xl font-bold tabular-nums'>
+          {formatStockQuantity(stock.quantityInBaseUnits)}
+        </p>
+        <p className='mt-1 text-sm font-medium'>
+          en {baseUnitLabel.toLocaleLowerCase('fr')}
+        </p>
+        {stock.quantityInBaseUnits < 0 && (
+          <p className='mt-4 text-sm leading-6'>
+            Le stock est négatif : les sorties enregistrées dépassent les
+            entrées disponibles.
+          </p>
+        )}
+      </section>
+
+      <section
+        aria-labelledby='stock-summary-title'
+        className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+      >
+        <div className='border-b border-slate-100 px-6 py-5'>
+          <h2
+            className='text-lg font-semibold text-slate-900'
+            id='stock-summary-title'
+          >
+            Détail des mouvements
+          </h2>
+          <p className='mt-1 text-sm text-slate-600'>
+            Quantités cumulées dans l’unité de base du produit.
+          </p>
+        </div>
+        <dl className='grid sm:grid-cols-2 lg:grid-cols-4'>
+          <div className='border-b border-slate-100 px-6 py-5 sm:border-r lg:border-b-0'>
+            <dt className='text-sm font-medium text-slate-500'>Entrées</dt>
+            <dd className='mt-2 text-2xl font-bold tabular-nums text-emerald-700'>
+              +{formatStockQuantity(stock.inputQuantityInBaseUnits)}
+            </dd>
+          </div>
+          <div className='border-b border-slate-100 px-6 py-5 lg:border-b-0 lg:border-r'>
+            <dt className='text-sm font-medium text-slate-500'>Sorties</dt>
+            <dd className='mt-2 text-2xl font-bold tabular-nums text-red-700'>
+              −{formatStockQuantity(stock.outputQuantityInBaseUnits)}
+            </dd>
+          </div>
+          <div className='border-b border-slate-100 px-6 py-5 sm:border-b-0 sm:border-r'>
+            <dt className='text-sm font-medium text-slate-500'>Mouvements</dt>
+            <dd className='mt-2 text-2xl font-bold tabular-nums text-slate-900'>
+              {formatStockQuantity(stock.movementCount)}
+            </dd>
+          </div>
+          <div className='px-6 py-5'>
+            <dt className='text-sm font-medium text-slate-500'>Dernier mouvement</dt>
+            <dd className='mt-2 text-sm font-semibold text-slate-900'>
+              {formatDate(stock.lastMovementAt)}
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  );
 };
 
 const IdentificationSection = ({
@@ -231,6 +321,19 @@ const ProductPage = async ({ params, searchParams }) => {
                 <span className='rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[13px] font-semibold text-blue-700'>
                   Unité de base : {baseUnitLabel}
                 </span>
+                <span
+                  className={`rounded-md border px-2.5 py-1 text-[13px] font-semibold tabular-nums ${
+                    product.stock.quantityInBaseUnits < 0
+                      ? 'border-red-100 bg-red-50 text-red-700'
+                      : product.stock.quantityInBaseUnits > 0
+                        ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  Stock : {formatStockQuantity(
+                    product.stock.quantityInBaseUnits,
+                  )}
+                </span>
                 {canReadPricing && (
                   <span
                     className={`rounded-md border px-2.5 py-1 text-[13px] font-semibold ${
@@ -282,6 +385,13 @@ const ProductPage = async ({ params, searchParams }) => {
             baseUnitLabel={baseUnitLabel}
             canUpdateProduct={canUpdateProduct}
             editing={editingProduct}
+            product={product}
+          />
+        )}
+
+        {activeSection === 'stock' && (
+          <StockSection
+            baseUnitLabel={baseUnitLabel}
             product={product}
           />
         )}
