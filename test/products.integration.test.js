@@ -153,12 +153,48 @@ test('liste les produits par code et filtre sur le code ou la désignation', asy
     'code',
     'designation',
     'id',
+    'salePriceCentimes',
   ]);
 
   const productsByDesignation = await listProducts({ query: '[Spéciale]' });
 
   assert.equal(productsByDesignation.length, 1);
   assert.equal(productsByDesignation[0].code, 'CATALOGUE-A');
+});
+
+test('liste le prix de vente en centimes ou null lorsqu’il est absent', async () => {
+  const authorId = new ObjectId().toString();
+  const productWithPrice = await createProduct({
+    code: 'LISTE-PRIX-A',
+    designation: 'Produit tarifé',
+    baseUnit: 'PIECE',
+    createdBy: authorId,
+  });
+
+  await createProduct({
+    code: 'LISTE-PRIX-B',
+    designation: 'Produit sans tarif',
+    baseUnit: 'BOITE',
+    createdBy: authorId,
+  });
+  await updateProductSalePrice({
+    productId: productWithPrice.product.id,
+    price: '275,50',
+    updatedBy: authorId,
+  });
+
+  const products = await listProducts({ query: 'LISTE-PRIX-' });
+
+  assert.deepEqual(
+    products.map((product) => ({
+      code: product.code,
+      salePriceCentimes: product.salePriceCentimes,
+    })),
+    [
+      { code: 'LISTE-PRIX-A', salePriceCentimes: 27550 },
+      { code: 'LISTE-PRIX-B', salePriceCentimes: null },
+    ],
+  );
 });
 
 test('retourne la fiche détaillée d’un produit et son créateur', async () => {
