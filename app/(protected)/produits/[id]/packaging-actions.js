@@ -1,0 +1,68 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
+import { addProductPackaging as savePackaging } from '../../../../lib/products.js';
+import { requireSession } from '../../../../lib/sessions.js';
+
+const readTextField = (formData, name) => {
+  const value = formData.get(name);
+  return typeof value === 'string' ? value : '';
+};
+
+export const addProductPackaging = async (
+  productId,
+  previousState,
+  formData,
+) => {
+  const session = await requireSession();
+  const values = {
+    label: readTextField(formData, 'label'),
+    quantity: readTextField(formData, 'quantity'),
+  };
+  const previousRevision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision
+    : 0;
+  const revision = previousRevision + 1;
+
+  try {
+    const result = await savePackaging({
+      productId,
+      ...values,
+      createdBy: session.userId,
+    });
+
+    if (result.errors) {
+      return { errors: result.errors, message: null, revision, values };
+    }
+
+    if (result.notFound) {
+      return {
+        errors: { form: 'Ce produit n’existe plus.' },
+        message: null,
+        revision,
+        values,
+      };
+    }
+
+    revalidatePath(`/produits/${productId}`);
+
+    return {
+      errors: {},
+      message: `Le conditionnement ${result.packaging.label} a été ajouté.`,
+      revision,
+      values: { label: '', quantity: '' },
+    };
+  } catch (error) {
+    console.error('Échec de l’ajout du conditionnement :', error);
+
+    return {
+      errors: {
+        form: 'L’ajout du conditionnement est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+      values,
+    };
+  }
+};

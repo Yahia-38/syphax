@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BASE_UNITS, validateProduct } from '../lib/products.js';
+import {
+  BASE_UNITS,
+  validateProduct,
+  validateProductPackaging,
+} from '../lib/products.js';
 
 test('normalise le code et la désignation', () => {
   const result = validateProduct({
@@ -96,5 +100,19 @@ test('accepte uniquement les quatre codes d’unité stables', () => {
   assert.equal(
     invalid.errors.baseUnit,
     'Sélectionnez une unité de base valide.',
+  );
+});
+
+test('valide et normalise un conditionnement supplémentaire', () => {
+  assert.deepEqual(
+    validateProductPackaging({ label: '  Pack de 6  ', quantity: ' 6 ' }),
+    { data: { label: 'Pack de 6', quantity: 6 } },
+  );
+  assert.deepEqual(
+    validateProductPackaging({ label: ' ', quantity: '1.5' }).errors,
+    {
+      label: 'Le libellé est obligatoire.',
+      quantity: 'Saisissez une quantité entière supérieure ou égale à 2.',
+    },
   );
 });

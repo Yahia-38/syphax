@@ -13,6 +13,7 @@ testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
 const {
+  addProductPackaging,
   createProduct,
   deleteProduct,
   getProductById,
@@ -183,6 +184,7 @@ test('retourne la fiche détaillée d’un produit et son créateur', async () =
     createdAt: product.createdAt,
     createdBy: 'gestionnaire',
     designation: 'Produit avec fiche',
+    packagings: [],
     updatedAt: null,
     updatedBy: null,
   });
@@ -285,4 +287,63 @@ test('supprime uniquement le produit demandé', async () => {
   assert.deepEqual(await deleteProduct('identifiant-invalide'), {
     notFound: true,
   });
+});
+
+test('ajoute un conditionnement à un produit avec sa traçabilité', async () => {
+  const authorId = new ObjectId();
+  const product = await createProduct({
+    code: 'PACK-01',
+    designation: 'Produit conditionné',
+    baseUnit: 'BOUTEILLE',
+    createdBy: authorId.toString(),
+  });
+  const result = await addProductPackaging({
+    productId: product.product.id,
+    label: '  Pack de 6  ',
+    quantity: '6',
+    createdBy: authorId.toString(),
+  });
+
+  assert.equal(result.packaging.label, 'Pack de 6');
+  assert.equal(result.packaging.quantity, 6);
+
+  const storedProduct = await database.collection('products').findOne({
+    _id: new ObjectId(product.product.id),
+  });
+  const [packaging] = storedProduct.packagings;
+
+  assert.ok(packaging._id instanceof ObjectId);
+  assert.equal(packaging.label, 'Pack de 6');
+  assert.equal(packaging.quantity, 6);
+  assert.ok(packaging.createdAt instanceof Date);
+  assert.ok(packaging.createdBy.equals(authorId));
+  assert.deepEqual((await getProductById(product.product.id)).packagings, [
+    {
+      id: packaging._id.toString(),
+      label: 'Pack de 6',
+      quantity: 6,
+    },
+  ]);
+});
+
+test('crée un produit avec un conditionnement initial facultatif', async () => {
+  const authorId = new ObjectId();
+  const result = await createProduct({
+    code: 'PACK-INITIAL-01',
+    designation: 'Produit avec conditionnement initial',
+    baseUnit: 'PIECE',
+    packaging: {
+      label: 'Carton de 24',
+      quantity: '24',
+    },
+    createdBy: authorId.toString(),
+  });
+  const storedProduct = await database.collection('products').findOne({
+    _id: new ObjectId(result.product.id),
+  });
+
+  assert.equal(storedProduct.packagings.length, 1);
+  assert.equal(storedProduct.packagings[0].label, 'Carton de 24');
+  assert.equal(storedProduct.packagings[0].quantity, 24);
+  assert.ok(storedProduct.packagings[0].createdBy.equals(authorId));
 });

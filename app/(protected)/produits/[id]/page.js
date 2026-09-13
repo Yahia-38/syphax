@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { requireSession } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
+import PackagingForm from './packaging-form.js';
 
 export const metadata = {
   title: 'Fiche produit | Syphax',
@@ -33,6 +34,7 @@ const ProductPage = async ({ params }) => {
 
   const baseUnit = BASE_UNITS.find((unit) => unit.code === product.baseUnit);
   const baseUnitLabel = baseUnit?.label ?? product.baseUnit;
+  const baseUnitPluralLabel = `${baseUnitLabel.toLocaleLowerCase('fr')}s`;
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -145,14 +147,39 @@ const ProductPage = async ({ params }) => {
               </p>
             </div>
 
-            <div className='mt-4 rounded-xl border border-dashed border-slate-300 p-5'>
+            <div className='mt-4 rounded-xl border border-slate-200 p-5'>
               <h3 className='font-semibold text-slate-900'>
                 Conditionnements supplémentaires
               </h3>
-              <p className='mt-2 text-sm leading-6 text-slate-600'>
-                Aucun pack, carton ou autre conditionnement avec quantité de
-                conversion n’est encore défini pour ce produit.
-              </p>
+              {product.packagings.length > 0 ? (
+                <ul className='mt-4 divide-y divide-slate-100'>
+                  {product.packagings.map((packaging) => (
+                    <li
+                      className='flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0'
+                      key={packaging.id}
+                    >
+                      <span className='text-sm font-medium text-slate-900'>
+                        {packaging.label}
+                      </span>
+                      <span className='text-sm text-slate-600'>
+                        {packaging.quantity} {baseUnitPluralLabel}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className='mt-2 text-sm leading-6 text-slate-600'>
+                  Aucun pack, carton ou autre conditionnement avec quantité de
+                  conversion n’est encore défini pour ce produit.
+                </p>
+              )}
+            </div>
+
+            <div className='mt-4'>
+              <PackagingForm
+                baseUnitLabel={baseUnitLabel}
+                productId={product.id}
+              />
             </div>
           </section>
         </div>

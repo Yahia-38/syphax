@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { BASE_UNITS, getProductById } from '../../../../../lib/products.js';
 import { requireSession } from '../../../../../lib/sessions.js';
+import PackagingForm from '../packaging-form.js';
 import EditProductForm from './edit-form.js';
 
 export const metadata = {
@@ -18,6 +19,9 @@ const EditProductPage = async ({ params }) => {
   if (!product) {
     notFound();
   }
+
+  const baseUnit = BASE_UNITS.find((unit) => unit.code === product.baseUnit);
+  const baseUnitLabel = baseUnit?.label ?? product.baseUnit;
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -41,6 +45,13 @@ const EditProductPage = async ({ params }) => {
 
         <section className='mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8'>
           <EditProductForm baseUnits={BASE_UNITS} product={product} />
+        </section>
+
+        <section className='mt-6'>
+          <PackagingForm
+            baseUnitLabel={baseUnitLabel}
+            productId={product.id}
+          />
         </section>
       </div>
     </main>

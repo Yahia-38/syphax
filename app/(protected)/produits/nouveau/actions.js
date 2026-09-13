@@ -14,6 +14,8 @@ export const createProduct = async (previousState, formData) => {
     code: readTextField(formData, 'code'),
     designation: readTextField(formData, 'designation'),
     baseUnit: readTextField(formData, 'baseUnit'),
+    label: readTextField(formData, 'label'),
+    quantity: readTextField(formData, 'quantity'),
   };
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
@@ -22,7 +24,13 @@ export const createProduct = async (previousState, formData) => {
 
   try {
     const result = await saveProduct({
-      ...values,
+      code: values.code,
+      designation: values.designation,
+      baseUnit: values.baseUnit,
+      packaging: {
+        label: values.label,
+        quantity: values.quantity,
+      },
       createdBy: session.userId,
     });
 
@@ -39,7 +47,13 @@ export const createProduct = async (previousState, formData) => {
       errors: {},
       message: `Le produit ${result.product.code} a été créé avec succès.`,
       revision,
-      values: { code: '', designation: '', baseUnit: '' },
+      values: {
+        code: '',
+        designation: '',
+        baseUnit: '',
+        label: '',
+        quantity: '',
+      },
     };
   } catch (error) {
     console.error('Échec de la création du produit :', error);
