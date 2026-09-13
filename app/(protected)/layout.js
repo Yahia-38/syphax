@@ -10,6 +10,10 @@ const ProtectedLayout = async ({ children }) => {
     <div className='min-h-screen bg-slate-50'>
       <Navbar
         canReadProducts={permissions.includes('products.read')}
+        canReadReceptions={
+          permissions.includes('receptions.read')
+          || permissions.includes('suppliers.read')
+        }
         username={session.username}
       />
       {children}

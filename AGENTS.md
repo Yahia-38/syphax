@@ -22,3 +22,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Run only tests targeted at the code being changed.
 - Never run the full test suite unless the user explicitly asks for it.
+
+## Syphax access policy
+
+- When adding permissions, grant all of them to the `yahia` account through
+  its dedicated full-access role. Do not automatically grant them to other
+  accounts or shared roles.

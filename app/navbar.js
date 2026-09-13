@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { logout } from './actions.js';
 
-const Navbar = ({ canReadProducts, username }) => {
+const Navbar = ({ canReadProducts, canReadReceptions, username }) => {
   return (
     <header className='border-b border-slate-200 bg-white'>
       <nav
@@ -29,6 +29,14 @@ const Navbar = ({ canReadProducts, username }) => {
               href='/produits'
             >
               Produits
+            </Link>
+          )}
+          {canReadReceptions && (
+            <Link
+              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+              href='/receptions'
+            >
+              Réceptions
             </Link>
           )}
         </div>
