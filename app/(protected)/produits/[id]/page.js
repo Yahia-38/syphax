@@ -5,6 +5,7 @@ import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { requireSession } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
 import PackagingForm from './packaging-form.js';
+import PricingForm from './pricing-form.js';
 
 export const metadata = {
   title: 'Fiche produit | Syphax',
@@ -20,6 +21,25 @@ const formatDate = (value) => {
     timeStyle: 'short',
     timeZone: 'Africa/Algiers',
   }).format(new Date(value));
+};
+
+const formatMoney = (amountInCentimes) => {
+  if (!Number.isSafeInteger(amountInCentimes)) {
+    return 'Non renseigné';
+  }
+
+  return `${new Intl.NumberFormat('fr-DZ', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(amountInCentimes / 100)} DA`;
+};
+
+const formatPriceInput = (amountInCentimes) => {
+  if (!Number.isSafeInteger(amountInCentimes)) {
+    return '';
+  }
+
+  return (amountInCentimes / 100).toFixed(2).replace(/\.00$/u, '');
 };
 
 const ProductPage = async ({ params }) => {
@@ -58,13 +78,7 @@ const ProductPage = async ({ params }) => {
           </p>
         </div>
 
-        <div className='flex gap-2'>
-          <Link
-            className='rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href={`/produits/${product.id}/modifier`}
-          >
-            Modifier
-          </Link>
+        <div>
           <DeleteProductButton
             product={{
               id: product.id,
@@ -119,6 +133,74 @@ const ProductPage = async ({ params }) => {
                 </dd>
               </div>
             </dl>
+          </section>
+
+          <section
+            aria-labelledby='pricing-title'
+            className='rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'
+          >
+            <h2
+              className='text-lg font-semibold text-slate-900'
+              id='pricing-title'
+            >
+              Tarification
+            </h2>
+            <p className='mt-1 text-sm leading-6 text-slate-600'>
+              Le prix de vente est TTC et s’applique à l’unité de base.
+            </p>
+
+            <dl className='mt-5 grid gap-4 sm:grid-cols-2'>
+              <div className='rounded-xl border border-blue-100 bg-blue-50 p-4'>
+                <dt className='text-sm font-medium text-blue-700'>
+                  Prix de vente par {baseUnitLabel.toLocaleLowerCase('fr')}
+                </dt>
+                <dd className='mt-2 text-2xl font-bold text-slate-900'>
+                  {formatMoney(product.salePrice?.amountInCentimes)}
+                </dd>
+                <p className='mt-1 text-xs text-slate-600'>TTC</p>
+              </div>
+              <div className='rounded-xl border border-slate-200 bg-slate-50 p-4'>
+                <dt className='text-sm font-medium text-slate-600'>
+                  Dernier coût d’achat accepté
+                </dt>
+                <dd className='mt-2 text-lg font-semibold text-slate-900'>
+                  Non disponible
+                </dd>
+                <p className='mt-1 text-xs leading-5 text-slate-500'>
+                  Disponible après l’intégration et le traitement des factures.
+                </p>
+              </div>
+            </dl>
+
+            <PricingForm
+              baseUnitLabel={baseUnitLabel}
+              currentPrice={formatPriceInput(
+                product.salePrice?.amountInCentimes,
+              )}
+              productId={product.id}
+            />
+
+            {product.salePriceHistory.length > 0 && (
+              <div className='mt-6'>
+                <h3 className='font-semibold text-slate-900'>
+                  Historique du prix de vente
+                </h3>
+                <ul className='mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 px-4'>
+                  {product.salePriceHistory.map((entry) => (
+                    <li className='py-4' key={entry.id}>
+                      <p className='text-sm font-medium text-slate-900'>
+                        {formatMoney(entry.oldAmountInCentimes)} →{' '}
+                        {formatMoney(entry.newAmountInCentimes)}
+                      </p>
+                      <p className='mt-1 text-xs text-slate-500'>
+                        {formatDate(entry.changedAt)} ·{' '}
+                        {entry.changedBy ?? 'Compte indisponible'}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <section

@@ -5,6 +5,7 @@ import {
   BASE_UNITS,
   validateProduct,
   validateProductPackaging,
+  validateProductSalePrice,
 } from '../lib/products.js';
 
 test('normalise le code et la désignation', () => {
@@ -115,4 +116,20 @@ test('valide et normalise un conditionnement supplémentaire', () => {
       quantity: 'Saisissez une quantité entière supérieure ou égale à 2.',
     },
   );
+});
+
+test('valide un prix de vente en centimes de dinar', () => {
+  assert.deepEqual(validateProductSalePrice(' 150 '), {
+    data: { amountInCentimes: 15000 },
+  });
+  assert.deepEqual(validateProductSalePrice('150,50'), {
+    data: { amountInCentimes: 15050 },
+  });
+
+  for (const price of ['', '0', '-1', '1.234', 'prix']) {
+    assert.equal(
+      validateProductSalePrice(price).errors.price,
+      'Saisissez un prix positif avec deux décimales maximum.',
+    );
+  }
 });

@@ -160,12 +160,6 @@ const ProductsPage = async ({ searchParams }) => {
                         >
                           Voir
                         </Link>
-                        <Link
-                          className='rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                          href={`/produits/${product.id}/modifier`}
-                        >
-                          Modifier
-                        </Link>
                         <DeleteProductButton compact product={product} />
                       </div>
                     </td>

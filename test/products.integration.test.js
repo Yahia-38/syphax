@@ -18,7 +18,7 @@ const {
   deleteProduct,
   getProductById,
   listProducts,
-  updateProduct,
+  updateProductSalePrice,
 } = await import('../lib/products.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 
@@ -185,80 +185,14 @@ test('retourne la fiche détaillée d’un produit et son créateur', async () =
     createdBy: 'gestionnaire',
     designation: 'Produit avec fiche',
     packagings: [],
+    salePrice: null,
+    salePriceHistory: [],
     updatedAt: null,
     updatedBy: null,
   });
   assert.equal(typeof product.createdAt, 'string');
   assert.equal(await getProductById('identifiant-invalide'), null);
   assert.equal(await getProductById(new ObjectId().toString()), null);
-});
-
-test('modifie un produit avec sa traçabilité et protège l’unicité du code', async () => {
-  const authorId = new ObjectId();
-  const editorId = new ObjectId();
-
-  await database.collection('users').insertMany([
-    { _id: authorId, username: 'auteur' },
-    { _id: editorId, username: 'editeur' },
-  ]);
-
-  const product = await createProduct({
-    code: 'MODIFIER-01',
-    designation: 'Avant modification',
-    baseUnit: 'PIECE',
-    createdBy: authorId.toString(),
-  });
-  await createProduct({
-    code: 'CODE-OCCUPE',
-    designation: 'Autre produit',
-    baseUnit: 'SACHET',
-    createdBy: authorId.toString(),
-  });
-
-  const updated = await updateProduct({
-    id: product.product.id,
-    code: '  modifier-02  ',
-    designation: '  Après modification  ',
-    baseUnit: 'BOUTEILLE',
-    updatedBy: editorId.toString(),
-  });
-
-  assert.deepEqual(updated.product, {
-    id: product.product.id,
-    code: 'MODIFIER-02',
-    designation: 'Après modification',
-    baseUnit: 'BOUTEILLE',
-  });
-
-  const details = await getProductById(product.product.id);
-
-  assert.equal(details.createdBy, 'auteur');
-  assert.equal(details.updatedBy, 'editeur');
-  assert.equal(typeof details.updatedAt, 'string');
-
-  const duplicate = await updateProduct({
-    id: product.product.id,
-    code: 'code-occupe',
-    designation: 'Modification interdite',
-    baseUnit: 'BOITE',
-    updatedBy: editorId.toString(),
-  });
-
-  assert.equal(
-    duplicate.errors.code,
-    'Un produit avec ce code existe déjà.',
-  );
-  assert.equal((await getProductById(product.product.id)).code, 'MODIFIER-02');
-  assert.deepEqual(
-    await updateProduct({
-      id: 'identifiant-invalide',
-      code: 'CODE',
-      designation: 'Produit',
-      baseUnit: 'PIECE',
-      updatedBy: editorId.toString(),
-    }),
-    { notFound: true },
-  );
 });
 
 test('supprime uniquement le produit demandé', async () => {
@@ -346,4 +280,76 @@ test('crée un produit avec un conditionnement initial facultatif', async () => 
   assert.equal(storedProduct.packagings[0].label, 'Carton de 24');
   assert.equal(storedProduct.packagings[0].quantity, 24);
   assert.ok(storedProduct.packagings[0].createdBy.equals(authorId));
+});
+
+test('modifie le prix de vente et conserve son historique complet', async () => {
+  const authorId = new ObjectId();
+  const firstEditorId = new ObjectId();
+  const secondEditorId = new ObjectId();
+
+  await database.collection('users').insertMany([
+    { _id: firstEditorId, username: 'tarif-initial' },
+    { _id: secondEditorId, username: 'tarif-suivant' },
+  ]);
+
+  const product = await createProduct({
+    code: 'PRIX-01',
+    designation: 'Produit avec prix',
+    baseUnit: 'BOUTEILLE',
+    createdBy: authorId.toString(),
+  });
+  await updateProductSalePrice({
+    productId: product.product.id,
+    price: '150',
+    updatedBy: firstEditorId.toString(),
+  });
+  await updateProductSalePrice({
+    productId: product.product.id,
+    price: '175,50',
+    updatedBy: secondEditorId.toString(),
+  });
+
+  const storedProduct = await database.collection('products').findOne({
+    _id: new ObjectId(product.product.id),
+  });
+
+  assert.deepEqual(
+    storedProduct.salePriceHistory.map((entry) => ({
+      oldAmountInCentimes: entry.oldAmountInCentimes,
+      newAmountInCentimes: entry.newAmountInCentimes,
+      changedBy: entry.changedBy.toString(),
+    })),
+    [
+      {
+        oldAmountInCentimes: null,
+        newAmountInCentimes: 15000,
+        changedBy: firstEditorId.toString(),
+      },
+      {
+        oldAmountInCentimes: 15000,
+        newAmountInCentimes: 17550,
+        changedBy: secondEditorId.toString(),
+      },
+    ],
+  );
+  assert.ok(
+    storedProduct.salePriceHistory.every(
+      (entry) => entry._id instanceof ObjectId && entry.changedAt instanceof Date,
+    ),
+  );
+
+  const details = await getProductById(product.product.id);
+
+  assert.deepEqual(details.salePrice, {
+    amountInCentimes: 17550,
+    currency: 'DZD',
+    taxIncluded: true,
+    updatedAt: details.salePrice.updatedAt,
+    updatedBy: 'tarif-suivant',
+  });
+  assert.equal(details.salePriceHistory[0].oldAmountInCentimes, 15000);
+  assert.equal(details.salePriceHistory[0].newAmountInCentimes, 17550);
+  assert.equal(details.salePriceHistory[0].changedBy, 'tarif-suivant');
+  assert.equal(details.salePriceHistory[1].oldAmountInCentimes, null);
+  assert.equal(details.salePriceHistory[1].changedBy, 'tarif-initial');
 });
