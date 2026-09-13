@@ -166,7 +166,7 @@ const PricingForm = ({
               className='text-[12px] font-bold uppercase tracking-[0.08em] text-emerald-700'
               htmlFor='sale-price'
             >
-              Prix de vente actuel
+              Prix de vente actuel · par {unitLabel}
             </label>
 
             {state.errors.form && (
@@ -200,7 +200,7 @@ const PricingForm = ({
                 value={priceValue}
               />
               <span className='inline-flex items-center rounded-r-lg border border-emerald-200 bg-emerald-100 px-3 text-sm font-semibold text-emerald-700'>
-                DA TTC
+                DA TTC / {unitLabel}
               </span>
             </div>
 
@@ -288,7 +288,7 @@ const PricingForm = ({
         ) : (
           <div className='flex-[1_1_260px] rounded-xl border border-emerald-100 bg-emerald-50 p-5'>
             <p className='text-[12px] font-bold uppercase tracking-[0.08em] text-emerald-700'>
-              Prix de vente actuel
+              Prix de vente actuel · unité de base
             </p>
             {Number.isSafeInteger(currentPriceInCentimes) ? (
               <>
@@ -297,7 +297,7 @@ const PricingForm = ({
                     {formatAmount(currentPriceInCentimes / 100)}
                   </span>
                   <span className='text-base font-semibold text-emerald-700'>
-                    DA TTC
+                    DA TTC / {unitLabel}
                   </span>
                 </p>
                 {lastChange && (

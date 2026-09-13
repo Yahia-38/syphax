@@ -440,6 +440,8 @@ const ProductPage = async ({ params, searchParams }) => {
               <PurchaseCostCard
                 baseUnitLabel={baseUnitLabel}
                 purchaseCost={latestPurchaseCost}
+                salePriceInCentimes={product.salePrice?.amountInCentimes ?? null}
+                showPriceComparison={canReadPricing}
               />
             )}
             {canReadPricing && (
