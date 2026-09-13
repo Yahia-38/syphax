@@ -6,7 +6,7 @@ import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
 import PackagingForm from './packaging-form.js';
-import PricingForm, { PriceEditLink } from './pricing-form.js';
+import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
 import ProductTabs from './product-tabs.js';
 
@@ -51,7 +51,12 @@ const formatPriceInput = (amountInCentimes) => {
   return (amountInCentimes / 100).toFixed(2).replace(/\.00$/u, '');
 };
 
-const IdentificationSection = ({ baseUnitLabel, editing, product }) => (
+const IdentificationSection = ({
+  baseUnitLabel,
+  canUpdateProduct,
+  editing,
+  product,
+}) => (
   <div
     aria-labelledby='identification-tab'
     className='flex flex-wrap gap-6'
@@ -62,18 +67,39 @@ const IdentificationSection = ({ baseUnitLabel, editing, product }) => (
       aria-labelledby='identification-title'
       className='flex-[2_1_460px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
     >
-      <div className='border-b border-slate-100 px-6 py-5'>
+      <div className='flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-5'>
         <h2
           className='text-lg font-semibold text-slate-900'
           id='identification-title'
         >
           {editing ? 'Modifier l’identification' : 'Identification'}
         </h2>
+        {canUpdateProduct && !editing && (
+          <Link
+            aria-label='Modifier la fiche'
+            className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+            href={`/produits/${product.id}?section=identification&modifier=1`}
+            title='Modifier la fiche'
+          >
+            <svg
+              aria-hidden='true'
+              fill='none'
+              height='18'
+              stroke='currentColor'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth='2'
+              viewBox='0 0 24 24'
+              width='18'
+            >
+              <path d='M12 20h9' />
+              <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' />
+            </svg>
+          </Link>
+        )}
       </div>
       {editing ? (
-        <div className='p-6'>
-          <ProductEditForm baseUnits={BASE_UNITS} product={product} />
-        </div>
+        <ProductEditForm baseUnits={BASE_UNITS} product={product} />
       ) : (
         <dl className='px-6'>
           <div className='flex items-baseline justify-between gap-6 border-b border-slate-100 py-3.5'>
@@ -223,12 +249,15 @@ const ProductPage = async ({ params, searchParams }) => {
     : 'identification';
   const canDeleteProduct = permissions.includes('products.delete');
   const canUpdateProduct = permissions.includes('products.update');
+  const canUpdatePrice = permissions.includes('pricing.update');
   const canCreatePackaging = permissions.includes('packaging.create');
   const canDeletePackaging = permissions.includes('packaging.delete');
   const editingProduct = activeSection === 'identification'
     && query.modifier === '1'
     && canUpdateProduct;
-  const openPricePanel = activeSection === 'tarification' && query.prix === '1';
+  const openPricePanel = activeSection === 'tarification'
+    && query.prix === '1'
+    && canUpdatePrice;
   const baseUnit = BASE_UNITS.find((unit) => unit.code === product.baseUnit);
   const baseUnitLabel = baseUnit?.label ?? product.baseUnit;
   const latestPriceChange = product.salePriceHistory[0] ?? null;
@@ -269,15 +298,6 @@ const ProductPage = async ({ params, searchParams }) => {
             </div>
 
             <div className='mt-4 flex flex-wrap items-center gap-3'>
-              <PriceEditLink productId={product.id} />
-              {canUpdateProduct && (
-                <Link
-                  className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                  href={`/produits/${product.id}?section=identification&modifier=1`}
-                >
-                  Modifier la fiche
-                </Link>
-              )}
               {canDeleteProduct && (
                 <DeleteProductButton
                   product={{
@@ -311,6 +331,7 @@ const ProductPage = async ({ params, searchParams }) => {
         {activeSection === 'identification' && (
           <IdentificationSection
             baseUnitLabel={baseUnitLabel}
+            canUpdateProduct={canUpdateProduct}
             editing={editingProduct}
             product={product}
           />
@@ -325,6 +346,7 @@ const ProductPage = async ({ params, searchParams }) => {
           >
             <PricingForm
               baseUnitLabel={baseUnitLabel}
+              canUpdatePrice={canUpdatePrice}
               currentPrice={formatPriceInput(
                 product.salePrice?.amountInCentimes,
               )}

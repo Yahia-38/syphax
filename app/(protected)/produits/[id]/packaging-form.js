@@ -162,14 +162,143 @@ const PackagingForm = ({
         </div>
         {canCreatePackaging && !isOpen && (
           <button
-            className='rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+            aria-label='Ajouter un conditionnement'
+            className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
             onClick={() => setIsOpen(true)}
+            title='Ajouter un conditionnement'
             type='button'
           >
-            Ajouter
+            <svg
+              aria-hidden='true'
+              fill='none'
+              height='18'
+              stroke='currentColor'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth='2'
+              viewBox='0 0 24 24'
+              width='18'
+            >
+              <path d='M12 5v14' />
+              <path d='M5 12h14' />
+            </svg>
           </button>
         )}
       </div>
+
+      {canCreatePackaging && isOpen && (
+        <form
+          action={formAction}
+          className={`px-6 py-4 ${packagings.length > 0 ? 'border-b border-slate-100' : ''}`}
+        >
+          {state.errors.form && (
+            <p
+              className='mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
+              role='alert'
+            >
+              {state.errors.form}
+            </p>
+          )}
+
+          <div className='flex flex-wrap items-start justify-between gap-4'>
+            <div className='min-w-[220px] flex-1'>
+              <label className='sr-only' htmlFor='packaging-label'>
+                Libellé du conditionnement
+              </label>
+              <input
+                aria-describedby={
+                  state.errors.label
+                    ? 'packaging-label-error packaging-preview'
+                    : 'packaging-preview'
+                }
+                aria-invalid={Boolean(state.errors.label)}
+                autoComplete='off'
+                className='w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-[15px] font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
+                id='packaging-label'
+                maxLength={100}
+                name='label'
+                onChange={(event) => setLabelValue(event.target.value)}
+                placeholder='Ex. Pack de 6'
+                ref={labelInputRef}
+                required
+                value={labelValue}
+              />
+              <p
+                aria-live='polite'
+                className='mt-1.5 text-[13px] text-slate-500'
+                id='packaging-preview'
+              >
+                {preview}
+              </p>
+              {state.errors.label && (
+                <p
+                  className='mt-1.5 text-sm text-red-700'
+                  id='packaging-label-error'
+                >
+                  {state.errors.label}
+                </p>
+              )}
+            </div>
+
+            <div className='flex flex-wrap items-start gap-3'>
+              <div>
+                <label className='sr-only' htmlFor='packaging-quantity'>
+                  Quantité en {quantityUnitLabel}
+                </label>
+                <div className='flex rounded-lg shadow-sm'>
+                  <input
+                    aria-describedby={
+                      state.errors.quantity
+                        ? 'packaging-quantity-error packaging-preview'
+                        : 'packaging-preview'
+                    }
+                    aria-invalid={Boolean(state.errors.quantity)}
+                    className='w-24 rounded-l-lg border border-r-0 border-slate-300 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
+                    id='packaging-quantity'
+                    inputMode='numeric'
+                    max={1000000}
+                    min={2}
+                    name='quantity'
+                    onChange={(event) => setQuantityValue(event.target.value)}
+                    placeholder='6'
+                    required
+                    step={1}
+                    type='number'
+                    value={quantityValue}
+                  />
+                  <span className='inline-flex items-center rounded-r-lg border border-slate-300 bg-slate-50 px-3 text-[13px] font-semibold text-slate-700'>
+                    {quantityUnitLabel}
+                  </span>
+                </div>
+                {state.errors.quantity && (
+                  <p
+                    className='mt-1.5 text-sm text-red-700'
+                    id='packaging-quantity-error'
+                  >
+                    {state.errors.quantity}
+                  </p>
+                )}
+              </div>
+
+              <button
+                className='rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
+                disabled={pending}
+                type='submit'
+              >
+                {pending ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+              <button
+                className='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
+                disabled={pending}
+                onClick={() => setIsOpen(false)}
+                type='button'
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {packagings.length > 0 ? (
         <ul>
@@ -201,7 +330,7 @@ const PackagingForm = ({
             </li>
           ))}
         </ul>
-      ) : (
+      ) : !isOpen ? (
         <div className='flex flex-col items-center px-6 py-8 text-center'>
           <p className='text-[15px] font-semibold text-slate-700'>
             Aucun conditionnement défini
@@ -210,17 +339,8 @@ const PackagingForm = ({
             Aucun pack, carton ou autre conditionnement avec quantité de
             conversion n’est encore défini pour ce produit.
           </p>
-          {canCreatePackaging && !isOpen && (
-            <button
-              className='mt-5 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              onClick={() => setIsOpen(true)}
-              type='button'
-            >
-              Ajouter un conditionnement
-            </button>
-          )}
         </div>
-      )}
+      ) : null}
 
       {state.message && !isOpen && (
         <p
@@ -231,121 +351,6 @@ const PackagingForm = ({
         </p>
       )}
 
-      {canCreatePackaging && isOpen && (
-        <form
-          action={formAction}
-          className='border-t border-slate-100 bg-slate-50 p-6'
-        >
-          {state.errors.form && (
-            <p
-              className='mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-              role='alert'
-            >
-              {state.errors.form}
-            </p>
-          )}
-
-          <div className='grid gap-4 sm:grid-cols-2'>
-            <div>
-              <label
-                className='block text-sm font-medium text-slate-700'
-                htmlFor='packaging-label'
-              >
-                Libellé
-              </label>
-              <input
-                aria-describedby={
-                  state.errors.label
-                    ? 'packaging-label-error packaging-preview'
-                    : 'packaging-preview'
-                }
-                aria-invalid={Boolean(state.errors.label)}
-                autoComplete='off'
-                className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                id='packaging-label'
-                maxLength={100}
-                name='label'
-                onChange={(event) => setLabelValue(event.target.value)}
-                placeholder='Ex. Pack de 6'
-                ref={labelInputRef}
-                required
-                value={labelValue}
-              />
-              {state.errors.label && (
-                <p
-                  className='mt-2 text-sm text-red-700'
-                  id='packaging-label-error'
-                >
-                  {state.errors.label}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label
-                className='block text-sm font-medium text-slate-700'
-                htmlFor='packaging-quantity'
-              >
-                Quantité en {quantityUnitLabel}
-              </label>
-              <input
-                aria-describedby={
-                  state.errors.quantity
-                    ? 'packaging-quantity-error packaging-preview'
-                    : 'packaging-preview'
-                }
-                aria-invalid={Boolean(state.errors.quantity)}
-                className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                id='packaging-quantity'
-                inputMode='numeric'
-                max={1000000}
-                min={2}
-                name='quantity'
-                onChange={(event) => setQuantityValue(event.target.value)}
-                placeholder='Ex. 6'
-                required
-                step={1}
-                type='number'
-                value={quantityValue}
-              />
-              {state.errors.quantity && (
-                <p
-                  className='mt-2 text-sm text-red-700'
-                  id='packaging-quantity-error'
-                >
-                  {state.errors.quantity}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <p
-            aria-live='polite'
-            className='mt-4 text-sm text-slate-600'
-            id='packaging-preview'
-          >
-            {preview}
-          </p>
-
-          <div className='mt-5 flex flex-wrap gap-3'>
-            <button
-              className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-              disabled={pending}
-              type='submit'
-            >
-              {pending ? 'Ajout…' : 'Ajouter le conditionnement'}
-            </button>
-            <button
-              className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-              disabled={pending}
-              onClick={() => setIsOpen(false)}
-              type='button'
-            >
-              Annuler
-            </button>
-          </div>
-        </form>
-      )}
     </section>
   );
 };
