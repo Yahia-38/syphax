@@ -12,3 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Use arrow functions whenever possible in JavaScript.
 - Use single quotes in JavaScript and JSX whenever possible.
+
+## Testing policy
+
+- Run only tests targeted at the code being changed.
+- Never run the full test suite unless the user explicitly asks for it.

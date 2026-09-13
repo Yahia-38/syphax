@@ -12,3 +12,12 @@ npm run dev
 ```
 
 L’application est ensuite accessible sur <http://localhost:3000>.
+
+## Tests
+
+MongoDB doit être démarrée. Les tests d’intégration créent une base temporaire
+isolée, puis la suppriment automatiquement :
+
+```bash
+npm test
+```

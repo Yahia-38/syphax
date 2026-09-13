@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --env-file-if-exists=.env.local --test",
     "user:create": "node --env-file=.env.local scripts/create-user.js"
   },
   "dependencies": {
