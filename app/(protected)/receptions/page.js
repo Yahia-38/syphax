@@ -1,11 +1,11 @@
 import Link from 'next/link';
 
 import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
-import { BASE_UNITS, listProducts } from '../../../lib/products.js';
+import { listReceptions } from '../../../lib/reception-records.js';
 import { getMissingReceptionFormPermissions } from '../../../lib/receptions.js';
 import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
-import ReceptionForm from './reception-form.js';
+import ReceptionList from './reception-list.js';
 import SupplierWorkspace from './supplier-workspace.js';
 
 export const metadata = {
@@ -28,43 +28,6 @@ const TabLink = ({ active, children, href }) => (
   </Link>
 );
 
-const PERMISSION_LABELS = {
-  'packaging.read': 'consulter les conditionnements',
-  'products.read': 'consulter les produits',
-  'receptions.create': 'créer des réceptions',
-  'receptions.read': 'consulter les réceptions',
-  'suppliers.read': 'consulter les fournisseurs',
-};
-
-const ReceptionFormUnavailable = ({ missingPermissions }) => (
-  <section
-    aria-labelledby='reception-form-unavailable-title'
-    className='mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'
-    role='tabpanel'
-  >
-    <div className='border-b border-slate-200 p-5 sm:p-6'>
-      <h2
-        className='text-lg font-semibold text-slate-900'
-        id='reception-form-unavailable-title'
-      >
-        Création d’une réception indisponible
-      </h2>
-      <p className='mt-1 text-sm leading-6 text-slate-600'>
-        Le formulaire et ses données de référence restent masqués tant que
-        tous les droits nécessaires ne sont pas accordés.
-      </p>
-    </div>
-    <div className='p-5 sm:p-6'>
-      <p className='text-sm font-medium text-slate-800'>Droits manquants :</p>
-      <p className='mt-2 text-sm leading-6 text-slate-600'>
-        {missingPermissions
-          .map((permission) => PERMISSION_LABELS[permission] ?? permission)
-          .join(', ')}.
-      </p>
-    </div>
-  </section>
-);
-
 const ReceptionsPage = async ({ searchParams }) => {
   const session = await requireSession();
   const [query, permissions] = await Promise.all([
@@ -73,6 +36,9 @@ const ReceptionsPage = async ({ searchParams }) => {
   ]);
   const canReadReceptions = permissions.includes('receptions.read');
   const canReadSuppliers = permissions.includes('suppliers.read');
+  const canCreateReception = getMissingReceptionFormPermissions(
+    permissions,
+  ).length === 0;
 
   if (!canReadReceptions && !canReadSuppliers) {
     throw new PermissionDeniedError('receptions.read');
@@ -85,19 +51,12 @@ const ReceptionsPage = async ({ searchParams }) => {
       ? 'receptions'
       : 'fournisseurs';
   let suppliers = [];
-  let receptionProducts = [];
-  const missingReceptionFormPermissions = activeTab === 'receptions'
-    ? getMissingReceptionFormPermissions(permissions)
-    : [];
+  let receptions = [];
 
   if (activeTab === 'fournisseurs') {
     suppliers = await listSuppliers();
-  } else if (missingReceptionFormPermissions.length === 0) {
-    [suppliers, receptionProducts] = await Promise.all([
-      listSuppliers(),
-      listProducts({ includePackagings: true }),
-    ]);
-    suppliers = suppliers.filter(({ active }) => active);
+  } else {
+    receptions = await listReceptions();
   }
 
   return (
@@ -140,17 +99,27 @@ const ReceptionsPage = async ({ searchParams }) => {
           suppliers={suppliers}
         />
       ) : (
-        missingReceptionFormPermissions.length === 0 ? (
-          <ReceptionForm
-            baseUnits={BASE_UNITS}
-            products={receptionProducts}
-            suppliers={suppliers}
-          />
-        ) : (
-          <ReceptionFormUnavailable
-            missingPermissions={missingReceptionFormPermissions}
-          />
-        )
+        <div role='tabpanel'>
+          <div className='mt-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
+            <div>
+              <h2 className='text-xl font-semibold text-slate-900'>
+                Réceptions de marchandises
+              </h2>
+              <p className='mt-1 text-sm leading-6 text-slate-600'>
+                Consultez les réceptions enregistrées et leurs quantités.
+              </p>
+            </div>
+            {canCreateReception && (
+              <Link
+                className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                href='/receptions/nouvelle'
+              >
+                Nouvelle réception
+              </Link>
+            )}
+          </div>
+          <ReceptionList receptions={receptions} />
+        </div>
       )}
     </main>
   );

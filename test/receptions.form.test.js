@@ -5,6 +5,7 @@ import {
   calculateReceptionLine,
   changeReceptionLineProduct,
   createEmptyReceptionLine,
+  formatReceptionDateInput,
   getMissingReceptionFormPermissions,
   RECEPTION_FORM_PERMISSIONS,
   validateReceptionDraft,
@@ -21,6 +22,13 @@ const product = {
     { id: 'carton-24', label: 'Carton de 24', quantity: 24 },
   ],
 };
+
+test('préremplit la date du jour dans le fuseau d’Alger', () => {
+  assert.equal(
+    formatReceptionDateInput(new Date('2026-09-12T23:30:00.000Z')),
+    '2026-09-13',
+  );
+});
 
 test('calcule une quantité saisie directement dans l’unité de base', () => {
   const calculation = calculateReceptionLine({

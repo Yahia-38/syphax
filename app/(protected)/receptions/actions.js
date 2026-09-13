@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache.js';
 
+import { createReception as saveReception } from '../../../lib/reception-records.js';
 import {
   createSupplier as saveSupplier,
   removeSupplier as removeSavedSupplier,
@@ -12,6 +13,64 @@ import { requirePermission } from '../../../lib/sessions.js';
 const readTextField = (formData, name) => {
   const value = formData.get(name);
   return typeof value === 'string' ? value : '';
+};
+
+const readReceptionLines = (formData) => {
+  const value = readTextField(formData, 'lines');
+
+  try {
+    const lines = JSON.parse(value);
+
+    return Array.isArray(lines) ? lines : [];
+  } catch {
+    return [];
+  }
+};
+
+export const createReception = async (previousState, formData) => {
+  const session = await requirePermission('receptions.create');
+  const values = {
+    supplierId: readTextField(formData, 'supplierId'),
+    receptionDate: readTextField(formData, 'receptionDate'),
+    supplierReference: readTextField(formData, 'supplierReference'),
+  };
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await saveReception({
+      ...values,
+      lines: readReceptionLines(formData),
+      createdBy: session.userId,
+    });
+
+    if (result.errors) {
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+      };
+    }
+
+    revalidatePath('/receptions');
+
+    return {
+      errors: {},
+      message: `La réception ${result.reception.supplierReference} a été enregistrée avec succès.`,
+      revision,
+    };
+  } catch (error) {
+    console.error('Échec de la création de la réception :', error);
+
+    return {
+      errors: {
+        form: 'L’enregistrement de la réception est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+    };
+  }
 };
 
 export const createSupplier = async (previousState, formData) => {
