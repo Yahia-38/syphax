@@ -36,6 +36,9 @@ const { deleteProduct } = await import(
 const { updateProduct } = await import(
   '../app/(protected)/produits/[id]/product-actions.js'
 );
+const { addProductPackaging, removePackagingAction } = await import(
+  '../app/(protected)/produits/[id]/packaging-actions.js'
+);
 
 let database;
 
@@ -51,8 +54,9 @@ after(async () => {
   await closeMongoConnection();
 });
 
-const createUserSession = async (username) => {
+const createUserSession = async (username, permissions = []) => {
   const userId = new ObjectId();
+  const roleId = new ObjectId();
   const token = randomBytes(32).toString('base64url');
 
   await Promise.all([
@@ -60,8 +64,14 @@ const createUserSession = async (username) => {
       _id: userId,
       username,
       active: true,
-      roleIds: [],
+      roleIds: permissions.length > 0 ? [roleId] : [],
     }),
+    ...(permissions.length > 0
+      ? [database.collection('roles').insertOne({
+          _id: roleId,
+          permissions,
+        })]
+      : []),
     database.collection('sessions').insertOne({
       tokenHash: createHash('sha256').update(token).digest('hex'),
       userId,
@@ -83,7 +93,10 @@ const callWithSession = async (token, callback) => {
     cookies,
     userspaceMutableCookies: cookies,
   };
-  const workStore = { route: '/produits' };
+  const workStore = {
+    incrementalCache: {},
+    route: '/produits',
+  };
 
   return workAsyncStorage.run(workStore, () =>
     workUnitAsyncStorage.run(requestStore, callback));
@@ -179,4 +192,148 @@ test('refuse un appel direct de la suppression sans products.delete', async () =
     isPermissionDenied('products.delete'),
   );
   assert.ok(await database.collection('products').findOne({ _id: productId }));
+});
+
+test('protège la création de conditionnement et conserve son auteur', async () => {
+  const productId = new ObjectId();
+  const { token: deniedToken } = await createUserSession(
+    'lecture-produit-sans-creation-conditionnement',
+    ['products.read'],
+  );
+  const { token: allowedToken, userId: allowedUserId } = await createUserSession(
+    'creation-conditionnement-autorisee',
+    ['products.read', 'packaging.create'],
+  );
+
+  await database.collection('products').insertOne({
+    _id: productId,
+    code: 'CONDITIONNEMENT-PROTEGE',
+    designation: 'Produit avec conditionnements protégés',
+    baseUnit: 'PIECE',
+    packagings: [],
+    createdAt: new Date(),
+    createdBy: allowedUserId,
+  });
+
+  const deniedFormData = new FormData();
+  deniedFormData.set('label', 'Carton interdit');
+  deniedFormData.set('quantity', '12');
+
+  await assert.rejects(
+    callWithSession(deniedToken, () =>
+      addProductPackaging(
+        productId.toString(),
+        { revision: 0 },
+        deniedFormData,
+      )),
+    isPermissionDenied('packaging.create'),
+  );
+
+  const productAfterRefusal = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.deepEqual(productAfterRefusal.packagings, []);
+
+  const allowedFormData = new FormData();
+  allowedFormData.set('label', 'Carton autorisé');
+  allowedFormData.set('quantity', '24');
+
+  const result = await callWithSession(allowedToken, () =>
+    addProductPackaging(
+      productId.toString(),
+      { revision: 0 },
+      allowedFormData,
+    ));
+  assert.equal(
+    result.message,
+    'Le conditionnement Carton autorisé a été ajouté.',
+  );
+
+  const productAfterAddition = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.equal(productAfterAddition.packagings.length, 1);
+  assert.equal(productAfterAddition.packagings[0].label, 'Carton autorisé');
+  assert.equal(productAfterAddition.packagings[0].quantity, 24);
+  assert.ok(productAfterAddition.packagings[0].createdBy.equals(allowedUserId));
+});
+
+test('distingue la lecture du produit de celle des conditionnements', async () => {
+  const { token } = await createUserSession(
+    'lecture-produit-sans-lecture-conditionnement',
+    ['products.read'],
+  );
+
+  const session = await callWithSession(token, () =>
+    requirePermission('products.read'));
+  assert.equal(
+    session.username,
+    'lecture-produit-sans-lecture-conditionnement',
+  );
+  await assert.rejects(
+    callWithSession(token, () => requirePermission('packaging.read')),
+    isPermissionDenied('packaging.read'),
+  );
+});
+
+test('protège la suppression des conditionnements', async () => {
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  const { token: deniedToken } = await createUserSession(
+    'lecture-conditionnement-sans-suppression',
+    ['products.read', 'packaging.read'],
+  );
+  const { token: allowedToken, userId: allowedUserId } = await createUserSession(
+    'suppression-conditionnement-autorisee',
+    ['products.read', 'packaging.read', 'packaging.delete'],
+  );
+
+  await database.collection('products').insertOne({
+    _id: productId,
+    code: 'SUPPRESSION-CONDITIONNEMENT',
+    designation: 'Produit avec suppression protégée',
+    baseUnit: 'PIECE',
+    packagings: [{
+      _id: packagingId,
+      label: 'Carton à retirer',
+      quantity: 12,
+      createdAt: new Date(),
+      createdBy: allowedUserId,
+    }],
+    createdAt: new Date(),
+    createdBy: allowedUserId,
+  });
+
+  await assert.rejects(
+    callWithSession(deniedToken, () =>
+      removePackagingAction(
+        productId.toString(),
+        packagingId.toString(),
+        { revision: 0 },
+      )),
+    isPermissionDenied('packaging.delete'),
+  );
+
+  const productAfterRefusal = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.equal(productAfterRefusal.packagings.length, 1);
+  assert.ok(productAfterRefusal.packagings[0]._id.equals(packagingId));
+
+  const result = await callWithSession(allowedToken, () =>
+    removePackagingAction(
+      productId.toString(),
+      packagingId.toString(),
+      { revision: 0 },
+    ));
+  assert.deepEqual(result, {
+    error: null,
+    revision: 1,
+    success: true,
+  });
+
+  const productAfterRemoval = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.deepEqual(productAfterRemoval.packagings, []);
 });

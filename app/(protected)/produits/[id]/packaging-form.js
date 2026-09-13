@@ -105,7 +105,13 @@ const PackagingRemovalButton = ({ packaging, product }) => {
   );
 };
 
-const PackagingForm = ({ baseUnitLabel, packagings, product }) => {
+const PackagingForm = ({
+  baseUnitLabel,
+  canCreatePackaging,
+  canDeletePackaging,
+  packagings,
+  product,
+}) => {
   const labelInputRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [labelValue, setLabelValue] = useState('');
@@ -154,7 +160,7 @@ const PackagingForm = ({ baseUnitLabel, packagings, product }) => {
             Unités utilisées pour acheter, recevoir et compter ce produit.
           </p>
         </div>
-        {!isOpen && (
+        {canCreatePackaging && !isOpen && (
           <button
             className='rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
             onClick={() => setIsOpen(true)}
@@ -185,10 +191,12 @@ const PackagingForm = ({ baseUnitLabel, packagings, product }) => {
                 <span className='rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[13px] font-semibold text-slate-700'>
                   {packaging.quantity} {quantityUnitLabel}
                 </span>
-                <PackagingRemovalButton
-                  packaging={packaging}
-                  product={product}
-                />
+                {canDeletePackaging && (
+                  <PackagingRemovalButton
+                    packaging={packaging}
+                    product={product}
+                  />
+                )}
               </div>
             </li>
           ))}
@@ -202,7 +210,7 @@ const PackagingForm = ({ baseUnitLabel, packagings, product }) => {
             Aucun pack, carton ou autre conditionnement avec quantité de
             conversion n’est encore défini pour ce produit.
           </p>
-          {!isOpen && (
+          {canCreatePackaging && !isOpen && (
             <button
               className='mt-5 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
               onClick={() => setIsOpen(true)}
@@ -223,7 +231,7 @@ const PackagingForm = ({ baseUnitLabel, packagings, product }) => {
         </p>
       )}
 
-      {isOpen && (
+      {canCreatePackaging && isOpen && (
         <form
           action={formAction}
           className='border-t border-slate-100 bg-slate-50 p-6'

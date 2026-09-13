@@ -216,11 +216,15 @@ const ProductPage = async ({ params, searchParams }) => {
   const requestedSection = typeof query.section === 'string'
     ? query.section
     : '';
+  const canReadPackaging = permissions.includes('packaging.read');
   const activeSection = SECTIONS.has(requestedSection)
+    && (requestedSection !== 'conditionnements' || canReadPackaging)
     ? requestedSection
     : 'identification';
   const canDeleteProduct = permissions.includes('products.delete');
   const canUpdateProduct = permissions.includes('products.update');
+  const canCreatePackaging = permissions.includes('packaging.create');
+  const canDeletePackaging = permissions.includes('packaging.delete');
   const editingProduct = activeSection === 'identification'
     && query.modifier === '1'
     && canUpdateProduct;
@@ -288,6 +292,7 @@ const ProductPage = async ({ params, searchParams }) => {
 
           <ProductTabs
             activeSection={activeSection}
+            canReadPackaging={canReadPackaging}
             productId={product.id}
           />
         </div>
@@ -365,6 +370,8 @@ const ProductPage = async ({ params, searchParams }) => {
 
             <PackagingForm
               baseUnitLabel={baseUnitLabel}
+              canCreatePackaging={canCreatePackaging}
+              canDeletePackaging={canDeletePackaging}
               packagings={product.packagings}
               product={{
                 id: product.id,

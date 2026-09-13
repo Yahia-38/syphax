@@ -1,12 +1,12 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from 'next/cache.js';
 
 import {
   addProductPackaging as savePackaging,
   removeProductPackaging,
 } from '../../../../lib/products.js';
-import { requireSession } from '../../../../lib/sessions.js';
+import { requirePermission } from '../../../../lib/sessions.js';
 
 const readTextField = (formData, name) => {
   const value = formData.get(name);
@@ -18,7 +18,7 @@ export const addProductPackaging = async (
   previousState,
   formData,
 ) => {
-  const session = await requireSession();
+  const session = await requirePermission('packaging.create');
   const values = {
     label: readTextField(formData, 'label'),
     quantity: readTextField(formData, 'quantity'),
@@ -75,7 +75,7 @@ export const removePackagingAction = async (
   packagingId,
   previousState,
 ) => {
-  await requireSession();
+  await requirePermission('packaging.delete');
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
     : 0;
