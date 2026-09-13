@@ -6,15 +6,22 @@ const TABS = [
   { label: 'Conditionnements', section: 'conditionnements' },
 ];
 
-const ProductTabs = ({ activeSection, canReadPackaging, productId }) => (
+const ProductTabs = ({
+  activeSection,
+  canReadPackaging,
+  canReadPricing,
+  productId,
+}) => (
   <nav
     aria-label='Sections de la fiche produit'
     className='mt-6 flex flex-wrap gap-1'
     role='tablist'
   >
     {TABS
-      .filter((tab) =>
-        tab.section !== 'conditionnements' || canReadPackaging)
+      .filter((tab) => (
+        (tab.section !== 'conditionnements' || canReadPackaging)
+        && (tab.section !== 'tarification' || canReadPricing)
+      ))
       .map((tab) => {
         const isActive = tab.section === activeSection;
 

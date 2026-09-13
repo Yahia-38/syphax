@@ -6,6 +6,7 @@ import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
 import PackagingForm from './packaging-form.js';
+import PriceHistory from './price-history.js';
 import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
 import ProductTabs from './product-tabs.js';
@@ -30,17 +31,6 @@ const formatDate = (value) => {
     timeStyle: 'short',
     timeZone: 'Africa/Algiers',
   }).format(new Date(value));
-};
-
-const formatMoney = (amountInCentimes) => {
-  if (!Number.isSafeInteger(amountInCentimes)) {
-    return 'Non renseigné';
-  }
-
-  return `${new Intl.NumberFormat('fr-DZ', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  }).format(amountInCentimes / 100)} DA`;
 };
 
 const formatPriceInput = (amountInCentimes) => {
@@ -176,55 +166,6 @@ const IdentificationSection = ({
   </div>
 );
 
-const PriceHistory = ({ history }) => {
-  if (history.length === 0) {
-    return null;
-  }
-
-  const historyCountLabel = history.length === 1
-    ? '1 changement enregistré.'
-    : `${history.length} changements enregistrés.`;
-
-  return (
-    <section
-      aria-labelledby='price-history-title'
-      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <div className='border-b border-slate-100 px-6 py-5'>
-        <h2
-          className='text-lg font-semibold text-slate-900'
-          id='price-history-title'
-        >
-          Historique du prix
-        </h2>
-        <p className='mt-1 text-sm leading-6 text-slate-600'>
-          {historyCountLabel}
-        </p>
-      </div>
-      <ul>
-        {history.map((entry, index) => (
-          <li
-            className={`flex flex-wrap items-center justify-between gap-3 px-6 py-4 ${index > 0 ? 'border-t border-slate-100' : ''}`}
-            key={entry.id}
-          >
-            <p className='text-sm font-medium text-slate-900'>
-              {formatMoney(entry.oldAmountInCentimes)}{' '}
-              <span className='text-slate-400'>→</span>{' '}
-              <span className='font-semibold text-emerald-700'>
-                {formatMoney(entry.newAmountInCentimes)}
-              </span>
-            </p>
-            <p className='text-[13px] text-slate-500'>
-              {formatDate(entry.changedAt)} ·{' '}
-              {entry.changedBy ?? 'Compte indisponible'}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-};
-
 const ProductPage = async ({ params, searchParams }) => {
   const session = await requirePermission('products.read');
 
@@ -233,7 +174,11 @@ const ProductPage = async ({ params, searchParams }) => {
     searchParams,
     getUserPermissions(session.userId),
   ]);
-  const product = await getProductById(id);
+  const canReadPackaging = permissions.includes('packaging.read');
+  const canReadPricing = permissions.includes('pricing.read');
+  const product = await getProductById(id, {
+    includePricing: canReadPricing,
+  });
 
   if (!product) {
     notFound();
@@ -242,14 +187,15 @@ const ProductPage = async ({ params, searchParams }) => {
   const requestedSection = typeof query.section === 'string'
     ? query.section
     : '';
-  const canReadPackaging = permissions.includes('packaging.read');
   const activeSection = SECTIONS.has(requestedSection)
     && (requestedSection !== 'conditionnements' || canReadPackaging)
+    && (requestedSection !== 'tarification' || canReadPricing)
     ? requestedSection
     : 'identification';
   const canDeleteProduct = permissions.includes('products.delete');
   const canUpdateProduct = permissions.includes('products.update');
-  const canUpdatePrice = permissions.includes('pricing.update');
+  const canUpdatePrice = canReadPricing
+    && permissions.includes('pricing.update');
   const canCreatePackaging = permissions.includes('packaging.create');
   const canDeletePackaging = permissions.includes('packaging.delete');
   const editingProduct = activeSection === 'identification'
@@ -285,15 +231,17 @@ const ProductPage = async ({ params, searchParams }) => {
                 <span className='rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[13px] font-semibold text-blue-700'>
                   Unité de base : {baseUnitLabel}
                 </span>
-                <span
-                  className={`rounded-md border px-2.5 py-1 text-[13px] font-semibold ${
-                    product.salePrice
-                      ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                      : 'border-amber-100 bg-amber-50 text-amber-700'
-                  }`}
-                >
-                  {product.salePrice ? 'Prix défini' : 'Prix à définir'}
-                </span>
+                {canReadPricing && (
+                  <span
+                    className={`rounded-md border px-2.5 py-1 text-[13px] font-semibold ${
+                      product.salePrice
+                        ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                        : 'border-amber-100 bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {product.salePrice ? 'Prix défini' : 'Prix à définir'}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -313,6 +261,7 @@ const ProductPage = async ({ params, searchParams }) => {
           <ProductTabs
             activeSection={activeSection}
             canReadPackaging={canReadPackaging}
+            canReadPricing={canReadPricing}
             productId={product.id}
           />
         </div>

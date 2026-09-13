@@ -24,7 +24,8 @@ const ProductsPage = async ({ searchParams }) => {
   const query = readQuery(resolvedSearchParams?.q);
   const productDeleted = resolvedSearchParams?.deleted === '1';
   const canCreateProduct = permissions.includes('products.create');
-  const products = await listProducts();
+  const canReadPricing = permissions.includes('pricing.read');
+  const products = await listProducts({ includePricing: canReadPricing });
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -59,6 +60,7 @@ const ProductsPage = async ({ searchParams }) => {
 
       <ProductTable
         canCreateProduct={canCreateProduct}
+        canReadPricing={canReadPricing}
         products={products}
         initialQuery={query}
       />

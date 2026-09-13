@@ -13,6 +13,7 @@ const BASE_UNITS = [
 const BASE_UNIT_LABELS = new Map(
   BASE_UNITS.map((baseUnit) => [baseUnit.code, baseUnit.label]),
 );
+const PRODUCTS_PER_PAGE = 10;
 
 const formatMoney = (amountInCentimes) =>
   `${new Intl.NumberFormat('fr-DZ', {
@@ -20,10 +21,17 @@ const formatMoney = (amountInCentimes) =>
     minimumFractionDigits: 0,
   }).format(amountInCentimes / 100)} DA`;
 
-const SortableHeader = ({ align = 'left', label, onSort, sortDir, sorted }) => (
+const SortableHeader = ({
+  align = 'left',
+  className = '',
+  label,
+  onSort,
+  sortDir,
+  sorted,
+}) => (
   <th
     aria-sort={sorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    className={`sticky top-0 z-10 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6 ${align === 'right' ? 'text-right' : 'text-left'}`}
+    className={`bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6 ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
     scope='col'
   >
     <button
@@ -42,23 +50,31 @@ const SortableHeader = ({ align = 'left', label, onSort, sortDir, sorted }) => (
   </th>
 );
 
-const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
+const ProductTable = ({
+  canCreateProduct,
+  canReadPricing,
+  initialQuery,
+  products,
+}) => {
   const searchRef = useRef(null);
   const [query, setQuery] = useState(initialQuery);
   const [unit, setUnit] = useState('ALL');
   const [onlyMissingPrice, setOnlyMissingPrice] = useState(false);
   const [sortKey, setSortKey] = useState('code');
   const [sortDir, setSortDir] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const usedUnits = useMemo(() => {
     const usedUnitCodes = new Set(products.map((product) => product.baseUnit));
     return BASE_UNITS.filter((baseUnit) => usedUnitCodes.has(baseUnit.code));
   }, [products]);
   const missingPriceCount = useMemo(
-    () => products.filter(
-      (product) => !Number.isSafeInteger(product.salePriceCentimes),
-    ).length,
-    [products],
+    () => canReadPricing
+      ? products.filter(
+          (product) => !Number.isSafeInteger(product.salePriceCentimes),
+        ).length
+      : 0,
+    [canReadPricing, products],
   );
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
   const filtersActive = Boolean(
@@ -109,6 +125,16 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
       return firstValue.localeCompare(secondValue, 'fr') * direction;
     });
   }, [normalizedQuery, onlyMissingPrice, products, sortDir, sortKey, unit]);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE),
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const firstProductIndex = (activePage - 1) * PRODUCTS_PER_PAGE;
+  const paginatedProducts = filteredProducts.slice(
+    firstProductIndex,
+    firstProductIndex + PRODUCTS_PER_PAGE,
+  );
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -139,9 +165,12 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
     setQuery('');
     setUnit('ALL');
     setOnlyMissingPrice(false);
+    setCurrentPage(1);
   };
 
   const updateSort = (nextSortKey) => {
+    setCurrentPage(1);
+
     if (sortKey === nextSortKey) {
       setSortDir((currentDirection) => (
         currentDirection === 'asc' ? 'desc' : 'asc'
@@ -172,7 +201,10 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
               className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 pr-10 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
               id='product-search'
               maxLength={100}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setCurrentPage(1);
+              }}
               placeholder='Rechercher par code ou désignation'
               ref={searchRef}
               type='search'
@@ -193,7 +225,10 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
                 <button
                   aria-pressed={unit === 'ALL'}
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${unit === 'ALL' ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}
-                  onClick={() => setUnit('ALL')}
+                  onClick={() => {
+                    setUnit('ALL');
+                    setCurrentPage(1);
+                  }}
                   type='button'
                 >
                   Toutes unités
@@ -203,7 +238,10 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
                     aria-pressed={unit === baseUnit.code}
                     className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${unit === baseUnit.code ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}
                     key={baseUnit.code}
-                    onClick={() => setUnit(baseUnit.code)}
+                    onClick={() => {
+                      setUnit(baseUnit.code);
+                      setCurrentPage(1);
+                    }}
                     type='button'
                   >
                     {baseUnit.label}
@@ -212,11 +250,14 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
               </div>
             )}
 
-            {missingPriceCount > 0 && (
+            {canReadPricing && missingPriceCount > 0 && (
               <button
                 aria-pressed={onlyMissingPrice}
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${onlyMissingPrice ? 'border-amber-700 bg-amber-700 text-white' : 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100'}`}
-                onClick={() => setOnlyMissingPrice((currentValue) => !currentValue)}
+                onClick={() => {
+                  setOnlyMissingPrice((currentValue) => !currentValue);
+                  setCurrentPage(1);
+                }}
                 type='button'
               >
                 Sans prix ({missingPriceCount})
@@ -228,9 +269,9 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
 
       <div className='flex min-h-12 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6'>
         <p className='text-sm text-slate-500'>
-          {filtersActive
-            ? `${filteredProducts.length} produits sur ${products.length}`
-            : `${products.length} produits`}
+          {filteredProducts.length > 0
+            ? `${firstProductIndex + 1}–${firstProductIndex + paginatedProducts.length} sur ${filteredProducts.length} produits${filtersActive ? ` (${products.length} au total)` : ''}`
+            : `0 produit${filtersActive ? ` sur ${products.length}` : ''}`}
         </p>
         {filtersActive && (
           <button
@@ -244,50 +285,57 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
       </div>
 
       {filteredProducts.length > 0 ? (
-        <div className='max-h-[calc(100vh-280px)] overflow-x-auto overflow-y-auto'>
-          <table className='min-w-full divide-y divide-slate-200'>
+        <>
+          <table className='w-full table-fixed divide-y divide-slate-200'>
             <caption className='sr-only'>Liste des produits</caption>
             <thead>
               <tr>
                 <SortableHeader
+                  className='w-[30%] sm:w-[24%]'
                   label='Code'
                   onSort={() => updateSort('code')}
                   sortDir={sortDir}
                   sorted={sortKey === 'code'}
                 />
                 <SortableHeader
+                  className='w-auto'
                   label='Désignation'
                   onSort={() => updateSort('designation')}
                   sortDir={sortDir}
                   sorted={sortKey === 'designation'}
                 />
                 <SortableHeader
+                  className='hidden w-[18%] md:table-cell'
                   label='Unité de base'
                   onSort={() => updateSort('baseUnit')}
                   sortDir={sortDir}
                   sorted={sortKey === 'baseUnit'}
                 />
-                <SortableHeader
-                  align='right'
-                  label='Prix de vente TTC'
-                  onSort={() => updateSort('salePriceCentimes')}
-                  sortDir={sortDir}
-                  sorted={sortKey === 'salePriceCentimes'}
-                />
+                {canReadPricing && (
+                  <SortableHeader
+                    align='right'
+                    className='hidden w-[20%] sm:table-cell'
+                    label='Prix de vente TTC'
+                    onSort={() => updateSort('salePriceCentimes')}
+                    sortDir={sortDir}
+                    sorted={sortKey === 'salePriceCentimes'}
+                  />
+                )}
                 <th
-                  className='sticky top-0 z-10 w-[120px] bg-slate-50 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
+                  className='w-14 bg-slate-50 px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[90px] sm:px-4 lg:w-[120px] lg:px-6'
                   scope='col'
                 >
-                  Actions
+                  <span className='hidden sm:inline'>Actions</span>
+                  <span className='sr-only sm:hidden'>Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody className='divide-y divide-slate-100 bg-white'>
-              {filteredProducts.map((product) => (
+              {paginatedProducts.map((product) => (
                 <tr className='hover:bg-slate-50' key={product.id}>
-                  <td className='whitespace-nowrap p-0'>
+                  <td className='p-0'>
                     <Link
-                      className='block px-4 py-3 font-mono text-[13px] font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:px-6'
+                      className='block break-all px-4 py-3 font-mono text-[13px] font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:px-6'
                       href={`/produits/${product.id}`}
                     >
                       {product.code}
@@ -295,29 +343,52 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
                   </td>
                   <td className='p-0'>
                     <Link
-                      className='block px-4 py-3 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:px-6'
+                      className='block break-words px-4 py-3 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:px-6'
                       href={`/produits/${product.id}`}
                     >
-                      {product.designation}
+                      <span>{product.designation}</span>
+                      <span className='mt-1 flex flex-wrap items-center gap-1.5 md:hidden'>
+                        <span className='rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600'>
+                          {BASE_UNIT_LABELS.get(product.baseUnit)
+                            ?? product.baseUnit}
+                        </span>
+                        {canReadPricing && (
+                          <span className='sm:hidden'>
+                            {Number.isSafeInteger(
+                              product.salePriceCentimes,
+                            ) ? (
+                              <span className='text-xs font-semibold tabular-nums text-slate-700'>
+                                {formatMoney(product.salePriceCentimes)}
+                              </span>
+                            ) : (
+                              <span className='rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700'>
+                                Sans prix
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </span>
                     </Link>
                   </td>
-                  <td className='whitespace-nowrap px-4 py-3 sm:px-6'>
+                  <td className='hidden px-4 py-3 sm:px-6 md:table-cell'>
                     <span className='rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600'>
                       {BASE_UNIT_LABELS.get(product.baseUnit) ?? product.baseUnit}
                     </span>
                   </td>
-                  <td className='whitespace-nowrap px-4 py-3 text-right sm:px-6'>
-                    {Number.isSafeInteger(product.salePriceCentimes) ? (
-                      <span className='font-semibold tabular-nums text-slate-900'>
-                        {formatMoney(product.salePriceCentimes)}
-                      </span>
-                    ) : (
-                      <span className='rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700'>
-                        Non renseigné
-                      </span>
-                    )}
-                  </td>
-                  <td className='w-[120px] px-4 py-3 sm:px-6'>
+                  {canReadPricing && (
+                    <td className='hidden px-4 py-3 text-right sm:table-cell sm:px-6'>
+                      {Number.isSafeInteger(product.salePriceCentimes) ? (
+                        <span className='font-semibold tabular-nums text-slate-900'>
+                          {formatMoney(product.salePriceCentimes)}
+                        </span>
+                      ) : (
+                        <span className='rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700'>
+                          Non renseigné
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  <td className='px-2 py-3 sm:px-4 lg:px-6'>
                     <div className='flex justify-center'>
                       <Link
                         aria-label='Voir la fiche produit'
@@ -346,7 +417,32 @@ const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
               ))}
             </tbody>
           </table>
-        </div>
+
+          <nav
+            aria-label='Pagination des produits'
+            className='flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-3 sm:px-6'
+          >
+            <button
+              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
+              disabled={activePage === 1}
+              onClick={() => setCurrentPage(activePage - 1)}
+              type='button'
+            >
+              Précédent
+            </button>
+            <p aria-live='polite' className='text-sm font-medium text-slate-600'>
+              Page {activePage} sur {totalPages}
+            </p>
+            <button
+              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
+              disabled={activePage === totalPages}
+              onClick={() => setCurrentPage(activePage + 1)}
+              type='button'
+            >
+              Suivant
+            </button>
+          </nav>
+        </>
       ) : (
         <div className='px-6 py-14 text-center'>
           <h3 className='font-semibold text-slate-900'>

@@ -13,6 +13,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Use arrow functions whenever possible in JavaScript.
 - Use single quotes in JavaScript and JSX whenever possible.
 
+## Syphax list and table design
+
+- Never make a table or list scrollable. Use pagination instead.
+- Every table and list must provide relevant search and filtering controls.
+
 ## Testing policy
 
 - Run only tests targeted at the code being changed.

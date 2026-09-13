@@ -144,7 +144,10 @@ test('liste les produits par code et filtre sur le code ou la désignation', asy
     createdBy: authorId,
   });
 
-  const productsByCode = await listProducts({ query: 'catalogue-' });
+  const productsByCode = await listProducts({
+    includePricing: true,
+    query: 'catalogue-',
+  });
 
   assert.deepEqual(
     productsByCode.map((product) => product.code),
@@ -185,7 +188,10 @@ test('liste le prix de vente en centimes ou null lorsqu’il est absent', async 
     updatedBy: authorId,
   });
 
-  const products = await listProducts({ query: 'LISTE-PRIX-' });
+  const products = await listProducts({
+    includePricing: true,
+    query: 'LISTE-PRIX-',
+  });
 
   assert.deepEqual(
     products.map((product) => ({
@@ -197,6 +203,34 @@ test('liste le prix de vente en centimes ou null lorsqu’il est absent', async 
       { code: 'LISTE-PRIX-B', salePriceCentimes: null },
     ],
   );
+});
+
+test('omet les données tarifaires lorsque leur lecture est désactivée', async () => {
+  const authorId = new ObjectId().toString();
+  const created = await createProduct({
+    code: 'TARIF-MASQUE-01',
+    designation: 'Produit avec tarif masqué',
+    baseUnit: 'PIECE',
+    createdBy: authorId,
+  });
+
+  await updateProductSalePrice({
+    productId: created.product.id,
+    price: '325',
+    updatedBy: authorId,
+  });
+
+  const [listedProduct] = await listProducts({
+    includePricing: false,
+    query: 'TARIF-MASQUE-01',
+  });
+  assert.equal('salePriceCentimes' in listedProduct, false);
+
+  const product = await getProductById(created.product.id, {
+    includePricing: false,
+  });
+  assert.equal(product.salePrice, null);
+  assert.deepEqual(product.salePriceHistory, []);
 });
 
 test('retourne la fiche détaillée d’un produit et son créateur', async () => {
@@ -457,7 +491,9 @@ test('modifie le prix de vente et conserve son historique complet', async () => 
     ),
   );
 
-  const details = await getProductById(product.product.id);
+  const details = await getProductById(product.product.id, {
+    includePricing: true,
+  });
 
   assert.deepEqual(details.salePrice, {
     amountInCentimes: 17550,

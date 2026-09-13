@@ -1,6 +1,13 @@
 'use client';
 
-import { useActionState, useEffect, useId, useRef, useState } from 'react';
+import {
+  useActionState,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   addProductPackaging,
@@ -19,6 +26,7 @@ const REMOVE_INITIAL_STATE = {
   revision: 0,
   success: false,
 };
+const PACKAGINGS_PER_PAGE = 5;
 
 const PackagingRemovalButton = ({ packaging, product }) => {
   const dialogRef = useRef(null);
@@ -116,6 +124,9 @@ const PackagingForm = ({
   const [isOpen, setIsOpen] = useState(false);
   const [labelValue, setLabelValue] = useState('');
   const [quantityValue, setQuantityValue] = useState('');
+  const [packagingQuery, setPackagingQuery] = useState('');
+  const [quantityFilter, setQuantityFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
   const addPackagingWithProductId = addProductPackaging.bind(null, product.id);
   const runPackagingAdd = async (previousState, formData) => {
     const nextState = await addPackagingWithProductId(previousState, formData);
@@ -134,6 +145,46 @@ const PackagingForm = ({
   const preview = labelValue.trim() && quantityValue.trim()
     ? `1 ${labelValue.trim()} = ${quantityValue.trim()} ${quantityUnitLabel}`
     : 'La conversion s’affichera ici.';
+  const quantityOptions = useMemo(
+    () => Array.from(new Set(packagings.map(({ quantity }) => quantity)))
+      .sort((firstQuantity, secondQuantity) => firstQuantity - secondQuantity),
+    [packagings],
+  );
+  const normalizedPackagingQuery = packagingQuery
+    .trim()
+    .toLocaleLowerCase('fr');
+  const filteredPackagings = useMemo(
+    () => packagings.filter((packaging) => {
+      const matchesQuery = !normalizedPackagingQuery
+        || packaging.label
+          .toLocaleLowerCase('fr')
+          .includes(normalizedPackagingQuery);
+      const matchesQuantity = quantityFilter === 'ALL'
+        || packaging.quantity === Number(quantityFilter);
+
+      return matchesQuery && matchesQuantity;
+    }),
+    [normalizedPackagingQuery, packagings, quantityFilter],
+  );
+  const filtersActive = Boolean(
+    normalizedPackagingQuery || quantityFilter !== 'ALL',
+  );
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredPackagings.length / PACKAGINGS_PER_PAGE),
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const firstPackagingIndex = (activePage - 1) * PACKAGINGS_PER_PAGE;
+  const paginatedPackagings = filteredPackagings.slice(
+    firstPackagingIndex,
+    firstPackagingIndex + PACKAGINGS_PER_PAGE,
+  );
+
+  const resetFilters = () => {
+    setPackagingQuery('');
+    setQuantityFilter('ALL');
+    setCurrentPage(1);
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -301,35 +352,146 @@ const PackagingForm = ({
       )}
 
       {packagings.length > 0 ? (
-        <ul>
-          {packagings.map((packaging, index) => (
-            <li
-              className={`flex flex-wrap items-center justify-between gap-4 px-6 py-4 ${index > 0 ? 'border-t border-slate-100' : ''}`}
-              key={packaging.id}
+        <>
+          <div className='flex flex-wrap items-end gap-3 border-b border-slate-100 p-4'>
+            <div className='min-w-[220px] flex-1'>
+              <label
+                className='sr-only'
+                htmlFor='packaging-search'
+              >
+                Rechercher un conditionnement
+              </label>
+              <input
+                className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                id='packaging-search'
+                maxLength={100}
+                onChange={(event) => {
+                  setPackagingQuery(event.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder='Rechercher par libellé'
+                type='search'
+                value={packagingQuery}
+              />
+            </div>
+            <div>
+              <label
+                className='sr-only'
+                htmlFor='packaging-quantity-filter'
+              >
+                Filtrer par quantité de conversion
+              </label>
+              <select
+                className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                id='packaging-quantity-filter'
+                onChange={(event) => {
+                  setQuantityFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                value={quantityFilter}
+              >
+                <option value='ALL'>Toutes les conversions</option>
+                {quantityOptions.map((quantity) => (
+                  <option key={quantity} value={quantity}>
+                    {quantity} {quantityUnitLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {filtersActive && (
+              <button
+                className='rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                onClick={resetFilters}
+                type='button'
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+
+          <div className='flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-3'>
+            <p className='text-sm text-slate-500'>
+              {filteredPackagings.length > 0
+                ? `${firstPackagingIndex + 1}–${firstPackagingIndex + paginatedPackagings.length} sur ${filteredPackagings.length} conditionnements${filtersActive ? ` (${packagings.length} au total)` : ''}`
+                : `0 conditionnement sur ${packagings.length}`}
+            </p>
+          </div>
+
+          {paginatedPackagings.length > 0 ? (
+            <ul>
+              {paginatedPackagings.map((packaging, index) => (
+                <li
+                  className={`flex flex-wrap items-center justify-between gap-4 px-6 py-4 ${index > 0 ? 'border-t border-slate-100' : ''}`}
+                  key={packaging.id}
+                >
+                  <div>
+                    <p className='text-[15px] font-semibold text-slate-900'>
+                      {packaging.label}
+                    </p>
+                    <p className='mt-1 text-[13px] text-slate-500'>
+                      1 {packaging.label.toLocaleLowerCase('fr')} ={' '}
+                      {packaging.quantity} {quantityUnitLabel}
+                    </p>
+                  </div>
+                  <div className='flex flex-wrap items-center gap-4'>
+                    <span className='rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[13px] font-semibold text-slate-700'>
+                      {packaging.quantity} {quantityUnitLabel}
+                    </span>
+                    {canDeletePackaging && (
+                      <PackagingRemovalButton
+                        packaging={packaging}
+                        product={product}
+                      />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className='px-6 py-10 text-center'>
+              <p className='font-semibold text-slate-800'>
+                Aucun conditionnement trouvé
+              </p>
+              <p className='mt-2 text-sm text-slate-500'>
+                Modifiez la recherche ou le filtre de conversion.
+              </p>
+              <button
+                className='mt-4 rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                onClick={resetFilters}
+                type='button'
+              >
+                Voir tous les conditionnements
+              </button>
+            </div>
+          )}
+
+          <nav
+            aria-label='Pagination des conditionnements'
+            className='flex items-center justify-between gap-4 border-t border-slate-100 px-6 py-3'
+          >
+            <button
+              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
+              disabled={activePage === 1 || filteredPackagings.length === 0}
+              onClick={() => setCurrentPage(activePage - 1)}
+              type='button'
             >
-              <div>
-                <p className='text-[15px] font-semibold text-slate-900'>
-                  {packaging.label}
-                </p>
-                <p className='mt-1 text-[13px] text-slate-500'>
-                  1 {packaging.label.toLocaleLowerCase('fr')} ={' '}
-                  {packaging.quantity} {quantityUnitLabel}
-                </p>
-              </div>
-              <div className='flex flex-wrap items-center gap-4'>
-                <span className='rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[13px] font-semibold text-slate-700'>
-                  {packaging.quantity} {quantityUnitLabel}
-                </span>
-                {canDeletePackaging && (
-                  <PackagingRemovalButton
-                    packaging={packaging}
-                    product={product}
-                  />
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+              Précédent
+            </button>
+            <p aria-live='polite' className='text-sm font-medium text-slate-600'>
+              Page {activePage} sur {totalPages}
+            </p>
+            <button
+              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
+              disabled={
+                activePage === totalPages || filteredPackagings.length === 0
+              }
+              onClick={() => setCurrentPage(activePage + 1)}
+              type='button'
+            >
+              Suivant
+            </button>
+          </nav>
+        </>
       ) : !isOpen ? (
         <div className='flex flex-col items-center px-6 py-8 text-center'>
           <p className='text-[15px] font-semibold text-slate-700'>

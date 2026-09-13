@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from 'next/cache.js';
 
 import { updateProductSalePrice as saveSalePrice } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';

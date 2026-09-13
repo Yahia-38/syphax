@@ -39,6 +39,9 @@ const { updateProduct } = await import(
 const { addProductPackaging, removePackagingAction } = await import(
   '../app/(protected)/produits/[id]/packaging-actions.js'
 );
+const { updateProductSalePrice } = await import(
+  '../app/(protected)/produits/[id]/pricing-actions.js'
+);
 
 let database;
 
@@ -113,6 +116,21 @@ test('refuse la consultation des produits sans products.read', async () => {
   await assert.rejects(
     callWithSession(token, () => requirePermission('products.read')),
     isPermissionDenied('products.read'),
+  );
+});
+
+test('distingue la lecture des produits de celle des tarifs', async () => {
+  const { token } = await createUserSession(
+    'lecture-produit-sans-lecture-tarif',
+    ['products.read'],
+  );
+
+  const session = await callWithSession(token, () =>
+    requirePermission('products.read'));
+  assert.equal(session.username, 'lecture-produit-sans-lecture-tarif');
+  await assert.rejects(
+    callWithSession(token, () => requirePermission('pricing.read')),
+    isPermissionDenied('pricing.read'),
   );
 });
 
@@ -192,6 +210,67 @@ test('refuse un appel direct de la suppression sans products.delete', async () =
     isPermissionDenied('products.delete'),
   );
   assert.ok(await database.collection('products').findOne({ _id: productId }));
+});
+
+test('protège la modification du prix et conserve son auteur', async () => {
+  const productId = new ObjectId();
+  const { token: deniedToken } = await createUserSession(
+    'lecture-tarif-sans-modification',
+    ['products.read', 'pricing.read'],
+  );
+  const { token: allowedToken, userId: allowedUserId } = await createUserSession(
+    'modification-tarif-autorisee',
+    ['products.read', 'pricing.read', 'pricing.update'],
+  );
+
+  await database.collection('products').insertOne({
+    _id: productId,
+    code: 'TARIF-PROTEGE',
+    designation: 'Produit avec tarif protégé',
+    baseUnit: 'PIECE',
+    createdAt: new Date(),
+    createdBy: allowedUserId,
+  });
+
+  const deniedFormData = new FormData();
+  deniedFormData.set('price', '125');
+
+  await assert.rejects(
+    callWithSession(deniedToken, () =>
+      updateProductSalePrice(
+        productId.toString(),
+        { revision: 0 },
+        deniedFormData,
+      )),
+    isPermissionDenied('pricing.update'),
+  );
+
+  const productAfterRefusal = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.equal(productAfterRefusal.salePrice, undefined);
+  assert.equal(productAfterRefusal.salePriceHistory, undefined);
+
+  const allowedFormData = new FormData();
+  allowedFormData.set('price', '175,50');
+
+  const result = await callWithSession(allowedToken, () =>
+    updateProductSalePrice(
+      productId.toString(),
+      { revision: 0 },
+      allowedFormData,
+    ));
+  assert.equal(result.message, 'Le prix de vente a été mis à jour.');
+
+  const productAfterUpdate = await database.collection('products').findOne({
+    _id: productId,
+  });
+  assert.equal(productAfterUpdate.salePrice.amountInCentimes, 17550);
+  assert.ok(productAfterUpdate.salePrice.updatedBy.equals(allowedUserId));
+  assert.equal(productAfterUpdate.salePriceHistory.length, 1);
+  assert.ok(
+    productAfterUpdate.salePriceHistory[0].changedBy.equals(allowedUserId),
+  );
 });
 
 test('protège la création de conditionnement et conserve son auteur', async () => {
