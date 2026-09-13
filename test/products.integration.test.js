@@ -18,6 +18,7 @@ const {
   deleteProduct,
   getProductById,
   listProducts,
+  removeProductPackaging,
   updateProductSalePrice,
 } = await import('../lib/products.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
@@ -294,6 +295,50 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
       quantity: 6,
     },
   ]);
+});
+
+test('retire uniquement le conditionnement demandé', async () => {
+  const authorId = new ObjectId();
+  const product = await createProduct({
+    code: 'PACK-RETRAIT-01',
+    designation: 'Produit avec plusieurs conditionnements',
+    baseUnit: 'PIECE',
+    createdBy: authorId.toString(),
+  });
+  const firstPackaging = await addProductPackaging({
+    productId: product.product.id,
+    label: 'Pack de 6',
+    quantity: '6',
+    createdBy: authorId.toString(),
+  });
+  const secondPackaging = await addProductPackaging({
+    productId: product.product.id,
+    label: 'Carton de 24',
+    quantity: '24',
+    createdBy: authorId.toString(),
+  });
+
+  assert.deepEqual(
+    await removeProductPackaging({
+      productId: product.product.id,
+      packagingId: firstPackaging.packaging.id,
+    }),
+    { removed: true },
+  );
+  assert.deepEqual((await getProductById(product.product.id)).packagings, [
+    {
+      id: secondPackaging.packaging.id,
+      label: 'Carton de 24',
+      quantity: 24,
+    },
+  ]);
+  assert.deepEqual(
+    await removeProductPackaging({
+      productId: product.product.id,
+      packagingId: firstPackaging.packaging.id,
+    }),
+    { notFound: true },
+  );
 });
 
 test('crée un produit avec un conditionnement initial facultatif', async () => {

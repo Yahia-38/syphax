@@ -2,7 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { addProductPackaging as savePackaging } from '../../../../lib/products.js';
+import {
+  addProductPackaging as savePackaging,
+  removeProductPackaging,
+} from '../../../../lib/products.js';
 import { requireSession } from '../../../../lib/sessions.js';
 
 const readTextField = (formData, name) => {
@@ -63,6 +66,46 @@ export const addProductPackaging = async (
       message: null,
       revision,
       values,
+    };
+  }
+};
+
+export const removePackagingAction = async (
+  productId,
+  packagingId,
+  previousState,
+) => {
+  await requireSession();
+  const previousRevision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision
+    : 0;
+  const revision = previousRevision + 1;
+
+  try {
+    const result = await removeProductPackaging({ productId, packagingId });
+
+    if (result.notFound) {
+      return {
+        error: 'Ce conditionnement n’existe plus.',
+        revision,
+        success: false,
+      };
+    }
+
+    revalidatePath(`/produits/${productId}`);
+
+    return {
+      error: null,
+      revision,
+      success: true,
+    };
+  } catch (error) {
+    console.error('Échec du retrait du conditionnement :', error);
+
+    return {
+      error: 'Le retrait du conditionnement est momentanément indisponible.',
+      revision,
+      success: false,
     };
   }
 };

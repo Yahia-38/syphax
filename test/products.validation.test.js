@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   BASE_UNITS,
+  removeProductPackaging,
   validateProduct,
   validateProductPackaging,
   validateProductSalePrice,
@@ -115,6 +116,23 @@ test('valide et normalise un conditionnement supplémentaire', () => {
       label: 'Le libellé est obligatoire.',
       quantity: 'Saisissez une quantité entière supérieure ou égale à 2.',
     },
+  );
+});
+
+test('refuse le retrait avec un identifiant de conditionnement invalide', async () => {
+  assert.deepEqual(
+    await removeProductPackaging({
+      productId: 'identifiant-produit-invalide',
+      packagingId: 'identifiant-conditionnement-invalide',
+    }),
+    { notFound: true },
+  );
+  assert.deepEqual(
+    await removeProductPackaging({
+      productId: '000000000000000000000000',
+      packagingId: '',
+    }),
+    { notFound: true },
   );
 });
 
