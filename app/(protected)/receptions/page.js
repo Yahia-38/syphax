@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import Link from 'next/link';
 
 import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
@@ -118,6 +120,7 @@ const ReceptionsPage = async ({ searchParams }) => {
           initialHistoryPage={historyState.page}
           initialHistoryQuery={historyState.query}
           initialHistorySupplierId={historyState.supplierId}
+          initialSubmissionKey={randomUUID()}
           products={products}
           receptions={receptions}
           suppliers={suppliers}

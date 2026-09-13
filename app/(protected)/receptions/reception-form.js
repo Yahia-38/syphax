@@ -16,6 +16,8 @@ const INPUT_CLASS = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-
 const INITIAL_RECEPTION_STATE = {
   errors: {},
   message: null,
+  receptionId: null,
+  replayed: false,
   revision: 0,
 };
 
@@ -322,6 +324,7 @@ const ReceptionDraftForm = ({
   initialDate,
   onSuccess,
   products,
+  submissionKey,
   suppliers,
 }) => {
   const nextLineId = useRef(1);
@@ -436,7 +439,15 @@ const ReceptionDraftForm = ({
       id='new-reception-form'
       onSubmit={validateReception}
     >
-          <input name='lines' type='hidden' value={JSON.stringify(lines)} />
+          <input
+            name='lines'
+            type='hidden'
+            value={JSON.stringify(lines.map((line) => ({
+              ...line,
+              baseUnit: getProduct(products, line.productId)?.baseUnit ?? '',
+            })))}
+          />
+          <input name='submissionKey' type='hidden' value={submissionKey} />
           <section
             aria-labelledby='reception-header-title'
             className='rounded-2xl border border-slate-200 bg-white shadow-sm'

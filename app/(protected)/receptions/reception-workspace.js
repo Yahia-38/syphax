@@ -12,20 +12,26 @@ const ReceptionWorkspace = ({
   initialHistoryPage,
   initialHistoryQuery,
   initialHistorySupplierId,
+  initialSubmissionKey,
   products,
   receptions,
   suppliers,
 }) => {
   const [formVisible, setFormVisible] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [submissionKey, setSubmissionKey] = useState(initialSubmissionKey);
 
   const handleReceptionCreated = useCallback((message) => {
     setFormVisible(false);
     setNotice(message);
+    setSubmissionKey(globalThis.crypto.randomUUID());
   }, []);
 
   const toggleForm = () => {
     setNotice(null);
+    if (formVisible) {
+      setSubmissionKey(globalThis.crypto.randomUUID());
+    }
     setFormVisible((visible) => !visible);
   };
 
@@ -59,6 +65,7 @@ const ReceptionWorkspace = ({
           initialDate={initialDate}
           onSuccess={handleReceptionCreated}
           products={products}
+          submissionKey={submissionKey}
           suppliers={suppliers}
         />
       )}

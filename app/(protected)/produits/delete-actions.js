@@ -27,6 +27,12 @@ export const deleteProduct = async (productId) => {
     };
   }
 
+  if (result.inUse) {
+    return {
+      error: 'Ce produit ne peut pas être supprimé car il possède un historique de réception.',
+    };
+  }
+
   revalidatePath('/produits');
   redirect('/produits?deleted=1');
 };

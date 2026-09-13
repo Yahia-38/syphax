@@ -30,6 +30,7 @@ const readReceptionLines = (formData) => {
 export const createReception = async (previousState, formData) => {
   const session = await requirePermission('receptions.create');
   const values = {
+    submissionKey: readTextField(formData, 'submissionKey'),
     supplierId: readTextField(formData, 'supplierId'),
     receptionDate: readTextField(formData, 'receptionDate'),
     supplierReference: readTextField(formData, 'supplierReference'),
@@ -58,6 +59,8 @@ export const createReception = async (previousState, formData) => {
     return {
       errors: {},
       message: `La réception ${result.reception.supplierReference} a été enregistrée avec succès.`,
+      receptionId: result.reception.id,
+      replayed: result.replayed,
       revision,
     };
   } catch (error) {

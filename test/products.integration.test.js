@@ -295,6 +295,47 @@ test('supprime uniquement le produit demandé', async () => {
   });
 });
 
+test('protège un produit déjà référencé par une réception historique', async () => {
+  const authorId = new ObjectId();
+  const created = await createProduct({
+    code: 'HISTORIQUE-01',
+    designation: 'Produit avec réception historique',
+    baseUnit: 'PIECE',
+    createdBy: authorId.toString(),
+  });
+  const productId = new ObjectId(created.product.id);
+
+  await database.collection('receptions').insertOne({
+    supplierId: new ObjectId(),
+    supplierName: 'Fournisseur historique',
+    receptionDate: new Date('2026-09-13T00:00:00.000Z'),
+    supplierReference: 'BL-HISTORIQUE-PRODUIT',
+    lines: [{
+      _id: new ObjectId(),
+      productId,
+      baseUnit: 'PIECE',
+      quantityInBaseUnits: 3,
+    }],
+    createdAt: new Date(),
+    createdBy: authorId,
+  });
+
+  assert.deepEqual(await deleteProduct(created.product.id), { inUse: true });
+  assert.deepEqual((await updateProduct({
+    productId: created.product.id,
+    code: created.product.code,
+    designation: created.product.designation,
+    baseUnit: 'BOITE',
+    updatedBy: authorId.toString(),
+  })).errors, {
+    baseUnit: 'L’unité de base ne peut plus être modifiée car ce produit possède un historique de réception.',
+  });
+  assert.equal(
+    (await getProductById(created.product.id)).baseUnit,
+    'PIECE',
+  );
+});
+
 test('modifie les informations d’un produit avec leur traçabilité', async () => {
   const creatorId = new ObjectId();
   const editorId = new ObjectId();
