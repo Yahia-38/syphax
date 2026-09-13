@@ -11,6 +11,7 @@ const ProductTabs = ({
   activeSection,
   canReadPackaging,
   canReadPricing,
+  canReadPurchaseCosts,
   productId,
 }) => (
   <nav
@@ -21,7 +22,11 @@ const ProductTabs = ({
     {TABS
       .filter((tab) => (
         (tab.section !== 'conditionnements' || canReadPackaging)
-        && (tab.section !== 'tarification' || canReadPricing)
+        && (
+          tab.section !== 'tarification'
+          || canReadPricing
+          || canReadPurchaseCosts
+        )
       ))
       .map((tab) => {
         const isActive = tab.section === activeSection;

@@ -26,7 +26,11 @@ const { RequestCookies } = await import(
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
-const { getReceptionById, listReceptions } = await import(
+const {
+  getLatestProductPurchaseCost,
+  getReceptionById,
+  listReceptions,
+} = await import(
   '../lib/reception-records.js'
 );
 const { deleteProduct, updateProduct } = await import('../lib/products.js');
@@ -112,6 +116,7 @@ const createReceptionFormData = ({
   formData.set('receptionDate', '2026-09-13');
   formData.set('supplierReference', supplierReference);
   formData.set('lines', JSON.stringify(lines ?? [{
+    amount: '120',
     baseUnit: 'BOUTEILLE',
     productId: productId.toString(),
     quantityMode: 'PACKAGING',
@@ -154,6 +159,133 @@ test('refuse la lecture d’une réception sans receptions.read', async () => {
     (error) => error instanceof PermissionDeniedError
       && error.permission === 'receptions.read',
   );
+});
+
+test('protège la lecture du dernier coût d’achat avec receptions.read', async () => {
+  const { userId } = await createUserSession('sans-lecture-cout-achat', [
+    'products.read',
+    'pricing.read',
+  ]);
+
+  await assert.rejects(
+    getLatestProductPurchaseCost({
+      baseUnit: 'PIECE',
+      productId: new ObjectId().toString(),
+      userId: userId.toString(),
+    }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'receptions.read',
+  );
+});
+
+test('sélectionne déterministement la dernière ligne de coût compatible', async (context) => {
+  const { userId } = await createUserSession('lecture-cout-achat', [
+    'receptions.read',
+  ]);
+  const productId = new ObjectId();
+  const otherProductId = new ObjectId();
+  const olderReceptionId = new ObjectId();
+  const selectedReceptionId = new ObjectId();
+  const selectedLineId = new ObjectId();
+  const receptionWithoutAmountId = new ObjectId();
+
+  context.after(async () => {
+    await database.collection('receptions').deleteMany({
+      _id: {
+        $in: [
+          olderReceptionId,
+          selectedReceptionId,
+          receptionWithoutAmountId,
+        ],
+      },
+    });
+  });
+
+  await database.collection('receptions').insertMany([
+    {
+      _id: olderReceptionId,
+      receptionDate: new Date('2026-09-13T00:00:00.000Z'),
+      createdAt: new Date('2026-09-13T08:00:00.000Z'),
+      supplierName: 'Fournisseur ancien',
+      supplierReference: 'BL-ANCIEN',
+      lines: [{
+        _id: new ObjectId(),
+        amountInCentimes: 12_000,
+        baseUnit: 'BOUTEILLE',
+        productId,
+        quantityInBaseUnits: 60,
+      }],
+    },
+    {
+      _id: selectedReceptionId,
+      receptionDate: new Date('2026-09-13T00:00:00.000Z'),
+      createdAt: new Date('2026-09-13T09:00:00.000Z'),
+      supplierName: 'Fournisseur retenu',
+      supplierReference: 'BL-RETENU',
+      lines: [
+        {
+          _id: new ObjectId(),
+          amountInCentimes: 4_800,
+          baseUnit: 'BOUTEILLE',
+          productId,
+          quantityInBaseUnits: 24,
+        },
+        {
+          _id: new ObjectId(),
+          amountInCentimes: 99_900,
+          baseUnit: 'BOUTEILLE',
+          productId: otherProductId,
+          quantityInBaseUnits: 1,
+        },
+        {
+          _id: selectedLineId,
+          amountInCentimes: 5_400,
+          baseUnit: 'BOUTEILLE',
+          productId,
+          quantityInBaseUnits: 24,
+        },
+        {
+          _id: new ObjectId(),
+          amountInCentimes: 3_000,
+          baseUnit: 'SACHET',
+          productId,
+          quantityInBaseUnits: 10,
+        },
+      ],
+    },
+    {
+      _id: receptionWithoutAmountId,
+      receptionDate: new Date('2026-09-14T00:00:00.000Z'),
+      createdAt: new Date('2026-09-14T08:00:00.000Z'),
+      supplierName: 'Fournisseur sans montant',
+      supplierReference: 'BL-SANS-MONTANT',
+      lines: [{
+        _id: new ObjectId(),
+        baseUnit: 'BOUTEILLE',
+        productId,
+        quantityInBaseUnits: 12,
+      }],
+    },
+  ]);
+
+  assert.deepEqual(await getLatestProductPurchaseCost({
+    baseUnit: 'BOUTEILLE',
+    productId: productId.toString(),
+    userId: userId.toString(),
+  }), {
+    amountInCentimes: 5_400,
+    baseUnit: 'BOUTEILLE',
+    quantityInBaseUnits: 24,
+    unitCostInCentimes: 225,
+    source: {
+      lineId: selectedLineId.toString(),
+      lineNumber: 3,
+      receptionDate: '2026-09-13',
+      receptionId: selectedReceptionId.toString(),
+      supplierName: 'Fournisseur retenu',
+      supplierReference: 'BL-RETENU',
+    },
+  });
 });
 
 test('renvoie une absence pour un identifiant invalide ou inconnu', async () => {
@@ -246,6 +378,7 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
   assert.ok(storedReception.supplierId.equals(supplierId));
   assert.equal(storedReception.supplierName, 'Distribution Atlas');
   assert.equal(storedReception.lines[0].quantityInBaseUnits, 60);
+  assert.equal(storedReception.lines[0].amountInCentimes, 12_000);
   assert.equal(storedReception.lines[0].productCode, 'EAU-1L');
   assert.equal(storedReception.lines[0].packaging.count, 10);
   assert.ok(stockMovement.productId.equals(productId));
@@ -305,7 +438,7 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
       quantityMode: 'PACKAGING',
       quantityInBaseUnits: 60,
       directQuantity: null,
-      amountInCentimes: null,
+      amountInCentimes: 12_000,
       packaging: {
         packagingId: packagingId.toString(),
         label: 'Pack de 6',
@@ -373,12 +506,14 @@ test('crée un mouvement physique par ligne sans dépendre des coûts', async ()
       supplierReference: 'BL-MULTI',
       lines: [
         {
+          amount: '40',
           baseUnit: 'PIECE',
           directQuantity: '4',
           productId: firstProductId.toString(),
           quantityMode: 'DIRECT',
         },
         {
+          amount: '70,50',
           baseUnit: 'BOITE',
           directQuantity: '7',
           productId: secondProductId.toString(),
@@ -395,6 +530,10 @@ test('crée un mouvement physique par ligne sans dépendre des coûts', async ()
   }).sort({ quantityDeltaInBaseUnits: 1 }).toArray();
 
   assert.deepEqual(result.errors, {});
+  assert.deepEqual(
+    reception.lines.map(({ amountInCentimes }) => amountInCentimes),
+    [4_000, 7_050],
+  );
   assert.deepEqual(
     movements.map((movement) => ({
       amountInCentimes: movement.amountInCentimes,
@@ -465,6 +604,7 @@ test('annule la réception et les mouvements si une écriture échoue', async ()
         supplierId,
         supplierReference: 'BL-ROLLBACK',
         lines: [firstProductId, secondProductId].map((productId) => ({
+          amount: '10',
           baseUnit: 'PIECE',
           directQuantity: '1',
           productId: productId.toString(),
@@ -528,6 +668,7 @@ test('rend une même soumission concurrente idempotente et refuse un autre conte
       supplierId,
       supplierReference,
       lines: [{
+        amount: '80',
         baseUnit: 'PIECE',
         directQuantity: '8',
         productId: productId.toString(),
@@ -759,4 +900,55 @@ test('refuse un mode de quantité forgé côté client', async () => {
     await database.collection('receptions').countDocuments(),
     beforeCount,
   );
+});
+
+test('refuse un montant TTC absent ou trop précis côté serveur', async () => {
+  const { token, userId } = await createUserSession(
+    'reception-montant-invalide',
+    ['receptions.create'],
+  );
+  const supplierId = new ObjectId();
+  const productId = new ObjectId();
+
+  await Promise.all([
+    database.collection('suppliers').insertOne({
+      _id: supplierId,
+      name: 'Fournisseur montant invalide',
+      active: true,
+    }),
+    database.collection('products').insertOne({
+      _id: productId,
+      code: 'MONTANT-INVALIDE',
+      designation: 'Produit montant invalide',
+      baseUnit: 'PIECE',
+      createdAt: new Date(),
+      createdBy: userId,
+    }),
+  ]);
+
+  for (const amount of ['', '12,345']) {
+    const result = await callWithSession(token, () => createReception(
+      { revision: 0 },
+      createReceptionFormData({
+        supplierId,
+        supplierReference: `BL-MONTANT-${amount || 'ABSENT'}`,
+        lines: [{
+          amount,
+          baseUnit: 'PIECE',
+          directQuantity: '5',
+          productId: productId.toString(),
+          quantityMode: 'DIRECT',
+        }],
+      }),
+    ));
+
+    assert.equal(
+      result.errors.lines,
+      'La ligne 1 est invalide. Vérifiez son produit, sa quantité et son montant TTC.',
+    );
+  }
+
+  assert.equal(await database.collection('receptions').countDocuments({
+    supplierId,
+  }), 0);
 });

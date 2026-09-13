@@ -315,17 +315,6 @@ const PricingForm = ({
           </div>
         )}
 
-        <div className='flex-[1_1_260px] rounded-xl border border-slate-200 bg-slate-50 p-5'>
-          <p className='text-[12px] font-bold uppercase tracking-[0.08em] text-slate-600'>
-            Dernier coût d’achat accepté
-          </p>
-          <p className='mt-3 text-2xl font-semibold text-slate-500'>
-            Non disponible
-          </p>
-          <p className='mt-3 text-xs leading-5 text-slate-500'>
-            Disponible après l’intégration et le traitement des factures.
-          </p>
-        </div>
       </div>
 
       {state.message && !isOpen && (

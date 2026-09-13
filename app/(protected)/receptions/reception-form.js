@@ -6,6 +6,8 @@ import {
   calculateReceptionLine,
   changeReceptionLineProduct,
   createEmptyReceptionLine,
+  formatReceptionMoney,
+  formatReceptionUnitCost,
   validateReceptionDraft,
   validateReceptionLine,
 } from '../../../lib/receptions.js';
@@ -229,6 +231,44 @@ const ReceptionLineForm = ({
           </>
         )}
 
+        <div className='lg:col-span-2'>
+          <label
+            className='block text-sm font-medium text-slate-700'
+            htmlFor={`${line.id}-amount`}
+          >
+            Montant TTC de la ligne
+          </label>
+          <div className='relative mt-2'>
+            <input
+              aria-describedby={errors.amount
+                ? `${line.id}-amount-error ${line.id}-amount-help`
+                : `${line.id}-amount-help`}
+              aria-invalid={Boolean(errors.amount)}
+              className={`${INPUT_CLASS} mt-0 pr-12`}
+              id={`${line.id}-amount`}
+              inputMode='decimal'
+              min='0'
+              onChange={(event) => onChange({ amount: event.target.value })}
+              placeholder='Ex. 120,00'
+              required
+              step='0.01'
+              type='number'
+              value={line.amount}
+            />
+            <span className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-500'>
+              DA
+            </span>
+          </div>
+          <p className='mt-2 text-xs leading-5 text-slate-500' id={`${line.id}-amount-help`}>
+            Montant total TTC du produit sur cette ligne, avant calcul du coût unitaire.
+          </p>
+          {errors.amount && (
+            <p className='mt-2 text-sm text-red-700' id={`${line.id}-amount-error`}>
+              {errors.amount}
+            </p>
+          )}
+        </div>
+
         <div className='rounded-lg border border-blue-100 bg-blue-50 p-4'>
           <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
             Quantité totale reçue
@@ -240,6 +280,24 @@ const ReceptionLineForm = ({
             {line.quantityMode === 'PACKAGING'
               ? 'Calculée depuis le conditionnement et non modifiable séparément.'
               : 'Saisie directement dans l’unité de base du produit.'}
+          </p>
+        </div>
+
+        <div className='rounded-lg border border-emerald-100 bg-emerald-50 p-4'>
+          <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>
+            Coût unitaire TTC
+          </p>
+          <p className='mt-2 text-xl font-bold text-emerald-950'>
+            {formatReceptionUnitCost(calculation)}
+            {calculation.amountInCentimes !== null
+              && calculation.quantityInBaseUnits !== null && (
+                <span className='ml-1 text-sm font-medium text-emerald-800'>
+                  / {lowerUnitLabel}
+                </span>
+            )}
+          </p>
+          <p className='mt-1 text-xs leading-5 text-emerald-800'>
+            Calculé depuis le montant TTC et la quantité totale en unité de base.
           </p>
         </div>
 
@@ -297,6 +355,24 @@ const ReceptionLineSummary = ({
           <p className='mt-1 text-lg font-bold text-blue-900'>
             {calculation.quantityInBaseUnits} {unitLabel} au total
           </p>
+          <dl className='mt-4 grid gap-3 sm:grid-cols-2'>
+            <div className='rounded-lg bg-white px-3 py-2'>
+              <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                Montant TTC
+              </dt>
+              <dd className='mt-1 font-semibold text-slate-900'>
+                {formatReceptionMoney(calculation.amountInCentimes)}
+              </dd>
+            </div>
+            <div className='rounded-lg bg-white px-3 py-2'>
+              <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                Coût unitaire TTC
+              </dt>
+              <dd className='mt-1 font-semibold text-slate-900'>
+                {formatReceptionUnitCost(calculation)} / {unitLabel}
+              </dd>
+            </div>
+          </dl>
         </div>
         <div className='flex shrink-0 gap-2'>
           <button
@@ -552,7 +628,7 @@ const ReceptionDraftForm = ({
                   Lignes de réception
                 </h2>
                 <p className='mt-1 text-sm leading-6 text-slate-600'>
-                  Chaque quantité reste attachée à son produit et à son unité de base.
+                  Chaque quantité et chaque montant TTC restent attachés à leur produit et à leur unité de base.
                 </p>
               </div>
               <button
@@ -618,7 +694,7 @@ const ReceptionDraftForm = ({
               <div>
                 <p className='font-semibold text-blue-950'>Enregistrement de la réception</p>
                 <p className='mt-1 text-sm leading-6 text-blue-800'>
-                  La réception sera enregistrée dans l’historique avec ses produits et ses quantités.
+                  La réception sera enregistrée dans l’historique avec ses produits, ses quantités et ses montants TTC.
                 </p>
               </div>
               <button

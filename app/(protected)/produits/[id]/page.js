@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
 import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
+import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
 import PackagingForm from './packaging-form.js';
@@ -10,6 +11,7 @@ import PriceHistory from './price-history.js';
 import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
 import ProductTabs from './product-tabs.js';
+import PurchaseCostCard from './purchase-cost-card.js';
 
 export const metadata = {
   title: 'Fiche produit | Syphax',
@@ -266,6 +268,8 @@ const ProductPage = async ({ params, searchParams }) => {
   ]);
   const canReadPackaging = permissions.includes('packaging.read');
   const canReadPricing = permissions.includes('pricing.read');
+  const canReadPurchaseCosts = permissions.includes('receptions.read');
+  const canReadTarification = canReadPricing || canReadPurchaseCosts;
   const product = await getProductById(id, {
     includePricing: canReadPricing,
   });
@@ -279,7 +283,7 @@ const ProductPage = async ({ params, searchParams }) => {
     : '';
   const activeSection = SECTIONS.has(requestedSection)
     && (requestedSection !== 'conditionnements' || canReadPackaging)
-    && (requestedSection !== 'tarification' || canReadPricing)
+    && (requestedSection !== 'tarification' || canReadTarification)
     ? requestedSection
     : 'identification';
   const canDeleteProduct = permissions.includes('products.delete');
@@ -297,6 +301,14 @@ const ProductPage = async ({ params, searchParams }) => {
   const baseUnit = BASE_UNITS.find((unit) => unit.code === product.baseUnit);
   const baseUnitLabel = baseUnit?.label ?? product.baseUnit;
   const latestPriceChange = product.salePriceHistory[0] ?? null;
+  const latestPurchaseCost = activeSection === 'tarification'
+    && canReadPurchaseCosts
+    ? await getLatestProductPurchaseCost({
+        baseUnit: product.baseUnit,
+        productId: product.id,
+        userId: session.userId,
+      })
+    : null;
 
   return (
     <main>
@@ -365,6 +377,7 @@ const ProductPage = async ({ params, searchParams }) => {
             activeSection={activeSection}
             canReadPackaging={canReadPackaging}
             canReadPricing={canReadPricing}
+            canReadPurchaseCosts={canReadPurchaseCosts}
             productId={product.id}
           />
         </div>
@@ -403,25 +416,35 @@ const ProductPage = async ({ params, searchParams }) => {
             id='tarification-panel'
             role='tabpanel'
           >
-            <PricingForm
-              baseUnitLabel={baseUnitLabel}
-              canUpdatePrice={canUpdatePrice}
-              currentPrice={formatPriceInput(
-                product.salePrice?.amountInCentimes,
-              )}
-              currentPriceInCentimes={product.salePrice?.amountInCentimes ?? null}
-              initiallyOpen={openPricePanel}
-              key={openPricePanel ? 'price-open' : 'price-closed'}
-              lastChange={latestPriceChange
-                ? {
-                    author:
-                      latestPriceChange.changedBy ?? 'Compte indisponible',
-                    date: formatDate(latestPriceChange.changedAt),
-                  }
-                : null}
-              productId={product.id}
-            />
-            <PriceHistory history={product.salePriceHistory} />
+            {canReadPricing && (
+              <PricingForm
+                baseUnitLabel={baseUnitLabel}
+                canUpdatePrice={canUpdatePrice}
+                currentPrice={formatPriceInput(
+                  product.salePrice?.amountInCentimes,
+                )}
+                currentPriceInCentimes={product.salePrice?.amountInCentimes ?? null}
+                initiallyOpen={openPricePanel}
+                key={openPricePanel ? 'price-open' : 'price-closed'}
+                lastChange={latestPriceChange
+                  ? {
+                      author:
+                        latestPriceChange.changedBy ?? 'Compte indisponible',
+                      date: formatDate(latestPriceChange.changedAt),
+                    }
+                  : null}
+                productId={product.id}
+              />
+            )}
+            {canReadPurchaseCosts && (
+              <PurchaseCostCard
+                baseUnitLabel={baseUnitLabel}
+                purchaseCost={latestPurchaseCost}
+              />
+            )}
+            {canReadPricing && (
+              <PriceHistory history={product.salePriceHistory} />
+            )}
           </div>
         )}
 
