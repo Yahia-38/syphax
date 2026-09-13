@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { updateProductSalePrice as saveSalePrice } from '../../../../lib/products.js';
-import { requireSession } from '../../../../lib/sessions.js';
+import { requirePermission } from '../../../../lib/sessions.js';
 
 const readTextField = (formData, name) => {
   const value = formData.get(name);
@@ -15,7 +15,7 @@ export const updateProductSalePrice = async (
   previousState,
   formData,
 ) => {
-  const session = await requireSession();
+  const session = await requirePermission('pricing.update');
   const values = { price: readTextField(formData, 'price') };
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision

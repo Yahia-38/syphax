@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
+import { getUserPermissions } from '../../../lib/access.js';
 import { listProducts } from '../../../lib/products.js';
-import { requireSession } from '../../../lib/sessions.js';
+import { requirePermission } from '../../../lib/sessions.js';
 import ProductTable from './product-table.js';
 
 export const metadata = {
@@ -14,11 +15,15 @@ const readQuery = (value) => {
 };
 
 const ProductsPage = async ({ searchParams }) => {
-  await requireSession();
+  const session = await requirePermission('products.read');
 
-  const resolvedSearchParams = await searchParams;
+  const [resolvedSearchParams, permissions] = await Promise.all([
+    searchParams,
+    getUserPermissions(session.userId),
+  ]);
   const query = readQuery(resolvedSearchParams?.q);
   const productDeleted = resolvedSearchParams?.deleted === '1';
+  const canCreateProduct = permissions.includes('products.create');
   const products = await listProducts();
 
   return (
@@ -33,12 +38,14 @@ const ProductsPage = async ({ searchParams }) => {
           </p>
         </div>
 
-        <Link
-          className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-          href='/produits/nouveau'
-        >
-          Nouveau produit
-        </Link>
+        {canCreateProduct && (
+          <Link
+            className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+            href='/produits/nouveau'
+          >
+            Nouveau produit
+          </Link>
+        )}
       </div>
 
       {productDeleted && (
@@ -50,7 +57,11 @@ const ProductsPage = async ({ searchParams }) => {
         </p>
       )}
 
-      <ProductTable products={products} initialQuery={query} />
+      <ProductTable
+        canCreateProduct={canCreateProduct}
+        products={products}
+        initialQuery={query}
+      />
     </main>
   );
 };

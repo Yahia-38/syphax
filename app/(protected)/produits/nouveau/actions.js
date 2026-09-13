@@ -1,7 +1,7 @@
 'use server';
 
 import { createProduct as saveProduct } from '../../../../lib/products.js';
-import { requireSession } from '../../../../lib/sessions.js';
+import { requirePermission } from '../../../../lib/sessions.js';
 
 const readTextField = (formData, name) => {
   const value = formData.get(name);
@@ -9,7 +9,7 @@ const readTextField = (formData, name) => {
 };
 
 export const createProduct = async (previousState, formData) => {
-  const session = await requireSession();
+  const session = await requirePermission('products.create');
   const values = {
     code: readTextField(formData, 'code'),
     designation: readTextField(formData, 'designation'),

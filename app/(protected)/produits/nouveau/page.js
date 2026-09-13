@@ -1,5 +1,5 @@
 import { BASE_UNITS } from '../../../../lib/products.js';
-import { requireSession } from '../../../../lib/sessions.js';
+import { requirePermission } from '../../../../lib/sessions.js';
 import ProductForm from './product-form.js';
 
 export const metadata = {
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 const NewProductPage = async () => {
-  await requireSession();
+  await requirePermission('products.create');
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>

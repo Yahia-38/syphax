@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --env-file-if-exists=.env.local --test",
+    "access:initialize": "node --env-file=.env.local scripts/initialize-access.js",
     "user:create": "node --env-file=.env.local scripts/create-user.js"
   },
   "dependencies": {

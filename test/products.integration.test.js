@@ -19,6 +19,7 @@ const {
   getProductById,
   listProducts,
   removeProductPackaging,
+  updateProduct,
   updateProductSalePrice,
 } = await import('../lib/products.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
@@ -258,6 +259,43 @@ test('supprime uniquement le produit demandé', async () => {
   assert.deepEqual(await deleteProduct('identifiant-invalide'), {
     notFound: true,
   });
+});
+
+test('modifie les informations d’un produit avec leur traçabilité', async () => {
+  const creatorId = new ObjectId();
+  const editorId = new ObjectId();
+  const created = await createProduct({
+    code: 'MODIFIER-01',
+    designation: 'Produit avant modification',
+    baseUnit: 'PIECE',
+    createdBy: creatorId.toString(),
+  });
+
+  const result = await updateProduct({
+    productId: created.product.id,
+    code: ' modifier-02 ',
+    designation: ' Produit après modification ',
+    baseUnit: 'BOITE',
+    updatedBy: editorId.toString(),
+  });
+
+  assert.deepEqual(result.product, {
+    id: created.product.id,
+    code: 'MODIFIER-02',
+    designation: 'Produit après modification',
+    baseUnit: 'BOITE',
+  });
+
+  const storedProduct = await database.collection('products').findOne({
+    _id: new ObjectId(created.product.id),
+  });
+
+  assert.equal(storedProduct.code, 'MODIFIER-02');
+  assert.equal(storedProduct.designation, 'Produit après modification');
+  assert.equal(storedProduct.baseUnit, 'BOITE');
+  assert.ok(storedProduct.updatedAt instanceof Date);
+  assert.ok(storedProduct.updatedBy.equals(editorId));
+  assert.ok(storedProduct.createdBy.equals(creatorId));
 });
 
 test('ajoute un conditionnement à un produit avec sa traçabilité', async () => {

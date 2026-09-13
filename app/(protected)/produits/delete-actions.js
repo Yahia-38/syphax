@@ -1,13 +1,13 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache.js';
+import { redirect } from 'next/navigation.js';
 
 import { deleteProduct as removeProduct } from '../../../lib/products.js';
-import { requireSession } from '../../../lib/sessions.js';
+import { requirePermission } from '../../../lib/sessions.js';
 
 export const deleteProduct = async (productId) => {
-  await requireSession();
+  await requirePermission('products.delete');
 
   let result;
 

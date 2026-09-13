@@ -42,7 +42,7 @@ const SortableHeader = ({ align = 'left', label, onSort, sortDir, sorted }) => (
   </th>
 );
 
-const ProductTable = ({ initialQuery, products }) => {
+const ProductTable = ({ canCreateProduct, initialQuery, products }) => {
   const searchRef = useRef(null);
   const [query, setQuery] = useState(initialQuery);
   const [unit, setUnit] = useState('ALL');
@@ -367,14 +367,14 @@ const ProductTable = ({ initialQuery, products }) => {
             >
               Voir tous les produits
             </button>
-          ) : (
+          ) : canCreateProduct ? (
             <Link
               className='mt-5 inline-flex rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
               href='/produits/nouveau'
             >
               Créer un produit
             </Link>
-          )}
+          ) : null}
         </div>
       )}
     </section>
