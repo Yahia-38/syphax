@@ -367,6 +367,19 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
       quantity: 6,
     },
   ]);
+  const catalogProduct = (await listProducts({ includePackagings: true }))
+    .find(({ id }) => id === product.product.id);
+  const catalogProductWithoutPackagings = (await listProducts())
+    .find(({ id }) => id === product.product.id);
+
+  assert.deepEqual(catalogProduct.packagings, [
+    {
+      id: packaging._id.toString(),
+      label: 'Pack de 6',
+      quantity: 6,
+    },
+  ]);
+  assert.equal('packagings' in catalogProductWithoutPackagings, false);
 });
 
 test('retire uniquement le conditionnement demandé', async () => {

@@ -1,8 +1,11 @@
 import Link from 'next/link';
 
 import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
+import { BASE_UNITS, listProducts } from '../../../lib/products.js';
+import { getMissingReceptionFormPermissions } from '../../../lib/receptions.js';
 import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
+import ReceptionForm from './reception-form.js';
 import SupplierWorkspace from './supplier-workspace.js';
 
 export const metadata = {
@@ -25,47 +28,38 @@ const TabLink = ({ active, children, href }) => (
   </Link>
 );
 
-const ReceptionPlaceholder = ({ canCreateReception }) => (
+const PERMISSION_LABELS = {
+  'packaging.read': 'consulter les conditionnements',
+  'products.read': 'consulter les produits',
+  'receptions.create': 'créer des réceptions',
+  'receptions.read': 'consulter les réceptions',
+  'suppliers.read': 'consulter les fournisseurs',
+};
+
+const ReceptionFormUnavailable = ({ missingPermissions }) => (
   <section
-    aria-labelledby='reception-list-title'
+    aria-labelledby='reception-form-unavailable-title'
     className='mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'
     role='tabpanel'
   >
     <div className='border-b border-slate-200 p-5 sm:p-6'>
-      <h2 className='text-lg font-semibold text-slate-900' id='reception-list-title'>
-        Réceptions de marchandises
+      <h2
+        className='text-lg font-semibold text-slate-900'
+        id='reception-form-unavailable-title'
+      >
+        Création d’une réception indisponible
       </h2>
       <p className='mt-1 text-sm leading-6 text-slate-600'>
-        La liste et le formulaire de réception seront ajoutés à la prochaine
-        étape du parcours.
+        Le formulaire et ses données de référence restent masqués tant que
+        tous les droits nécessaires ne sont pas accordés.
       </p>
     </div>
-    <div className='px-6 py-14 text-center'>
-      <div
-        aria-hidden='true'
-        className='mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700'
-      >
-        <svg
-          fill='none'
-          height='24'
-          stroke='currentColor'
-          strokeLinecap='round'
-          strokeLinejoin='round'
-          strokeWidth='2'
-          viewBox='0 0 24 24'
-          width='24'
-        >
-          <path d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z' />
-          <path d='m3.3 7 8.7 5 8.7-5M12 22V12' />
-        </svg>
-      </div>
-      <h3 className='mt-4 font-semibold text-slate-900'>
-        Aucune réception enregistrée
-      </h3>
-      <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
-        {canCreateReception
-          ? 'Le prochain incrément permettra d’enregistrer les produits reçus et leurs montants TTC.'
-          : 'Vous pourrez consulter ici les réceptions auxquelles vous avez accès.'}
+    <div className='p-5 sm:p-6'>
+      <p className='text-sm font-medium text-slate-800'>Droits manquants :</p>
+      <p className='mt-2 text-sm leading-6 text-slate-600'>
+        {missingPermissions
+          .map((permission) => PERMISSION_LABELS[permission] ?? permission)
+          .join(', ')}.
       </p>
     </div>
   </section>
@@ -90,7 +84,21 @@ const ReceptionsPage = async ({ searchParams }) => {
     : canReadReceptions
       ? 'receptions'
       : 'fournisseurs';
-  const suppliers = activeTab === 'fournisseurs' ? await listSuppliers() : [];
+  let suppliers = [];
+  let receptionProducts = [];
+  const missingReceptionFormPermissions = activeTab === 'receptions'
+    ? getMissingReceptionFormPermissions(permissions)
+    : [];
+
+  if (activeTab === 'fournisseurs') {
+    suppliers = await listSuppliers();
+  } else if (missingReceptionFormPermissions.length === 0) {
+    [suppliers, receptionProducts] = await Promise.all([
+      listSuppliers(),
+      listProducts({ includePackagings: true }),
+    ]);
+    suppliers = suppliers.filter(({ active }) => active);
+  }
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -132,9 +140,17 @@ const ReceptionsPage = async ({ searchParams }) => {
           suppliers={suppliers}
         />
       ) : (
-        <ReceptionPlaceholder
-          canCreateReception={permissions.includes('receptions.create')}
-        />
+        missingReceptionFormPermissions.length === 0 ? (
+          <ReceptionForm
+            baseUnits={BASE_UNITS}
+            products={receptionProducts}
+            suppliers={suppliers}
+          />
+        ) : (
+          <ReceptionFormUnavailable
+            missingPermissions={missingReceptionFormPermissions}
+          />
+        )
       )}
     </main>
   );
