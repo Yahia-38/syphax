@@ -181,7 +181,9 @@ const TourPage = async ({ params, searchParams }) => {
       {paymentPreview && (
         <TourPaymentPreview
           canCreatePayment={canCreateCashPayment}
+          initialConfirmationKey={randomUUID()}
           preview={paymentPreview}
+          tourId={tour.id}
         />
       )}
 

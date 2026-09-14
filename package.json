@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "cash:initialize": "node --env-file=.env.local scripts/initialize-cash-register.js",
     "start": "next start",
     "lint": "eslint",
     "test": "node --env-file-if-exists=.env.local --test",
