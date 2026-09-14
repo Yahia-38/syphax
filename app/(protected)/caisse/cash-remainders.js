@@ -79,6 +79,10 @@ const CashRemainders = ({
     INITIAL_PAYMENT_STATE,
   );
   const [allocationSelection, setAllocationSelection] = useState(null);
+  const [delivererConfirmationKey, setDelivererConfirmationKey] = useState(
+    initialConfirmationKey,
+  );
+  const [delivererPaymentNotice, setDelivererPaymentNotice] = useState(null);
   const [paymentSelection, setPaymentSelection] = useState(null);
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + remainders.length - 1;
@@ -101,6 +105,11 @@ const CashRemainders = ({
     : INITIAL_PAYMENT_STATE;
   const confirmationKey = paymentState.confirmationKey
     ?? initialConfirmationKey;
+  const currentAllocationSelection = allocationSelection
+    ? remainders.find((remainder) =>
+      remainder.deliverer.id === allocationSelection.deliverer.id)
+      ?? allocationSelection
+    : null;
 
   const openPaymentDialog = (deliverer, tour) => {
     setAllocationSelection(null);
@@ -113,7 +122,13 @@ const CashRemainders = ({
 
   const openAllocationPreview = (remainder) => {
     setPaymentSelection(null);
+    setDelivererPaymentNotice(null);
     setAllocationSelection(remainder);
+  };
+
+  const handleDelivererPaymentResolved = (result) => {
+    setDelivererPaymentNotice(result);
+    setDelivererConfirmationKey(result.nextConfirmationKey);
   };
 
   return (
@@ -208,6 +223,12 @@ const CashRemainders = ({
       {paymentState.message && (
         <p className='border-b border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 sm:px-6' role='status'>
           {paymentState.message}
+        </p>
+      )}
+
+      {delivererPaymentNotice && (
+        <p className='border-b border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 sm:px-6' role='status'>
+          {delivererPaymentNotice.message}
         </p>
       )}
 
@@ -461,10 +482,13 @@ const CashRemainders = ({
         </div>
       )}
 
-      {allocationSelection && (
+      {currentAllocationSelection && (
         <DelivererCashAllocationPreview
+          cashRegister={cashRegister}
+          confirmationKey={delivererConfirmationKey}
           onClose={() => setAllocationSelection(null)}
-          remainder={allocationSelection}
+          onResolved={handleDelivererPaymentResolved}
+          remainder={currentAllocationSelection}
         />
       )}
     </section>

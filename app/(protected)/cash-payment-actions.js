@@ -8,6 +8,7 @@ import { requireUserPermission } from '../../lib/access.js';
 import {
   CASH_PAYMENT_CREATE_PERMISSION,
   CASH_READ_PERMISSION,
+  recordDelivererCashPayment,
   recordTourCashPayment,
 } from '../../lib/cash-payments.js';
 import { requirePermission } from '../../lib/sessions.js';
@@ -22,6 +23,143 @@ const revalidatePaymentReads = (tourId) => {
 
   if (tourId) {
     revalidatePath(`/tournees/${tourId}`);
+  }
+};
+
+const readDelivererPaymentRequest = (formData) => {
+  if (!formData || typeof formData.get !== 'function') {
+    return {
+      error: 'La demande d’encaissement est invalide. Rechargez la page.',
+    };
+  }
+
+  const fieldNames = [
+    'amount',
+    'confirmationKey',
+    'delivererId',
+    'expectedCashRegisterId',
+    'expectedSummary',
+    'note',
+  ];
+  const fields = Object.fromEntries(fieldNames.map((name) => [
+    name,
+    formData.get(name),
+  ]));
+
+  if (fieldNames.some((name) => typeof fields[name] !== 'string')) {
+    return {
+      error: 'La forme de la demande d’encaissement est invalide. Rechargez la page.',
+    };
+  }
+
+  let expectedSummary;
+
+  try {
+    expectedSummary = JSON.parse(fields.expectedSummary);
+  } catch {
+    return {
+      error: 'Le récapitulatif confirmé est illisible. Rechargez la page.',
+    };
+  }
+
+  if (
+    !expectedSummary
+    || typeof expectedSummary !== 'object'
+    || Array.isArray(expectedSummary)
+    || !Array.isArray(expectedSummary.allocations)
+  ) {
+    return {
+      error: 'La forme du récapitulatif confirmé est invalide. Rechargez la page.',
+    };
+  }
+
+  return {
+    request: {
+      amount: fields.amount,
+      confirmationKey: fields.confirmationKey,
+      delivererId: fields.delivererId,
+      expectedCashRegisterId: fields.expectedCashRegisterId,
+      expectedSummary,
+      note: fields.note,
+    },
+  };
+};
+
+const revalidateDelivererPaymentReads = (payment) => {
+  revalidatePath('/caisse');
+
+  const tourIds = new Set(
+    payment.allocations
+      .map((allocation) => allocation.tourId)
+      .filter(Boolean),
+  );
+
+  for (const tourId of tourIds) {
+    revalidatePath(`/tournees/${tourId}`);
+  }
+};
+
+export const recordDelivererPayment = async (formData) => {
+  const session = await requirePermission(CASH_PAYMENT_CREATE_PERMISSION);
+
+  await requireUserPermission(session.userId, CASH_READ_PERMISSION);
+
+  const parsed = readDelivererPaymentRequest(formData);
+
+  if (parsed.error) {
+    return {
+      errors: { form: parsed.error },
+      stale: false,
+      succeeded: false,
+      uncertain: false,
+    };
+  }
+
+  try {
+    const result = await recordDelivererCashPayment({
+      ...parsed.request,
+      receivedBy: session.userId,
+    });
+
+    if (result.errors) {
+      if (result.stale) {
+        revalidatePath('/caisse');
+      }
+
+      return {
+        errors: result.errors,
+        stale: Boolean(result.stale),
+        succeeded: false,
+        summary: result.summary ?? null,
+        uncertain: false,
+      };
+    }
+
+    revalidateDelivererPaymentReads(result.payment);
+
+    return {
+      errors: {},
+      message: result.replayed
+        ? `Le versement ${result.payment.reference} avait déjà été enregistré.`
+        : `Le versement ${result.payment.reference} a été enregistré.`,
+      nextConfirmationKey: randomUUID(),
+      payment: result.payment,
+      replayed: result.replayed,
+      stale: false,
+      succeeded: true,
+      uncertain: false,
+    };
+  } catch (error) {
+    console.error('Résultat incertain du versement global :', error);
+
+    return {
+      errors: {
+        form: 'La réponse du serveur n’a pas permis de déterminer le résultat du versement.',
+      },
+      stale: false,
+      succeeded: false,
+      uncertain: true,
+    };
   }
 };
 

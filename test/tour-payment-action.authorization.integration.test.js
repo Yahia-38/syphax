@@ -89,8 +89,15 @@ const insertCountedTour = async () => {
   const tourId = new ObjectId();
 
   await Promise.all([
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: true,
+      code: 'LIV-ACTION',
+      name: 'Livreur action',
+    }),
     database.collection('tourCountings').insertOne({
       _id: countingId,
+      countedAt: new Date('2026-09-14T08:00:00.000Z'),
       totalDueInCentimes: 750_000,
       tourId,
     }),
@@ -141,6 +148,7 @@ beforeEach(async () => {
   await Promise.all([
     database.collection('cashPayments').deleteMany({}),
     database.collection('cashRegisters').deleteMany({}),
+    database.collection('deliverers').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
     database.collection('tours').deleteMany({}),
   ]);
