@@ -25,19 +25,22 @@ const PaginationLink = ({ children, disabled, href }) => disabled ? (
 const CashJournal = ({
   canReadDeliverers,
   canReadTours,
-  cashRegisters,
   dateFrom,
   dateTo,
   delivererId,
   deliverers,
+  financialDataError,
+  netVariationInCentimes,
   page,
   pageSize,
   payments,
   query,
   remainderState,
-  totalAmountInCentimes,
+  totalEntriesInCentimes,
   totalItems,
   totalPages,
+  totalWithdrawalsInCentimes,
+  trackedBalance,
 }) => {
   const filtersActive = Boolean(query || delivererId || dateFrom || dateTo);
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
@@ -62,27 +65,63 @@ const CashJournal = ({
         aria-labelledby='cash-register-title'
         className='mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
       >
-        <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-          {cashRegisters.length === 1 ? 'Caisse concernée' : 'Caisses concernées'}
+        <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>
+          Situation globale de la caisse active
         </p>
         <h2 className='mt-2 text-lg font-semibold text-slate-900' id='cash-register-title'>
-          {cashRegisters.length === 1
-            ? `${cashRegisters[0].name || 'Caisse sans nom'} — ${cashRegisters[0].code}`
-            : cashRegisters.length > 1
-              ? cashRegisters
-                  .map(({ code, name }) => `${name || 'Caisse sans nom'} — ${code}`)
-                  .join(' · ')
-              : 'Aucune caisse associée à un encaissement'}
+          Solde suivi
         </h2>
-        <p className='mt-4 text-sm font-medium text-slate-600'>
-          Total encaissé sur la sélection
-        </p>
-        <p className='mt-1 text-3xl font-bold tracking-tight text-slate-900'>
-          {formatCashAmount(totalAmountInCentimes)}
-        </p>
-        <p className='mt-2 text-xs leading-5 text-slate-500'>
-          Ce total reprend uniquement les versements enregistrés correspondant aux filtres.
-        </p>
+        {trackedBalance.error ? (
+          <p className='mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900' role='alert'>
+            {trackedBalance.error}
+          </p>
+        ) : (
+          <>
+            <p className='mt-1 text-3xl font-bold tracking-tight text-slate-900'>
+              {formatCashAmount(trackedBalance.balanceInCentimes)}
+            </p>
+            <p className='mt-2 text-sm font-medium text-slate-700'>
+              {trackedBalance.cashRegister.name} — {trackedBalance.cashRegister.code}
+            </p>
+            <p className='mt-2 text-xs leading-5 text-slate-500'>
+              Fonds initial déclaré + tous les encaissements − tous les retraits,
+              sur l’historique complet. Ce montant ne constitue pas un comptage
+              physique du tiroir.
+            </p>
+          </>
+        )}
+
+        <div className='mt-6 border-t border-slate-200 pt-5'>
+          <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+            Totaux de la sélection filtrée
+          </p>
+          {financialDataError ? (
+            <p className='mt-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900' role='alert'>
+              {financialDataError}
+            </p>
+          ) : (
+            <dl className='mt-3 grid gap-3 sm:grid-cols-3'>
+              {[
+                ['Entrées', formatCashAmount(totalEntriesInCentimes), 'text-emerald-800'],
+                ['Sorties', formatCashAmount(totalWithdrawalsInCentimes), 'text-red-800'],
+                ['Variation nette', formatCashAmount(netVariationInCentimes), 'text-slate-950'],
+              ].map(([label, value, color]) => (
+                <div className='rounded-xl bg-slate-50 p-4' key={label}>
+                  <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                    {label}
+                  </dt>
+                  <dd className={`mt-1 text-xl font-bold ${color}`}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <p className='mt-3 text-xs leading-5 text-slate-500'>
+            La variation filtrée dépend des critères ci-dessous ; elle ne doit
+            pas être confondue avec le solde suivi global.
+          </p>
+        </div>
       </section>
 
       <section
@@ -91,10 +130,10 @@ const CashJournal = ({
       >
         <div className='border-b border-slate-200 p-5 sm:p-6'>
           <h2 className='text-lg font-semibold text-slate-900' id='cash-journal-title'>
-            Journal des encaissements
+            Journal de caisse
           </h2>
           <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Consultez les versements déjà enregistrés, du plus récent au plus ancien.
+            Consultez les encaissements et les retraits, du plus récent au plus ancien.
           </p>
         </div>
 
@@ -120,7 +159,7 @@ const CashJournal = ({
           )}
           <div>
             <label className='sr-only' htmlFor='cash-search'>
-              Rechercher un encaissement
+              Rechercher un mouvement de caisse
             </label>
             <input
               className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
@@ -128,7 +167,7 @@ const CashJournal = ({
               id='cash-search'
               maxLength={100}
               name='q'
-              placeholder='Versement, code ou nom du livreur'
+              placeholder='Référence, livreur, note ou motif'
               type='search'
             />
           </div>
@@ -195,24 +234,24 @@ const CashJournal = ({
         <div className='flex min-h-12 items-center border-b border-slate-200 px-4 py-3 sm:px-6'>
           <p className='text-sm text-slate-500'>
             {totalItems > 0
-              ? `${firstItem}–${lastItem} sur ${totalItems} encaissements`
-              : '0 encaissement'}
+              ? `${firstItem}–${lastItem} sur ${totalItems} mouvements`
+              : '0 mouvement'}
           </p>
         </div>
 
         {payments.length > 0 ? (
           <>
             <table className='w-full table-fixed divide-y divide-slate-200'>
-              <caption className='sr-only'>Journal des encaissements</caption>
+              <caption className='sr-only'>Journal des mouvements de caisse</caption>
               <thead>
                 <tr>
                   {[
+                    ['Type', 'w-[12%]'],
                     ['Date et heure', 'w-[16%]'],
-                    ['Référence du versement', 'w-[20%]'],
-                    ['Livreur', 'w-[18%]'],
-                    ['Affectations', 'w-[18%]'],
+                    ['Référence', 'w-[19%]'],
+                    ['Informations', 'w-[25%]'],
                     ['Montant en DA', 'w-[14%]'],
-                    ['Auteur de l’encaissement', 'w-[14%]'],
+                    ['Auteur', 'w-[14%]'],
                   ].map(([label, width]) => (
                     <th
                       className={`${width} bg-slate-50 px-2 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:px-4`}
@@ -227,12 +266,21 @@ const CashJournal = ({
               <tbody className='divide-y divide-slate-100 bg-white'>
                 {payments.map((payment) => (
                   <tr className='align-top hover:bg-slate-50' key={payment.id}>
+                    <td className='break-words px-2 py-3 text-xs font-semibold sm:px-4'>
+                      <span className={payment.type === 'WITHDRAWAL'
+                        ? 'text-red-800'
+                        : 'text-emerald-800'}>
+                        {payment.type === 'WITHDRAWAL'
+                          ? 'Retrait'
+                          : 'Encaissement'}
+                      </span>
+                    </td>
                     <td className='break-words px-2 py-3 text-xs text-slate-600 sm:px-4'>
                       {formatCashPaymentDateTime(payment.receivedAt)}
                     </td>
                     <td className='break-all px-2 py-3 font-mono text-xs font-semibold text-slate-900 sm:px-4'>
                       {payment.reference}
-                      {payment.note && (
+                      {payment.type === 'PAYMENT' && payment.note && (
                         <details className='mt-2 font-sans font-normal text-slate-600'>
                           <summary className='cursor-pointer text-xs font-medium text-blue-800'>
                             Voir la note
@@ -244,57 +292,71 @@ const CashJournal = ({
                       )}
                     </td>
                     <td className='break-words px-2 py-3 text-xs text-slate-700 sm:px-4'>
-                      {canReadDeliverers && payment.deliverer.id ? (
-                        <Link
-                          className='font-medium text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                          href={`/livreurs/${payment.deliverer.id}`}
-                        >
-                          {payment.deliverer.code}
-                        </Link>
+                      {payment.type === 'WITHDRAWAL' ? (
+                        <>
+                          <p className='font-semibold text-slate-900'>Motif</p>
+                          <p className='mt-1 whitespace-pre-wrap break-words'>
+                            {payment.reason}
+                          </p>
+                        </>
                       ) : (
-                        <span className='font-medium text-slate-900'>
-                          {payment.deliverer.code}
-                        </span>
-                      )}
-                      <span className='mt-1 block'>{payment.deliverer.name}</span>
-                    </td>
-                    <td className='break-words px-2 py-3 text-xs text-slate-700 sm:px-4'>
-                      {payment.allocations ? (
-                        <details>
-                          <summary className='cursor-pointer font-semibold text-blue-800'>
-                            {payment.allocations.length} affectation{payment.allocations.length > 1 ? 's' : ''}
-                          </summary>
-                          <div className='mt-2 space-y-2'>
-                            {payment.allocations.map((allocation) => (
-                              <div
-                                className='rounded-lg bg-slate-50 p-2'
-                                key={allocation.id}
+                        <>
+                          <p>
+                            {canReadDeliverers && payment.deliverer.id ? (
+                              <Link
+                                className='font-medium text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                                href={`/livreurs/${payment.deliverer.id}`}
                               >
-                                <p className='break-all font-mono'>
-                                  {canReadTours && allocation.id ? (
-                                    <Link
-                                      className='font-semibold text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                                      href={`/tournees/${allocation.id}`}
-                                    >
-                                      {allocation.reference}
-                                    </Link>
-                                  ) : allocation.reference}
-                                </p>
-                                <p className='mt-1 font-semibold text-slate-900'>
-                                  {formatCashAmount(allocation.amountInCentimes)}
-                                </p>
+                                {payment.deliverer.code}
+                              </Link>
+                            ) : (
+                              <span className='font-medium text-slate-900'>
+                                {payment.deliverer.code}
+                              </span>
+                            )}
+                            <span className='ml-1'>{payment.deliverer.name}</span>
+                          </p>
+                          {payment.allocations ? (
+                            <details className='mt-2'>
+                              <summary className='cursor-pointer font-semibold text-blue-800'>
+                                {payment.allocations.length} affectation{payment.allocations.length > 1 ? 's' : ''}
+                              </summary>
+                              <div className='mt-2 space-y-2'>
+                                {payment.allocations.map((allocation) => (
+                                  <div className='rounded-lg bg-slate-50 p-2' key={allocation.id}>
+                                    <p className='break-all font-mono'>
+                                      {canReadTours && allocation.id ? (
+                                        <Link
+                                          className='font-semibold text-blue-800 hover:text-blue-950 hover:underline'
+                                          href={`/tournees/${allocation.id}`}
+                                        >
+                                          {allocation.reference}
+                                        </Link>
+                                      ) : allocation.reference}
+                                    </p>
+                                    <p className='mt-1 font-semibold text-slate-900'>
+                                      {formatCashAmount(allocation.amountInCentimes)}
+                                    </p>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </details>
-                      ) : (
-                        <span className='font-medium text-red-700'>
-                          Affectations incohérentes
-                        </span>
+                            </details>
+                          ) : (
+                            <span className='mt-2 block font-medium text-red-700'>
+                              Affectations incohérentes
+                            </span>
+                          )}
+                        </>
                       )}
                     </td>
-                    <td className='break-words px-2 py-3 text-xs font-semibold text-slate-900 sm:px-4'>
-                      {formatCashAmount(payment.amountInCentimes)}
+                    <td className={`break-words px-2 py-3 text-xs font-bold sm:px-4 ${
+                      payment.type === 'WITHDRAWAL'
+                        ? 'text-red-800'
+                        : 'text-emerald-800'
+                    }`}>
+                      {payment.amountInCentimes === null
+                        ? 'Donnée incohérente'
+                        : `${payment.type === 'WITHDRAWAL' ? '−' : '+'} ${formatCashAmount(payment.amountInCentimes)}`}
                     </td>
                     <td className='break-words px-2 py-3 text-xs text-slate-700 sm:px-4'>
                       {payment.author ?? 'Compte indisponible'}
@@ -305,7 +367,7 @@ const CashJournal = ({
             </table>
 
             <nav
-              aria-label='Pagination des encaissements'
+              aria-label='Pagination des mouvements de caisse'
               className='flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-3 sm:px-6'
             >
               <PaginationLink disabled={page === 1} href={getPageHref(page - 1)}>
@@ -327,12 +389,12 @@ const CashJournal = ({
             <h3 className='font-semibold text-slate-900'>
               {filtersActive
                 ? 'Aucun résultat pour ces filtres'
-                : 'Aucun encaissement enregistré'}
+                : 'Aucun mouvement enregistré'}
             </h3>
             <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
               {filtersActive
                 ? 'Modifiez ou réinitialisez les critères de recherche.'
-                : 'Les versements déjà enregistrés depuis les tournées apparaîtront ici.'}
+                : 'Les encaissements et retraits enregistrés apparaîtront ici.'}
             </p>
           </div>
         )}

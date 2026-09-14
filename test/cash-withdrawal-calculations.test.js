@@ -12,6 +12,7 @@ test('prévisualise un montant positif exact et nettoie le motif', () => {
     reason: '  Approvisionnement agence  ',
   }), {
     amountInCentimes: null,
+    balanceAfterWithdrawalInCentimes: null,
     errors: {
       amount: 'Saisissez un montant valide avec deux décimales maximum, dans la limite numérique autorisée.',
     },
@@ -23,9 +24,34 @@ test('prévisualise un montant positif exact et nettoie le motif', () => {
     reason: '  Approvisionnement agence  ',
   }), {
     amountInCentimes: 1_234_567,
+    balanceAfterWithdrawalInCentimes: null,
     errors: {},
     reason: 'Approvisionnement agence',
   });
+});
+
+test('calcule le solde prévu et accepte le retrait exact du solde', () => {
+  const partial = validateCashWithdrawalPreview({
+    amount: '3000',
+    balanceInCentimes: 1_000_000,
+    reason: 'Dépôt bancaire',
+  });
+  const exact = validateCashWithdrawalPreview({
+    amount: '7000',
+    balanceInCentimes: 700_000,
+    reason: 'Dépôt bancaire',
+  });
+  const excessive = validateCashWithdrawalPreview({
+    amount: '7000,01',
+    balanceInCentimes: 700_000,
+    reason: 'Dépôt bancaire',
+  });
+
+  assert.equal(partial.balanceAfterWithdrawalInCentimes, 700_000);
+  assert.equal(exact.balanceAfterWithdrawalInCentimes, 0);
+  assert.equal(excessive.amountInCentimes, null);
+  assert.equal(excessive.balanceAfterWithdrawalInCentimes, null);
+  assert.match(excessive.errors.amount, /dépasse/u);
 });
 
 test('refuse les montants vides, nuls, trop précis et hors limite numérique', () => {

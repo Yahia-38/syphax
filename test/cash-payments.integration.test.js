@@ -315,6 +315,11 @@ test('initialise une unique Caisse principale active sans solde fictif', async (
   assert.equal(cashRegister.name, MAIN_CASH_REGISTER_NAME);
   assert.equal(cashRegister.currency, CASH_CURRENCY);
   assert.equal(cashRegister.active, true);
+  assert.equal(cashRegister.openingBalance.amountInCentimes, 0);
+  assert.equal(cashRegister.openingBalance.currency, CASH_CURRENCY);
+  assert.ok(cashRegister.openingBalance.declaredAt instanceof Date);
+  assert.equal(typeof cashRegister.openingBalance.reference, 'string');
+  assert.equal(typeof cashRegister.openingBalance.source, 'string');
   assert.equal(await database.collection('cashRegisters').countDocuments({}), 1);
   assert.equal(await database.collection('cashPayments').countDocuments({}), 0);
   assert.equal(await database.collection('cashMovements').countDocuments({}), 0);

@@ -13,6 +13,7 @@ import {
 import {
   CASH_WITHDRAWAL_FORM_PERMISSIONS,
   getCashWithdrawalPreviewData,
+  getTrackedCashBalance,
 } from '../../../lib/cash-withdrawals.js';
 import { requirePermission } from '../../../lib/sessions.js';
 import CashJournal from './cash-journal.js';
@@ -32,10 +33,17 @@ const CashPage = async ({ searchParams }) => {
   const canPreviewWithdrawal = CASH_WITHDRAWAL_FORM_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
-  const [journal, options, remainders, withdrawalPreview] = await Promise.all([
+  const [
+    journal,
+    options,
+    remainders,
+    trackedBalance,
+    withdrawalPreview,
+  ] = await Promise.all([
     listCashPayments({ ...listState, userId: session.userId }),
     listCashJournalFilterOptions({ userId: session.userId }),
     listCashRemainders({ ...remainderState, userId: session.userId }),
+    getTrackedCashBalance({ userId: session.userId }),
     canPreviewWithdrawal
       ? getCashWithdrawalPreviewData({ userId: session.userId })
       : null,
@@ -61,11 +69,14 @@ const CashPage = async ({ searchParams }) => {
             Caisse
           </h1>
           <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Consultez les encaissements déjà enregistrés depuis les tournées.
+            Consultez les encaissements, les retraits et le solde suivi.
           </p>
         </div>
         {withdrawalPreview && (
-          <CashWithdrawalPreview {...withdrawalPreview} />
+          <CashWithdrawalPreview
+            {...withdrawalPreview}
+            initialConfirmationKey={randomUUID()}
+          />
         )}
       </div>
 
@@ -75,6 +86,7 @@ const CashPage = async ({ searchParams }) => {
         canReadDeliverers={canReadDeliverers}
         canReadTours={canReadTours}
         remainderState={remainders}
+        trackedBalance={trackedBalance}
       />
       <CashRemainders
         {...remainders}
