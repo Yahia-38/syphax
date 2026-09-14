@@ -274,6 +274,52 @@ test('refuse la confirmation du chargement sans tours.load', async () => {
   await database.collection('tours').deleteOne({ _id: tourId });
 });
 
+test('exige la lecture de la tournée et des tarifs pour confirmer', async () => {
+  const { token: missingPricingToken } = await createUserSession(
+    'chargement-sans-lecture-tarifs',
+    ['tours.load', 'tours.read'],
+  );
+  const { token: missingTourReadToken } = await createUserSession(
+    'chargement-sans-lecture-tournee',
+    ['pricing.read', 'tours.load'],
+  );
+  const tourId = new ObjectId();
+
+  await database.collection('tours').insertOne({
+    _id: tourId,
+    reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+    status: 'PREPARATION',
+  });
+
+  await assert.rejects(
+    callWithSession(missingPricingToken, () => loadTour(
+      tourId.toString(),
+      { revision: 0 },
+      createTourLoadingFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'pricing.read',
+  );
+  await assert.rejects(
+    callWithSession(missingTourReadToken, () => loadTour(
+      tourId.toString(),
+      { revision: 0 },
+      createTourLoadingFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.read',
+  );
+
+  const tour = await database.collection('tours').findOne({ _id: tourId });
+
+  assert.equal(tour.status, 'PREPARATION');
+  assert.equal('loadedAt' in tour, false);
+  assert.equal(await database.collection('stockMovements').countDocuments({
+    sourceTourId: tourId,
+  }), 0);
+  await database.collection('tours').deleteOne({ _id: tourId });
+});
+
 test('exige aussi les droits de lecture du catalogue et des conditionnements', async () => {
   const { token: missingProductReadToken } = await createUserSession(
     'reservation-sans-catalogue',

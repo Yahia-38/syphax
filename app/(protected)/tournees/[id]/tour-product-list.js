@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import TourReservationReleaseButton from './tour-reservation-release-button.js';
 
 const LINES_PER_PAGE = 5;
@@ -10,7 +11,33 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const TourProductList = ({ canRelease, lines, loaded, tourId }) => {
+const calculateLoadedValue = (line) => {
+  const amountInCentimes = line.salePriceAtLoading?.amountInCentimes;
+  const valueInCentimes = line.quantityInBaseUnits * amountInCentimes;
+
+  return Number.isSafeInteger(amountInCentimes)
+    && amountInCentimes >= 0
+    && Number.isSafeInteger(valueInCentimes)
+    && valueInCentimes >= 0
+    ? valueInCentimes
+    : null;
+};
+
+const formatPriceSourceDate = (value) => value
+  ? new Intl.DateTimeFormat('fr-DZ', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'Africa/Algiers',
+    }).format(new Date(value))
+  : null;
+
+const TourProductList = ({
+  canReadPricing,
+  canRelease,
+  lines,
+  loaded,
+  tourId,
+}) => {
   const [query, setQuery] = useState('');
   const [quantityMode, setQuantityMode] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,6 +67,14 @@ const TourProductList = ({ canRelease, lines, loaded, tourId }) => {
     firstLineIndex + LINES_PER_PAGE,
   );
   const filtersActive = Boolean(normalizedQuery || quantityMode !== 'ALL');
+  const loadedValues = loaded && canReadPricing
+    ? lines.map(calculateLoadedValue)
+    : [];
+  const hasCompleteLoadedValue = loadedValues.length > 0
+    && loadedValues.every(Number.isSafeInteger);
+  const totalLoadedValueInCentimes = hasCompleteLoadedValue
+    ? loadedValues.reduce((total, value) => total + value, 0)
+    : null;
 
   const resetFilters = () => {
     setQuery('');
@@ -59,6 +94,24 @@ const TourProductList = ({ canRelease, lines, loaded, tourId }) => {
         <p className='mt-1 text-sm text-slate-600'>
           {lines.length} ligne{lines.length > 1 ? 's' : ''} dans la tournée.
         </p>
+        {loaded && canReadPricing && (
+          <div className='mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3'>
+            <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
+              Valeur des marchandises chargées
+            </p>
+            {hasCompleteLoadedValue
+              && Number.isSafeInteger(totalLoadedValueInCentimes) ? (
+                <p className='mt-1 text-xl font-bold tabular-nums text-blue-950'>
+                  {formatReceptionMoney(totalLoadedValueInCentimes)}
+                </p>
+              ) : (
+                <p className='mt-1 text-sm font-medium text-slate-700'>
+                  Non calculable : au moins un prix de vente au chargement
+                  n’est pas renseigné.
+                </p>
+              )}
+          </div>
+        )}
       </div>
 
       <div className='space-y-4 border-b border-slate-200 p-5 sm:p-6' role='search'>
@@ -139,6 +192,40 @@ const TourProductList = ({ canRelease, lines, loaded, tourId }) => {
                       {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
                     </p>
                   </div>
+                  {loaded && canReadPricing && (
+                    line.salePriceAtLoading ? (
+                      <div className='mt-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3'>
+                        <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
+                          Prix de vente unitaire TTC au chargement
+                        </p>
+                        <p className='mt-1 font-semibold tabular-nums text-blue-950'>
+                          {formatReceptionMoney(
+                            line.salePriceAtLoading.amountInCentimes,
+                          )} / {line.salePriceAtLoading.unit}
+                        </p>
+                        <p className='mt-2 text-xs text-slate-600'>
+                          Valeur des marchandises chargées :{' '}
+                          {formatReceptionMoney(calculateLoadedValue(line))}
+                        </p>
+                        {(line.salePriceAtLoading.sourceUpdatedAt
+                          || line.salePriceAtLoading.sourceVersionId) && (
+                          <p className='mt-1 text-xs text-slate-500'>
+                            Tarif source
+                            {line.salePriceAtLoading.sourceUpdatedAt
+                              ? ` du ${formatPriceSourceDate(line.salePriceAtLoading.sourceUpdatedAt)}`
+                              : ''}
+                            {line.salePriceAtLoading.sourceVersionId
+                              ? ` · version ${line.salePriceAtLoading.sourceVersionId}`
+                              : ''}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className='mt-3 max-w-xs rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900'>
+                        Prix de vente au chargement non renseigné
+                      </p>
+                    )
+                  )}
                   {canRelease && (
                     <TourReservationReleaseButton
                       productCode={line.productCode}

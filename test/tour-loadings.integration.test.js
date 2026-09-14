@@ -15,6 +15,7 @@ process.env.MONGODB_URI = testUri.toString();
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { deactivateDeliverer } = await import('../lib/deliverers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
+const { updateProductSalePrice } = await import('../lib/products.js');
 const {
   TOUR_LOADING_OUTPUT_KIND,
   getProductStockSummaries,
@@ -28,6 +29,7 @@ const {
 const {
   confirmTourLoading,
   createTourLoadingDigest,
+  getTourLoadingPreview,
 } = await import('../lib/tour-loadings.js');
 const { formatTourStatus, getTourById } = await import('../lib/tours.js');
 
@@ -43,7 +45,7 @@ before(async () => {
     database.collection('roles').insertOne({
       _id: roleId,
       key: 'tour-loader-test',
-      permissions: ['tours.load', 'tours.read'],
+      permissions: ['pricing.read', 'tours.load', 'tours.read'],
     }),
     database.collection('users').insertOne({
       _id: loaderId,
@@ -88,22 +90,40 @@ const insertTour = async ({ delivererId, status = 'PREPARATION' } = {}) => {
   return tourId;
 };
 
-const insertProduct = async ({ physicalQuantity = 100 } = {}) => {
+const insertProduct = async ({
+  baseUnit = 'PIECE',
+  packagings = [],
+  physicalQuantity = 100,
+  salePriceInCentimes = 15000,
+} = {}) => {
   const productId = new ObjectId();
+  const salePriceUpdatedAt = new Date('2026-09-14T08:30:00.000Z');
 
   await database.collection('products').insertOne({
     _id: productId,
     active: true,
-    baseUnit: 'PIECE',
+    baseUnit,
     code: `PRD-${productId.toHexString().slice(-6)}`,
     designation: `Produit ${productId.toHexString().slice(-4)}`,
-    packagings: [],
+    packagings,
+    ...(Number.isSafeInteger(salePriceInCentimes)
+      ? {
+          salePrice: {
+            amountInCentimes: salePriceInCentimes,
+            currency: 'DZD',
+            taxIncluded: true,
+            updatedAt: salePriceUpdatedAt,
+            updatedBy: loaderId,
+            versionId: new ObjectId(),
+          },
+        }
+      : {}),
   });
   await database.collection('stockMovements').insertOne({
     _id: new ObjectId(),
     kind: 'TEST_IN',
     productId,
-    baseUnit: 'PIECE',
+    baseUnit,
     quantityDeltaInBaseUnits: physicalQuantity,
     occurredOn: new Date('2026-09-14T08:00:00.000Z'),
   });
@@ -111,21 +131,32 @@ const insertProduct = async ({ physicalQuantity = 100 } = {}) => {
   return productId;
 };
 
-const addReservation = async ({ productId, quantity = 30, tourId }) =>
+const addReservation = async ({
+  packagingCount = '',
+  packagingId = '',
+  productId,
+  quantity = 30,
+  quantityMode = 'DIRECT',
+  tourId,
+}) =>
   addAndReserveTourProduct({
     additionKey: randomUUID(),
     createdBy: loaderId.toString(),
-    directQuantity: String(quantity),
-    packagingCount: '',
-    packagingId: '',
+    directQuantity: quantityMode === 'DIRECT' ? String(quantity) : '',
+    packagingCount,
+    packagingId,
     productId: productId.toString(),
-    quantityMode: 'DIRECT',
+    quantityMode,
     tourId: tourId.toString(),
   });
 
-const getDigest = async (tourId) => createTourLoadingDigest(
-  await listTourReservations({ database, tourId: tourId.toString() }),
-);
+const getPreview = async (tourId, userId = loaderId) =>
+  getTourLoadingPreview({
+    tourId: tourId.toString(),
+    userId: userId.toString(),
+  });
+
+const getDigest = async (tourId) => (await getPreview(tourId)).digest;
 
 const load = async (tourId, expectedDigest) => confirmTourLoading({
   expectedDigest,
@@ -168,7 +199,10 @@ test('charge plusieurs produits, conserve les autres réservations et reste idem
     }).toArray(),
     getProductStockSummaries([firstProductId, secondProductId], { database }),
     listTourReservations({ database, tourId: tourId.toString() }),
-    getTourById(tourId.toString(), { userId: loaderId.toString() }),
+    getTourById(tourId.toString(), {
+      includePricing: true,
+      userId: loaderId.toString(),
+    }),
   ]);
   const firstStock = summaries.get(firstProductId.toString());
   const secondStock = summaries.get(secondProductId.toString());
@@ -205,12 +239,184 @@ test('charge plusieurs produits, conserve les autres réservations et reste idem
     reservation.loadedAt instanceof Date
     && reservation.loadedBy.equals(loaderId)
     && !('amountInCentimes' in reservation)
-    && !('salePrice' in reservation)));
+    && !('salePrice' in reservation)
+    && reservation.salePriceAtLoading.amountInCentimes === 15000
+    && reservation.salePriceAtLoading.currency === 'DZD'
+    && reservation.salePriceAtLoading.taxIncluded === true
+    && reservation.salePriceAtLoading.unit === 'PIECE'));
+  assert.ok(tourDetail.lines.every((line) =>
+    line.salePriceAtLoading.amountInCentimes === 15000));
   const loadingIndex = (await database.collection('stockMovements')
     .listIndexes().toArray()).find((index) =>
     index.name === 'unique_tour_loading_reservation_movement');
 
   assert.equal(loadingIndex.unique, true);
+});
+
+test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base', async () => {
+  const packagingId = new ObjectId();
+  const productId = await insertProduct({
+    baseUnit: 'BOUTEILLE',
+    packagings: [{
+      _id: packagingId,
+      label: 'Pack de 12',
+      quantity: 12,
+    }],
+    physicalQuantity: 100,
+    salePriceInCentimes: 15000,
+  });
+  const tourId = await insertTour();
+
+  await addReservation({
+    packagingCount: '5',
+    packagingId: packagingId.toString(),
+    productId,
+    quantityMode: 'PACKAGING',
+    tourId,
+  });
+
+  const preview = await getPreview(tourId);
+
+  assert.equal(preview.errors.form, undefined);
+  assert.equal(preview.lines[0].quantityInBaseUnits, 60);
+  assert.equal(preview.lines[0].salePriceAtLoading.amountInCentimes, 15000);
+  assert.equal(preview.lines[0].salePriceAtLoading.unit, 'BOUTEILLE');
+  assert.equal(preview.lines[0].loadedValueInCentimes, 900000);
+  assert.equal(preview.totalValueInCentimes, 900000);
+
+  const result = await load(tourId, preview.digest);
+  const reservation = await database.collection('tourReservations').findOne({
+    productId,
+    tourId,
+  });
+
+  assert.ok(result.tourId);
+  assert.equal(reservation.salePriceAtLoading.amountInCentimes, 15000);
+  assert.equal(reservation.salePriceAtLoading.unit, 'BOUTEILLE');
+});
+
+test('refuse un tarif manquant sans sortie ni transition partielle', async () => {
+  const productId = await insertProduct({ salePriceInCentimes: null });
+  const tourId = await insertTour();
+
+  await addReservation({ productId, tourId });
+
+  const preview = await getPreview(tourId);
+  const result = await load(
+    tourId,
+    createTourLoadingDigest(
+      await listTourReservations({ database, tourId: tourId.toString() }),
+    ),
+  );
+  const [tour, reservation, movementCount] = await Promise.all([
+    database.collection('tours').findOne({ _id: tourId }),
+    database.collection('tourReservations').findOne({ tourId }),
+    database.collection('stockMovements').countDocuments({
+      kind: TOUR_LOADING_OUTPUT_KIND,
+      sourceTourId: tourId,
+    }),
+  ]);
+
+  assert.match(preview.errors.form, /prix de vente.*PRD-/u);
+  assert.match(result.errors.form, /prix de vente.*PRD-/u);
+  assert.equal(tour.status, 'PREPARATION');
+  assert.equal(reservation.status, 'ACTIVE');
+  assert.equal('salePriceAtLoading' in reservation, false);
+  assert.equal(movementCount, 0);
+});
+
+test('refuse un tarif modifié après aperçu et conserve le prix lors des mises à jour et rejeux', async () => {
+  const editorId = new ObjectId();
+  const productId = await insertProduct({ salePriceInCentimes: 15000 });
+  const tourId = await insertTour();
+
+  await addReservation({ productId, quantity: 60, tourId });
+
+  const stalePreview = await getPreview(tourId);
+
+  await updateProductSalePrice({
+    price: '175,50',
+    productId: productId.toString(),
+    updatedBy: editorId.toString(),
+  });
+
+  const staleResult = await load(tourId, stalePreview.digest);
+
+  assert.match(staleResult.errors.form, /tarifs applicables ont changé/u);
+  assert.equal(await database.collection('stockMovements').countDocuments({
+    kind: TOUR_LOADING_OUTPUT_KIND,
+    sourceTourId: tourId,
+  }), 0);
+  assert.equal((await database.collection('tours').findOne({
+    _id: tourId,
+  })).status, 'PREPARATION');
+
+  const refreshedPreview = await getPreview(tourId);
+  const loaded = await load(tourId, refreshedPreview.digest);
+
+  assert.ok(loaded.tourId);
+  assert.equal(refreshedPreview.lines[0].salePriceAtLoading.amountInCentimes, 17550);
+
+  await updateProductSalePrice({
+    price: '200',
+    productId: productId.toString(),
+    updatedBy: editorId.toString(),
+  });
+
+  const replayed = await load(tourId, refreshedPreview.digest);
+  const reservation = await database.collection('tourReservations').findOne({
+    productId,
+    tourId,
+  });
+
+  assert.equal(replayed.replayed, true);
+  assert.equal(reservation.salePriceAtLoading.amountInCentimes, 17550);
+  assert.equal(await database.collection('stockMovements').countDocuments({
+    kind: TOUR_LOADING_OUTPUT_KIND,
+    sourceTourId: tourId,
+  }), 1);
+});
+
+test('sérialise une modification concurrente du tarif avec le chargement', async () => {
+  const editorId = new ObjectId();
+  const productId = await insertProduct({ salePriceInCentimes: 15000 });
+  const tourId = await insertTour();
+
+  await addReservation({ productId, tourId });
+
+  const preview = await getPreview(tourId);
+  const [loadingResult] = await Promise.all([
+    load(tourId, preview.digest),
+    updateProductSalePrice({
+      price: '175,50',
+      productId: productId.toString(),
+      updatedBy: editorId.toString(),
+    }),
+  ]);
+  const [product, reservation, movementCount, tour] = await Promise.all([
+    database.collection('products').findOne({ _id: productId }),
+    database.collection('tourReservations').findOne({ tourId }),
+    database.collection('stockMovements').countDocuments({
+      kind: TOUR_LOADING_OUTPUT_KIND,
+      sourceTourId: tourId,
+    }),
+    database.collection('tours').findOne({ _id: tourId }),
+  ]);
+
+  assert.equal(product.salePrice.amountInCentimes, 17550);
+
+  if (loadingResult.tourId) {
+    assert.equal(reservation.salePriceAtLoading.amountInCentimes, 15000);
+    assert.equal(reservation.status, 'LOADED');
+    assert.equal(movementCount, 1);
+    assert.equal(tour.status, 'LOADED');
+  } else {
+    assert.match(loadingResult.errors.form, /tarifs applicables ont changé/u);
+    assert.equal('salePriceAtLoading' in reservation, false);
+    assert.equal(reservation.status, 'ACTIVE');
+    assert.equal(movementCount, 0);
+    assert.equal(tour.status, 'PREPARATION');
+  }
 });
 
 test('annule toutes les écritures si une sortie échoue en cours de transaction', async () => {
@@ -292,7 +498,7 @@ test('refuse sans permission, pour une tournée vide ou avec un livreur désacti
   )).errors.form, /aucune réservation active/u);
   assert.match((await load(
     disabledTourId,
-    await getDigest(disabledTourId),
+    createTourLoadingDigest([]),
   )).errors.form, /désactivé/u);
 });
 
@@ -311,7 +517,7 @@ test('refuse une empreinte périmée après modification des lignes', async () =
 
   const result = await load(tourId, staleDigest);
 
-  assert.match(result.errors.form, /lignes ont changé/u);
+  assert.match(result.errors.form, /quantités ou les tarifs applicables ont changé/u);
   assert.equal(await database.collection('stockMovements').countDocuments({
     kind: TOUR_LOADING_OUTPUT_KIND,
     sourceTourId: tourId,
@@ -413,6 +619,80 @@ test('sérialise ajout, retrait, autre chargement et désactivation du livreur',
     loadAgainstDeactivation.errors?.form ?? '',
   ));
   assert.ok(addRaceReservation.reservation);
+});
+
+test('protège les prix de tournée avec pricing.read', async () => {
+  const roleId = new ObjectId();
+  const userId = new ObjectId();
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+
+  await Promise.all([
+    database.collection('roles').insertOne({
+      _id: roleId,
+      permissions: ['tours.load', 'tours.read'],
+    }),
+    database.collection('users').insertOne({
+      _id: userId,
+      active: true,
+      roleIds: [roleId],
+      username: 'chargement-sans-tarifs',
+    }),
+  ]);
+  await addReservation({ productId, tourId });
+
+  await assert.rejects(
+    getPreview(tourId, userId),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'pricing.read',
+  );
+  await assert.rejects(
+    getTourById(tourId.toString(), {
+      includePricing: true,
+      userId: userId.toString(),
+    }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'pricing.read',
+  );
+
+  const hidden = await getTourById(tourId.toString(), {
+    userId: userId.toString(),
+  });
+
+  assert.equal('salePriceAtLoading' in hidden.lines[0], false);
+});
+
+test('laisse explicitement absent le prix des anciennes tournées chargées', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour({ status: 'LOADED' });
+
+  await database.collection('tourReservations').insertOne({
+    _id: new ObjectId(),
+    baseUnit: 'PIECE',
+    productCode: `PRD-${productId.toHexString().slice(-6)}`,
+    productDesignation: 'Ancien produit chargé',
+    productId,
+    quantityInBaseUnits: 12,
+    quantityMode: 'DIRECT',
+    reservedAt: new Date(),
+    status: 'LOADED',
+    tourId,
+  });
+
+  const visible = await getTourById(tourId.toString(), {
+    includePricing: true,
+    userId: loaderId.toString(),
+  });
+  const hidden = await getTourById(tourId.toString(), {
+    userId: loaderId.toString(),
+  });
+  const stored = await database.collection('tourReservations').findOne({
+    tourId,
+  });
+
+  assert.equal(visible.lines[0].salePriceAtLoading, null);
+  assert.equal('salePriceAtLoading' in hidden.lines[0], false);
+  assert.equal('salePriceAtLoading' in stored, false);
 });
 
 test('masque la source tournée de l’historique sans droit de lecture', async () => {

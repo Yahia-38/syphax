@@ -602,6 +602,10 @@ test('modifie le prix de vente et conserve son historique complet', async () => 
       (entry) => entry._id instanceof ObjectId && entry.changedAt instanceof Date,
     ),
   );
+  assert.ok(storedProduct.salePrice.versionId instanceof ObjectId);
+  assert.ok(storedProduct.salePrice.versionId.equals(
+    storedProduct.salePriceHistory.at(-1)._id,
+  ));
 
   const details = await getProductById(product.product.id, {
     includePricing: true,

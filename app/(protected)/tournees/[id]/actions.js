@@ -134,6 +134,10 @@ export const releaseTourProduct = async (
 
 export const loadTour = async (tourId, previousState, formData) => {
   const session = await requirePermission('tours.load');
+
+  await requireUserPermission(session.userId, 'tours.read');
+  await requireUserPermission(session.userId, 'pricing.read');
+
   const revision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision + 1
     : 1;

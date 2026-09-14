@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { getUserPermissions } from '../../../../lib/access.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
-import { createTourLoadingDigest } from '../../../../lib/tour-loadings.js';
+import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
   TOUR_STATUS_LOADED,
   TOUR_STATUS_PREPARATION,
@@ -31,7 +31,11 @@ const TourPage = async ({ params, searchParams }) => {
     searchParams,
     getUserPermissions(session.userId),
   ]);
-  const tour = await getTourById(id, { userId: session.userId });
+  const canReadPricing = permissions.includes('pricing.read');
+  const tour = await getTourById(id, {
+    includePricing: canReadPricing,
+    userId: session.userId,
+  });
 
   if (!tour) {
     notFound();
@@ -46,10 +50,15 @@ const TourPage = async ({ params, searchParams }) => {
   const canReleaseTourProducts = permissions.includes(
     'tours.products.release',
   );
-  const canLoadTour = permissions.includes('tours.load');
+  const canLoadTour = permissions.includes('tours.load') && canReadPricing;
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
+  const loadingPreview = canLoadTour
+    && tour.status === TOUR_STATUS_PREPARATION
+    && tour.lines.length > 0
+    ? await getTourLoadingPreview({ tourId: tour.id, userId: session.userId })
+    : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
   return (
@@ -110,8 +119,7 @@ const TourPage = async ({ params, searchParams }) => {
         && tour.status === TOUR_STATUS_PREPARATION
         && tour.lines.length > 0 && (
         <TourLoadingConfirmation
-          digest={createTourLoadingDigest(tour.lines)}
-          lines={tour.lines}
+          preview={loadingPreview}
           tourId={tour.id}
         />
       )}
@@ -127,6 +135,7 @@ const TourPage = async ({ params, searchParams }) => {
 
       {tour.lines.length > 0 ? (
         <TourProductList
+          canReadPricing={canReadPricing}
           canRelease={canReleaseTourProducts
             && tour.status === TOUR_STATUS_PREPARATION}
           lines={tour.lines}
