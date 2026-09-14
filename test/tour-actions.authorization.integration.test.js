@@ -29,6 +29,9 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
+const { addTourProduct } = await import(
+  '../app/(protected)/tournees/[id]/actions.js'
+);
 
 let database;
 
@@ -103,6 +106,103 @@ const createTourFormData = ({ creationKey = randomUUID(), plannedDate }) => {
 
   return formData;
 };
+
+const createTourProductFormData = ({ productId }) => {
+  const formData = new FormData();
+
+  formData.set('additionKey', randomUUID());
+  formData.set('productId', productId);
+  formData.set('quantityMode', 'DIRECT');
+  formData.set('directQuantity', '10');
+
+  return formData;
+};
+
+test('refuse l’ajout de produit sans la permission dédiée', async () => {
+  const { token } = await createUserSession(
+    'lecture-tournee-sans-reservation',
+    ['packaging.read', 'products.read', 'tours.read'],
+  );
+  const delivererId = new ObjectId();
+  const productId = new ObjectId();
+  const tourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: true,
+      code: 'LIV-SANS-RESERVATION',
+      name: 'Sans réservation',
+    }),
+    database.collection('products').insertOne({
+      _id: productId,
+      baseUnit: 'PIECE',
+      code: 'PRD-SANS-PERMISSION',
+      designation: 'Produit protégé',
+    }),
+    database.collection('tours').insertOne({
+      _id: tourId,
+      delivererId,
+      reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+      status: 'PREPARATION',
+    }),
+    database.collection('stockMovements').insertOne({
+      productId,
+      quantityDeltaInBaseUnits: 100,
+    }),
+  ]);
+
+  await assert.rejects(
+    callWithSession(token, () => addTourProduct(
+      tourId.toString(),
+      { revision: 0 },
+      createTourProductFormData({ productId: productId.toString() }),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.products.add',
+  );
+  assert.equal(await database.collection('tourReservations').countDocuments({
+    tourId,
+  }), 0);
+  await Promise.all([
+    database.collection('deliverers').deleteOne({ _id: delivererId }),
+    database.collection('products').deleteOne({ _id: productId }),
+    database.collection('stockMovements').deleteMany({ productId }),
+    database.collection('tours').deleteOne({ _id: tourId }),
+  ]);
+});
+
+test('exige aussi les droits de lecture du catalogue et des conditionnements', async () => {
+  const { token: missingProductReadToken } = await createUserSession(
+    'reservation-sans-catalogue',
+    ['packaging.read', 'tours.products.add'],
+  );
+  const { token: missingPackagingReadToken } = await createUserSession(
+    'reservation-sans-conditionnements',
+    ['products.read', 'tours.products.add'],
+  );
+  const tourId = new ObjectId().toString();
+  const productId = new ObjectId().toString();
+
+  await assert.rejects(
+    callWithSession(missingProductReadToken, () => addTourProduct(
+      tourId,
+      { revision: 0 },
+      createTourProductFormData({ productId }),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'products.read',
+  );
+  await assert.rejects(
+    callWithSession(missingPackagingReadToken, () => addTourProduct(
+      tourId,
+      { revision: 0 },
+      createTourProductFormData({ productId }),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'packaging.read',
+  );
+});
 
 test('refuse la création avec la seule permission deliverers.read sans écrire', async () => {
   const { token, userId } = await createUserSession(

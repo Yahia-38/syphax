@@ -154,10 +154,12 @@ test('liste les produits par code et filtre sur le code ou la désignation', asy
     ['CATALOGUE-A', 'CATALOGUE-B'],
   );
   assert.deepEqual(Object.keys(productsByCode[0]).sort(), [
+    'availableQuantityInBaseUnits',
     'baseUnit',
     'code',
     'designation',
     'id',
+    'reservedQuantityInBaseUnits',
     'salePriceCentimes',
     'stockQuantityInBaseUnits',
   ]);
@@ -267,12 +269,16 @@ test('calcule le stock dans la liste et la fiche depuis les mouvements', async (
   const detailedProduct = await getProductById(created.product.id);
 
   assert.equal(listedProduct.stockQuantityInBaseUnits, 11);
+  assert.equal(listedProduct.reservedQuantityInBaseUnits, 0);
+  assert.equal(listedProduct.availableQuantityInBaseUnits, 11);
   assert.deepEqual(detailedProduct.stock, {
+    availableQuantityInBaseUnits: 11,
     inputQuantityInBaseUnits: 15,
     lastMovementAt: lastMovementDate.toISOString(),
     movementCount: 2,
     outputQuantityInBaseUnits: 4,
     quantityInBaseUnits: 11,
+    reservedQuantityInBaseUnits: 0,
   });
 });
 
@@ -303,11 +309,13 @@ test('retourne la fiche détaillée d’un produit et son créateur', async () =
     salePrice: null,
     salePriceHistory: [],
     stock: {
+      availableQuantityInBaseUnits: 0,
       inputQuantityInBaseUnits: 0,
       lastMovementAt: null,
       movementCount: 0,
       outputQuantityInBaseUnits: 0,
       quantityInBaseUnits: 0,
+      reservedQuantityInBaseUnits: 0,
     },
     updatedAt: null,
     updatedBy: null,

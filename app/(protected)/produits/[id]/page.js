@@ -50,9 +50,9 @@ const formatStockQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
 
 const StockSection = ({ baseUnitLabel, product }) => {
   const { stock } = product;
-  const stockTone = stock.quantityInBaseUnits < 0
+  const stockTone = stock.availableQuantityInBaseUnits < 0
     ? 'border-red-200 bg-red-50 text-red-800'
-    : stock.quantityInBaseUnits > 0
+    : stock.availableQuantityInBaseUnits > 0
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
       : 'border-slate-200 bg-slate-50 text-slate-700';
 
@@ -63,26 +63,47 @@ const StockSection = ({ baseUnitLabel, product }) => {
       id='stock-panel'
       role='tabpanel'
     >
-      <section
-        aria-labelledby='current-stock-title'
-        className={`rounded-2xl border p-6 shadow-sm ${stockTone}`}
-      >
-        <h2
-          className='text-sm font-bold uppercase tracking-[0.08em]'
-          id='current-stock-title'
-        >
-          Stock actuel
-        </h2>
-        <p className='mt-3 text-4xl font-bold tabular-nums'>
-          {formatStockQuantity(stock.quantityInBaseUnits)}
-        </p>
-        <p className='mt-1 text-sm font-medium'>
-          en {baseUnitLabel.toLocaleLowerCase('fr')}
-        </p>
-        {stock.quantityInBaseUnits < 0 && (
-          <p className='mt-4 text-sm leading-6'>
-            Le stock est négatif : les sorties enregistrées dépassent les
-            entrées disponibles.
+      <section aria-labelledby='current-stock-title'>
+        <h2 className='sr-only' id='current-stock-title'>Stock actuel</h2>
+        <dl className='grid gap-4 sm:grid-cols-3'>
+          <div className='rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'>
+            <dt className='text-sm font-bold uppercase tracking-[0.08em] text-slate-600'>
+              En entrepôt
+            </dt>
+            <dd className='mt-3 text-4xl font-bold tabular-nums text-slate-900'>
+              {formatStockQuantity(stock.quantityInBaseUnits)}
+            </dd>
+            <p className='mt-1 text-sm text-slate-500'>
+              {baseUnitLabel.toLocaleLowerCase('fr')}
+            </p>
+          </div>
+          <div className='rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm'>
+            <dt className='text-sm font-bold uppercase tracking-[0.08em] text-amber-700'>
+              Réservé
+            </dt>
+            <dd className='mt-3 text-4xl font-bold tabular-nums text-amber-900'>
+              {formatStockQuantity(stock.reservedQuantityInBaseUnits)}
+            </dd>
+            <p className='mt-1 text-sm text-amber-700'>
+              {baseUnitLabel.toLocaleLowerCase('fr')}
+            </p>
+          </div>
+          <div className={`rounded-2xl border p-6 shadow-sm ${stockTone}`}>
+            <dt className='text-sm font-bold uppercase tracking-[0.08em]'>
+              Disponible
+            </dt>
+            <dd className='mt-3 text-4xl font-bold tabular-nums'>
+              {formatStockQuantity(stock.availableQuantityInBaseUnits)}
+            </dd>
+            <p className='mt-1 text-sm font-medium'>
+              {baseUnitLabel.toLocaleLowerCase('fr')}
+            </p>
+          </div>
+        </dl>
+        {stock.availableQuantityInBaseUnits < 0 && (
+          <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'>
+            Le disponible est négatif : les sorties physiques et réservations
+            dépassent le stock en entrepôt.
           </p>
         )}
       </section>
@@ -99,7 +120,8 @@ const StockSection = ({ baseUnitLabel, product }) => {
             Détail des mouvements
           </h2>
           <p className='mt-1 text-sm text-slate-600'>
-            Quantités cumulées dans l’unité de base du produit.
+            Historique physique uniquement, dans l’unité de base du produit.
+            Les réservations ne sont pas des sorties.
           </p>
         </div>
         <dl className='grid sm:grid-cols-2 lg:grid-cols-4'>

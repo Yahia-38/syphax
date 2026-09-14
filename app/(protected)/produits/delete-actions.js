@@ -29,7 +29,9 @@ export const deleteProduct = async (productId) => {
 
   if (result.inUse) {
     return {
-      error: 'Ce produit ne peut pas être supprimé car il possède un historique de réception.',
+      error: result.reservationInUse
+        ? 'Ce produit ne peut pas être supprimé car il est référencé par une tournée.'
+        : 'Ce produit ne peut pas être supprimé car il possède un historique de réception.',
     };
   }
 

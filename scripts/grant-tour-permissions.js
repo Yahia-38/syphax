@@ -1,7 +1,11 @@
 import { grantYahiaFullAccessPermission } from '../lib/access.js';
 import { closeMongoConnection } from '../lib/mongodb.js';
 
-const permissions = ['tours.read', 'tours.create'];
+const permissions = [
+  'tours.read',
+  'tours.create',
+  'tours.products.add',
+];
 
 try {
   for (const permission of permissions) {

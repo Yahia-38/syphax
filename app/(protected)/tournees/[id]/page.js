@@ -1,15 +1,21 @@
+import { randomUUID } from 'node:crypto';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
+import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
+  TOUR_STATUS_PREPARATION,
   formatTourCreatedAt,
   formatTourDate,
   formatTourStatus,
   getTourById,
   validateTourReturnHref,
 } from '../../../../lib/tours.js';
+import TourProductForm from './tour-product-form.js';
+import TourProductList from './tour-product-list.js';
 
 export const metadata = {
   title: 'Fiche de tournée | Syphax',
@@ -29,6 +35,14 @@ const TourPage = async ({ params, searchParams }) => {
   }
 
   const canReadDeliverer = permissions.includes('deliverers.read');
+  const canAddTourProducts = [
+    'tours.products.add',
+    'products.read',
+    'packaging.read',
+  ].every((permission) => permissions.includes(permission));
+  const products = canAddTourProducts
+    ? await listProducts({ includePackagings: true, onlyUsable: true })
+    : [];
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
   return (
@@ -79,17 +93,30 @@ const TourPage = async ({ params, searchParams }) => {
         </dl>
       </header>
 
-      <section
-        aria-labelledby='tour-products-title'
-        className='mt-8 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm'
-      >
-        <h2 className='font-semibold text-slate-900' id='tour-products-title'>
-          Aucun produit ajouté à cette tournée
-        </h2>
-        <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
-          Cette tournée est vide. Les produits seront gérés dans un prochain incrément.
-        </p>
-      </section>
+      {canAddTourProducts && tour.status === TOUR_STATUS_PREPARATION && (
+        <TourProductForm
+          existingProductIds={tour.lines.map((line) => line.productId)}
+          initialAdditionKey={randomUUID()}
+          products={products}
+          tourId={tour.id}
+        />
+      )}
+
+      {tour.lines.length > 0 ? (
+        <TourProductList lines={tour.lines} />
+      ) : (
+        <section
+          aria-labelledby='tour-products-title'
+          className='mt-8 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm'
+        >
+          <h2 className='font-semibold text-slate-900' id='tour-products-title'>
+            Aucun produit ajouté à cette tournée
+          </h2>
+          <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
+            La tournée ne contient encore aucune réservation de stock.
+          </p>
+        </section>
+      )}
     </main>
   );
 };

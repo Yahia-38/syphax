@@ -123,11 +123,44 @@ test('agrège entrées, sorties et date du dernier mouvement par produit', async
   ], { database });
 
   assert.deepEqual(summaries.get(productId.toString()), {
+    availableQuantityInBaseUnits: 14,
     inputQuantityInBaseUnits: 20,
     lastMovementAt: lastDate,
     movementCount: 2,
     outputQuantityInBaseUnits: 6,
     quantityInBaseUnits: 14,
+    reservedQuantityInBaseUnits: 0,
   });
   assert.equal(summaries.has(productWithoutMovementId.toString()), false);
+});
+
+test('déduit uniquement les réservations actives du disponible', async () => {
+  const productId = new ObjectId();
+
+  await Promise.all([
+    database.collection('stockMovements').insertOne({
+      productId,
+      kind: 'TEST_IN',
+      quantityDeltaInBaseUnits: 100,
+    }),
+    database.collection('tourReservations').insertMany([
+      {
+        productId,
+        quantityInBaseUnits: 30,
+        status: 'ACTIVE',
+      },
+      {
+        productId,
+        quantityInBaseUnits: 20,
+        status: 'RELEASED',
+      },
+    ]),
+  ]);
+
+  const summary = (await getProductStockSummaries([productId], { database }))
+    .get(productId.toString());
+
+  assert.equal(summary.quantityInBaseUnits, 100);
+  assert.equal(summary.reservedQuantityInBaseUnits, 30);
+  assert.equal(summary.availableQuantityInBaseUnits, 70);
 });

@@ -89,13 +89,13 @@ const ProductTable = ({
   );
   const stockCounts = useMemo(() => ({
     negative: products.filter(
-      (product) => product.stockQuantityInBaseUnits < 0,
+      (product) => product.availableQuantityInBaseUnits < 0,
     ).length,
     positive: products.filter(
-      (product) => product.stockQuantityInBaseUnits > 0,
+      (product) => product.availableQuantityInBaseUnits > 0,
     ).length,
     zero: products.filter(
-      (product) => product.stockQuantityInBaseUnits === 0,
+      (product) => product.availableQuantityInBaseUnits === 0,
     ).length,
   }), [products]);
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
@@ -115,21 +115,21 @@ const ProductTable = ({
         || !Number.isSafeInteger(product.salePriceCentimes);
       const matchesStock = stockStatus === 'ALL'
         || (stockStatus === 'POSITIVE'
-          && product.stockQuantityInBaseUnits > 0)
+          && product.availableQuantityInBaseUnits > 0)
         || (stockStatus === 'ZERO'
-          && product.stockQuantityInBaseUnits === 0)
+          && product.availableQuantityInBaseUnits === 0)
         || (stockStatus === 'NEGATIVE'
-          && product.stockQuantityInBaseUnits < 0);
+          && product.availableQuantityInBaseUnits < 0);
 
       return matchesQuery && matchesUnit && matchesPrice && matchesStock;
     });
     const direction = sortDir === 'asc' ? 1 : -1;
 
     return matchingProducts.sort((firstProduct, secondProduct) => {
-      if (sortKey === 'stockQuantityInBaseUnits') {
+      if (sortKey === 'availableQuantityInBaseUnits') {
         return (
-          firstProduct.stockQuantityInBaseUnits
-          - secondProduct.stockQuantityInBaseUnits
+          firstProduct.availableQuantityInBaseUnits
+          - secondProduct.availableQuantityInBaseUnits
         ) * direction;
       }
 
@@ -410,10 +410,10 @@ const ProductTable = ({
                 <SortableHeader
                   align='right'
                   className='hidden w-[18%] sm:table-cell'
-                  label='Stock'
-                  onSort={() => updateSort('stockQuantityInBaseUnits')}
+                  label='Stocks'
+                  onSort={() => updateSort('availableQuantityInBaseUnits')}
                   sortDir={sortDir}
-                  sorted={sortKey === 'stockQuantityInBaseUnits'}
+                  sorted={sortKey === 'availableQuantityInBaseUnits'}
                 />
                 {canReadPricing && (
                   <SortableHeader
@@ -472,10 +472,10 @@ const ProductTable = ({
                           </span>
                         )}
                         <span
-                          className={`text-xs font-semibold tabular-nums sm:hidden ${getStockTextClass(product.stockQuantityInBaseUnits)}`}
+                          className={`text-xs font-semibold tabular-nums sm:hidden ${getStockTextClass(product.availableQuantityInBaseUnits)}`}
                         >
-                          Stock : {formatStockQuantity(
-                            product.stockQuantityInBaseUnits,
+                          Disponible : {formatStockQuantity(
+                            product.availableQuantityInBaseUnits,
                           )}
                         </span>
                       </span>
@@ -487,15 +487,26 @@ const ProductTable = ({
                     </span>
                   </td>
                   <td className='hidden px-4 py-3 text-right sm:table-cell sm:px-6'>
-                    <span
-                      className={`font-semibold tabular-nums ${getStockTextClass(product.stockQuantityInBaseUnits)}`}
-                    >
-                      {formatStockQuantity(product.stockQuantityInBaseUnits)}
-                    </span>
-                    <span className='mt-0.5 block text-[11px] text-slate-500'>
-                      {BASE_UNIT_LABELS.get(product.baseUnit)
-                        ?? product.baseUnit}
-                    </span>
+                    <dl className='space-y-0.5 text-xs tabular-nums'>
+                      <div className='flex justify-end gap-2'>
+                        <dt className='text-slate-500'>Entrepôt</dt>
+                        <dd className='font-semibold text-slate-800'>
+                          {formatStockQuantity(product.stockQuantityInBaseUnits)}
+                        </dd>
+                      </div>
+                      <div className='flex justify-end gap-2'>
+                        <dt className='text-slate-500'>Réservé</dt>
+                        <dd className='font-semibold text-amber-700'>
+                          {formatStockQuantity(product.reservedQuantityInBaseUnits)}
+                        </dd>
+                      </div>
+                      <div className='flex justify-end gap-2'>
+                        <dt className='font-medium text-slate-600'>Disponible</dt>
+                        <dd className={`font-bold ${getStockTextClass(product.availableQuantityInBaseUnits)}`}>
+                          {formatStockQuantity(product.availableQuantityInBaseUnits)}
+                        </dd>
+                      </div>
+                    </dl>
                   </td>
                   {canReadPricing && (
                     <td className='hidden px-4 py-3 text-right md:table-cell sm:px-6'>
