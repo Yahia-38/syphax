@@ -10,6 +10,10 @@ import {
   validateDelivererListHref,
 } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import {
+  createTour as saveTour,
+  validateTourReturnHref,
+} from '../../../../lib/tours.js';
 
 const readTextField = (formData, name) => {
   const value = formData.get(name);
@@ -22,6 +26,56 @@ const buildDelivererHref = (delivererId, returnHref) => {
   });
 
   return `/livreurs/${delivererId}?${parameters.toString()}`;
+};
+
+const buildTourHref = (tourId, delivererId, returnHref) => {
+  const parameters = new URLSearchParams({
+    retour: validateTourReturnHref(returnHref, delivererId),
+  });
+
+  return `/tournees/${tourId}?${parameters.toString()}`;
+};
+
+export const createTour = async (
+  delivererId,
+  returnHref,
+  previousState,
+  formData,
+) => {
+  const session = await requirePermission('tours.create');
+  const values = {
+    creationKey: readTextField(formData, 'creationKey'),
+    plannedDate: readTextField(formData, 'plannedDate'),
+  };
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+  let result;
+
+  try {
+    result = await saveTour({
+      ...values,
+      createdBy: session.userId,
+      delivererId,
+    });
+  } catch (error) {
+    console.error('Échec de la création de la tournée :', error);
+
+    return {
+      errors: {
+        form: 'La création de la tournée est momentanément indisponible.',
+      },
+      revision,
+      values,
+    };
+  }
+
+  if (result.errors) {
+    return { errors: result.errors, revision, values };
+  }
+
+  revalidatePath(`/livreurs/${delivererId}`);
+  redirect(buildTourHref(result.tour.id, delivererId, returnHref));
 };
 
 const updateDelivererStatus = async ({

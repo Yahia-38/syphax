@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -9,8 +11,16 @@ import {
   validateDelivererListHref,
 } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import {
+  buildDelivererToursHref,
+  formatTourDateInput,
+  listToursByDeliverer,
+  readDelivererTourListState,
+} from '../../../../lib/tours.js';
 import DelivererEditForm from './deliverer-edit-form.js';
 import DelivererStatusButton from './deliverer-status-button.js';
+import DelivererTourList from './deliverer-tour-list.js';
+import TourCreateButton from './tour-create-button.js';
 
 export const metadata = {
   title: 'Fiche livreur | Syphax',
@@ -37,6 +47,8 @@ const DelivererPage = async ({ params, searchParams }) => {
   const canUpdateDelivererStatus = permissions.includes(
     'deliverers.status.update',
   );
+  const canCreateTour = permissions.includes('tours.create');
+  const canReadTours = permissions.includes('tours.read');
   const editing = query.modifier === '1';
 
   await requireDelivererEditPermission({
@@ -53,6 +65,14 @@ const DelivererPage = async ({ params, searchParams }) => {
   }
 
   const returnHref = validateDelivererListHref(query.retour);
+  const tourListState = readDelivererTourListState(query);
+  const tourList = canReadTours
+    ? await listToursByDeliverer({
+        delivererId: deliverer.id,
+        ...tourListState,
+        userId: session.userId,
+      })
+    : null;
   const viewHref = buildDelivererHref({
     delivererId: deliverer.id,
     returnHref,
@@ -60,6 +80,11 @@ const DelivererPage = async ({ params, searchParams }) => {
   const editHref = buildDelivererHref({
     delivererId: deliverer.id,
     editing: true,
+    returnHref,
+  });
+  const currentDelivererHref = buildDelivererToursHref({
+    delivererId: deliverer.id,
+    ...(tourList ?? tourListState),
     returnHref,
   });
   const latestStatusChange = deliverer.statusHistory.at(-1);
@@ -95,6 +120,18 @@ const DelivererPage = async ({ params, searchParams }) => {
             >
               {deliverer.active ? 'Actif' : 'Désactivé'}
             </span>
+            {deliverer.active && canCreateTour && (
+              <TourCreateButton
+                creationKey={randomUUID()}
+                deliverer={{
+                  code: deliverer.code,
+                  id: deliverer.id,
+                  name: deliverer.name,
+                }}
+                initialPlannedDate={formatTourDateInput(new Date())}
+                returnHref={currentDelivererHref}
+              />
+            )}
             {canUpdateDelivererStatus && (
               <DelivererStatusButton
                 deliverer={{
@@ -240,6 +277,14 @@ const DelivererPage = async ({ params, searchParams }) => {
           </aside>
         </div>
       </header>
+
+      {tourList && (
+        <DelivererTourList
+          delivererId={deliverer.id}
+          returnHref={returnHref}
+          {...tourList}
+        />
+      )}
     </main>
   );
 };

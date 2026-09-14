@@ -45,10 +45,12 @@ after(async () => {
   await closeMongoConnection();
 });
 
-test('le catalogue conserve la création des livreurs hors du rôle Manager partagé', () => {
+test('le catalogue conserve les accès livreurs et tournées hors du rôle Manager partagé', () => {
   assert.deepEqual(
     INITIAL_MANAGER_PERMISSIONS,
-    PERMISSION_KEYS.filter((permission) => !permission.startsWith('deliverers.')),
+    PERMISSION_KEYS.filter((permission) =>
+      !permission.startsWith('deliverers.')
+      && !permission.startsWith('tours.')),
   );
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
@@ -61,6 +63,10 @@ test('le catalogue conserve la création des livreurs hors du rôle Manager part
     INITIAL_MANAGER_PERMISSIONS.includes('deliverers.status.update'),
     false,
   );
+  assert.ok(PERMISSION_KEYS.includes('tours.read'));
+  assert.ok(PERMISSION_KEYS.includes('tours.create'));
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.read'), false);
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.create'), false);
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('pricing.update'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.manage'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.assign'));
@@ -94,7 +100,7 @@ test('initialise le Manager et son attribution de manière rejouable', async () 
   assert.equal(await userHasPermission(userId.toString(), 'pricing.update'), true);
 });
 
-test('attribue la permission de statut uniquement au rôle dédié de yahia', async () => {
+test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', async () => {
   const yahiaRoleId = new ObjectId();
   const otherRoleId = new ObjectId();
   const yahiaId = new ObjectId();
@@ -128,6 +134,8 @@ test('attribue la permission de statut uniquement au rôle dédié de yahia', as
   const second = await grantYahiaFullAccessPermission(
     'deliverers.status.update',
   );
+  const toursRead = await grantYahiaFullAccessPermission('tours.read');
+  const toursCreate = await grantYahiaFullAccessPermission('tours.create');
   const [yahiaRole, otherRole] = await Promise.all([
     database.collection('roles').findOne({ _id: yahiaRoleId }),
     database.collection('roles').findOne({ _id: otherRoleId }),
@@ -135,9 +143,13 @@ test('attribue la permission de statut uniquement au rôle dédié de yahia', as
 
   assert.equal(first.granted, true);
   assert.equal(second.granted, false);
+  assert.equal(toursRead.granted, true);
+  assert.equal(toursCreate.granted, true);
   assert.deepEqual(yahiaRole.permissions, [
     'deliverers.read',
     'deliverers.status.update',
+    'tours.read',
+    'tours.create',
   ]);
   assert.deepEqual(otherRole.permissions, ['deliverers.read']);
 });
