@@ -1,5 +1,7 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
+
 import { revalidatePath } from 'next/cache.js';
 
 import { requireUserPermission } from '../../../../lib/access.js';
@@ -15,6 +17,11 @@ import { closeCountedTour } from '../../../../lib/tour-closures.js';
 import {
   confirmTourCounting,
 } from '../../../../lib/tour-countings.js';
+import {
+  TOUR_EXPENSE_DECLARE_PERMISSION,
+  TOUR_EXPENSE_PREVIEW_PERMISSIONS,
+  recordTourExpenseDeclaration,
+} from '../../../../lib/tour-expenses.js';
 import {
   addAndReserveTourProduct,
   releaseTourReservation,
@@ -36,6 +43,18 @@ const readCountingLines = (formData) => {
     returnedQuantity: typeof returnedQuantities[index] === 'string'
       ? returnedQuantities[index]
       : '',
+  }));
+};
+
+const readExpenseLines = (formData) => {
+  const amounts = formData.getAll('expenseAmount');
+  const reasons = formData.getAll('expenseReason');
+  const length = Math.max(amounts.length, reasons.length);
+
+  return Array.from({ length }, (_, index) => ({
+    amount: typeof amounts[index] === 'string' ? amounts[index] : '',
+    id: `expense-${index + 1}`,
+    reason: typeof reasons[index] === 'string' ? reasons[index] : '',
   }));
 };
 
@@ -388,6 +407,84 @@ export const closeTour = async (tourId, previousState, formData) => {
         form: 'La clôture de la tournée est momentanément indisponible.',
       },
       message: null,
+      revision,
+      stale: false,
+      succeeded: false,
+    };
+  }
+};
+
+export const declareTourExpenses = async (
+  tourId,
+  previousState,
+  formData,
+) => {
+  const session = await requirePermission(TOUR_EXPENSE_DECLARE_PERMISSION);
+
+  for (const permission of TOUR_EXPENSE_PREVIEW_PERMISSIONS) {
+    await requireUserPermission(session.userId, permission);
+  }
+
+  const confirmationKey = readTextField(formData, 'confirmationKey');
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await recordTourExpenseDeclaration({
+      choice: readTextField(formData, 'expenseChoice'),
+      confirmationKey,
+      declaredBy: session.userId,
+      expectedDigest: readTextField(formData, 'expenseDigest'),
+      expenses: readExpenseLines(formData),
+      tourId,
+    });
+
+    if (result.errors) {
+      if (result.stale) {
+        revalidatePath(`/tournees/${tourId}`);
+        revalidatePath('/caisse');
+      }
+
+      return {
+        confirmationKey,
+        errors: result.errors,
+        message: null,
+        replayed: false,
+        revision,
+        stale: Boolean(result.stale),
+        succeeded: false,
+      };
+    }
+
+    revalidatePath(`/tournees/${tourId}`);
+    revalidatePath('/caisse');
+
+    if (result.delivererId) {
+      revalidatePath(`/livreurs/${result.delivererId}`);
+    }
+
+    return {
+      confirmationKey: randomUUID(),
+      errors: {},
+      message: result.replayed
+        ? 'Cette déclaration avait déjà été enregistrée.'
+        : 'La déclaration définitive de frais a été enregistrée.',
+      replayed: result.replayed,
+      revision,
+      stale: false,
+      succeeded: true,
+    };
+  } catch (error) {
+    console.error('Échec de la déclaration des frais :', error);
+
+    return {
+      confirmationKey,
+      errors: {
+        form: 'L’enregistrement de la déclaration est momentanément indisponible.',
+      },
+      message: null,
+      replayed: false,
       revision,
       stale: false,
       succeeded: false,

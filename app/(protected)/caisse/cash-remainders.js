@@ -145,7 +145,8 @@ const CashRemainders = ({
         </h2>
         <p className='mt-1 max-w-3xl text-sm leading-6 text-slate-600'>
           Restes des tournées comptées ou terminées uniquement. Ce récapitulatif
-          n’intègre ni avances, ni dépenses, ni dettes externes.
+          déduit les frais définitivement déclarés sans modifier les ventes
+          brutes ni les mouvements de caisse.
         </p>
         <p className='mt-5 text-sm font-medium text-slate-600'>
           Total à encaisser sur les résultats
@@ -306,60 +307,62 @@ const CashRemainders = ({
                 </summary>
                 <div className='border-t border-slate-200 px-4 py-1'>
                   {remainder.tours.map((tour) => (
-                    <div
-                      className='grid gap-2 border-t border-slate-200 py-4 first:border-t-0 sm:grid-cols-[minmax(0,1.2fr)_7rem_repeat(3,minmax(7rem,1fr))_7rem] sm:items-start sm:gap-4'
+                    <article
+                      className='border-t border-slate-200 py-4 first:border-t-0'
                       key={tour.id}
                     >
-                      <p className='break-all font-mono text-xs font-semibold text-slate-900'>
-                        <span className='mb-1 block font-sans text-[11px] font-medium uppercase tracking-wide text-slate-500'>
-                          Tournée
-                        </span>
-                        {canReadTours ? (
-                          <Link
-                            className='text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                            href={`/tournees/${tour.id}`}
+                      <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                        <div>
+                          <p className='break-all font-mono text-xs font-semibold text-slate-900'>
+                            {canReadTours ? (
+                              <Link
+                                className='text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                                href={`/tournees/${tour.id}`}
+                              >
+                                {tour.reference}
+                              </Link>
+                            ) : tour.reference}
+                          </p>
+                          <p className='mt-1 text-xs text-slate-600'>
+                            {STATUS_LABELS[tour.status] ?? tour.status}
+                          </p>
+                        </div>
+                        {canCreatePayment && (
+                          <button
+                            className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 sm:w-auto'
+                            onClick={() => openPaymentDialog(
+                              remainder.deliverer,
+                              tour,
+                            )}
+                            type='button'
                           >
-                            {tour.reference}
-                          </Link>
-                        ) : tour.reference}
-                      </p>
-                      <p className='text-xs text-slate-700'>
-                        <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
-                          Statut
-                        </span>
-                        {STATUS_LABELS[tour.status] ?? tour.status}
-                      </p>
-                      <p className='text-xs text-slate-700'>
-                        <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
-                          Montant dû
-                        </span>
-                        {formatReceptionMoney(tour.amountDueInCentimes)}
-                      </p>
-                      <p className='text-xs text-slate-700'>
-                        <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
-                          Encaissé
-                        </span>
-                        {formatReceptionMoney(tour.amountPaidInCentimes)}
-                      </p>
-                      <p className='text-xs font-semibold text-slate-900'>
-                        <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
-                          Reste à payer
-                        </span>
-                        {formatReceptionMoney(tour.remainingDueInCentimes)}
-                      </p>
-                      {canCreatePayment && (
-                        <button
-                          className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700'
-                          onClick={() => openPaymentDialog(
-                            remainder.deliverer,
-                            tour,
-                          )}
-                          type='button'
-                        >
-                          Encaisser
-                        </button>
-                      )}
-                    </div>
+                            Encaisser
+                          </button>
+                        )}
+                      </div>
+                      <dl className='mt-3 grid gap-px overflow-hidden rounded-lg bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
+                        {[
+                          ['Ventes brutes', formatReceptionMoney(tour.grossSalesInCentimes)],
+                          ['Frais', tour.expenseDeclarationStatus === 'DECLARED'
+                            ? formatReceptionMoney(tour.totalExpensesInCentimes)
+                            : tour.expenseDeclarationStatus === 'HISTORICAL_MISSING'
+                              ? 'Absence historique'
+                              : 'Non déclarés'],
+                          ['Net à remettre', formatReceptionMoney(tour.netDueInCentimes)],
+                          ['Encaissé', formatReceptionMoney(tour.amountPaidInCentimes)],
+                          ['Reste à payer', formatReceptionMoney(tour.remainingDueInCentimes)],
+                        ].map(([label, value]) => (
+                          <div className='bg-white p-3' key={label}>
+                            <dt className='text-[11px] font-medium uppercase tracking-wide text-slate-500'>
+                              {label}
+                            </dt>
+                            <dd className='mt-1 text-xs font-semibold text-slate-900'>
+                              {value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </article>
                   ))}
                 </div>
               </details>

@@ -67,6 +67,7 @@ const createUser = async (
 
 const insertCountedTour = async ({
   delivererActive = true,
+  includeExpenseDeclaration = true,
   includeCounting = true,
   status = TOUR_STATUS_COUNTED,
   totalDueInCentimes = 750_000,
@@ -101,6 +102,21 @@ const insertCountedTour = async ({
           tourId,
         })]
       : []),
+    ...(includeCounting && includeExpenseDeclaration
+      ? [database.collection('tourExpenses').insertOne({
+          _id: new ObjectId(),
+          choice: 'NONE',
+          confirmationKey: randomUUID(),
+          declaredAt: new Date(),
+          declaredBy: closerId,
+          delivererId,
+          lines: [],
+          requestDigest: 'test-none',
+          sourceTourCountingId: countingId,
+          totalInCentimes: 0,
+          tourId,
+        })]
+      : []),
   ]);
 
   return { countingId, delivererId, tourId };
@@ -119,6 +135,8 @@ const recordPayment = async ({
   const payments = await database.collection('cashPayments').find({
     tourId,
   }).toArray();
+  const expenseDeclaration = await database.collection('tourExpenses')
+    .findOne({ tourId });
   const paid = payments.reduce((total, payment) =>
     Number.isSafeInteger(payment.amountInCentimes)
       ? total + payment.amountInCentimes
@@ -129,7 +147,9 @@ const recordPayment = async ({
     confirmationKey,
     expectedCashRegisterId: cashRegister.id,
     expectedRemainingDueInCentimes: String(
-      counting.totalDueInCentimes - paid,
+      counting.totalDueInCentimes
+        - (expenseDeclaration?.totalInCentimes ?? 0)
+        - paid,
     ),
     note: '',
     receivedBy: cashierId.toString(),
@@ -173,6 +193,7 @@ beforeEach(async () => {
     database.collection('deliverers').deleteMany({}),
     database.collection('stockMovements').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
+    database.collection('tourExpenses').deleteMany({}),
     database.collection('tours').deleteMany({}),
   ]);
   cashRegister = await initializeMainCashRegister();
@@ -251,6 +272,51 @@ test('termine avec un paiement partiel et conserve le reste actuel', async () =>
   assert.equal(preview.remainingDueInCentimes, 250_000);
   assert.equal(result.closure.remainingDueInCentimes, 250_000);
   assert.equal((await database.collection('cashPayments').countDocuments({})), 1);
+});
+
+test('exige une déclaration enregistrée avant toute nouvelle clôture', async () => {
+  const tour = await insertCountedTour({
+    includeExpenseDeclaration: false,
+  });
+  const preview = await readClosurePreview(tour.tourId);
+  const result = await closeCountedTour({
+    closedBy: closerId.toString(),
+    expectedDigest: 'a'.repeat(64),
+    tourId: tour.tourId.toString(),
+  });
+
+  assert.match(preview.errors.form, /déclaration de frais/u);
+  assert.match(result.errors.form, /déclaration de frais/u);
+  assert.equal((await database.collection('tours').findOne({
+    _id: tour.tourId,
+  })).status, TOUR_STATUS_COUNTED);
+});
+
+test('clôture sur le net après frais sans modifier ventes, caisse ou stock', async () => {
+  const tour = await insertCountedTour();
+
+  await database.collection('tourExpenses').updateOne(
+    { tourId: tour.tourId },
+    {
+      $set: {
+        choice: 'DECLARE',
+        lines: [{ amountInCentimes: 220_000, reason: 'Carburant' }],
+        totalInCentimes: 220_000,
+      },
+    },
+  );
+  await recordPayment({ amount: '3000', tourId: tour.tourId });
+
+  const preview = await readClosurePreview(tour.tourId);
+  const result = await closeFromPreview(tour.tourId, preview);
+
+  assert.equal(preview.grossSalesInCentimes, 750_000);
+  assert.equal(preview.totalExpensesInCentimes, 220_000);
+  assert.equal(preview.netDueInCentimes, 530_000);
+  assert.equal(preview.remainingDueInCentimes, 230_000);
+  assert.equal(result.closure.remainingDueInCentimes, 230_000);
+  assert.equal(await database.collection('cashWithdrawals').countDocuments({}), 0);
+  assert.equal(await database.collection('stockMovements').countDocuments({}), 0);
 });
 
 test('clôture avec uniquement le montant affecté par un versement multi-tournées', async () => {

@@ -257,6 +257,37 @@ test('compare les engagements inférieur, égal et supérieur, y compris avec un
   }), { amountInCentimes: 1, status: 'EXCEEDED' });
 });
 
+test('déduit les frais déclarés de l’engagement de crédit sans toucher au brut', async () => {
+  const delivererId = await insertDeliverer({ limitInCentimes: 1_500_000 });
+  const tour = await insertCountedTour({
+    delivererId,
+    totalDueInCentimes: 2_000_000,
+  });
+
+  await database.collection('tourExpenses').insertOne({
+    _id: new ObjectId(),
+    choice: 'DECLARE',
+    confirmationKey: randomUUID(),
+    declaredAt: new Date(),
+    declaredBy: readerId,
+    delivererId,
+    lines: [{ amountInCentimes: 500_000, reason: 'Carburant' }],
+    requestDigest: randomUUID(),
+    sourceTourCountingId: tour.countingId,
+    totalInCentimes: 500_000,
+    tourId: tour.tourId,
+  });
+
+  const result = await readExposure(delivererId);
+
+  assert.equal(result.cashSummary.grossSalesInCentimes, 2_000_000);
+  assert.equal(result.cashSummary.totalExpensesInCentimes, 500_000);
+  assert.equal(result.cashSummary.netDueInCentimes, 1_500_000);
+  assert.equal(result.exposure.countedRemainderInCentimes, 1_500_000);
+  assert.equal(result.exposure.engagementInCentimes, 1_500_000);
+  assert.equal(result.exposure.comparison.status, 'REACHED');
+});
+
 test('ne compare pas une limite absente mais compare une limite configurée à zéro', async () => {
   const withoutLimitId = await insertDeliverer();
   const zeroLimitId = await insertDeliverer({ limitInCentimes: 0 });

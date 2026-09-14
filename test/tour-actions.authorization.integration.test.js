@@ -26,6 +26,7 @@ const { RequestCookies } = await import(
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
+const { getTourExpensePreview } = await import('../lib/tour-expenses.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
@@ -33,6 +34,7 @@ const {
   addTourProduct,
   cancelCurrentTour,
   countTour,
+  declareTourExpenses,
   loadTour,
   releaseTourProduct,
 } = await import('../app/(protected)/tournees/[id]/actions.js');
@@ -149,6 +151,109 @@ const createTourCancellationFormData = () => {
 
   return formData;
 };
+
+const createTourExpenseFormData = () => {
+  const formData = new FormData();
+
+  formData.set('confirmationKey', randomUUID());
+  formData.set('expenseChoice', 'NONE');
+  formData.set('expenseDigest', 'a'.repeat(64));
+
+  return formData;
+};
+
+test('refuse la déclaration de frais sans la permission dédiée', async () => {
+  const { token } = await createUserSession(
+    'lecture-tournee-sans-declaration-frais',
+    ['cash.read', 'tours.expenses.read', 'tours.read'],
+  );
+  const tourId = new ObjectId();
+
+  await database.collection('tours').insertOne({
+    _id: tourId,
+    reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+    status: 'COUNTED',
+  });
+
+  await assert.rejects(
+    callWithSession(token, () => declareTourExpenses(
+      tourId.toString(),
+      { revision: 0 },
+      createTourExpenseFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.expenses.declare',
+  );
+  assert.equal(await database.collection('tourExpenses').countDocuments({
+    tourId,
+  }), 0);
+  await database.collection('tours').deleteOne({ _id: tourId });
+});
+
+test('la Server Action prend l’auteur de la déclaration depuis la session', async () => {
+  const { token, userId } = await createUserSession(
+    'auteur-declaration-frais',
+    [
+      'cash.read',
+      'tours.expenses.declare',
+      'tours.expenses.read',
+      'tours.read',
+    ],
+  );
+  const countingId = new ObjectId();
+  const delivererId = new ObjectId();
+  const tourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: false,
+      code: 'LIV-ACTION-FRAIS',
+      name: 'Livreur action frais',
+    }),
+    database.collection('tourCountings').insertOne({
+      _id: countingId,
+      totalDueInCentimes: 750_000,
+      tourId,
+    }),
+    database.collection('tours').insertOne({
+      _id: tourId,
+      countingId,
+      delivererCode: 'LIV-ACTION-FRAIS',
+      delivererId,
+      delivererName: 'Livreur action frais',
+      reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+      status: 'COUNTED',
+    }),
+  ]);
+  const preview = await getTourExpensePreview({
+    tourId: tourId.toString(),
+    userId: userId.toString(),
+  });
+  const formData = createTourExpenseFormData();
+
+  formData.set('expenseDigest', preview.digest);
+  formData.set('declaredBy', new ObjectId().toString());
+
+  const result = await callWithSession(token, () => declareTourExpenses(
+    tourId.toString(),
+    { revision: 0 },
+    formData,
+  ));
+  const declaration = await database.collection('tourExpenses').findOne({
+    tourId,
+  });
+
+  assert.equal(result.succeeded, true);
+  assert.ok(declaration.declaredBy.equals(userId));
+  assert.ok(declaration.declaredAt instanceof Date);
+  await Promise.all([
+    database.collection('deliverers').deleteOne({ _id: delivererId }),
+    database.collection('tourCountings').deleteOne({ _id: countingId }),
+    database.collection('tourExpenses').deleteOne({ tourId }),
+    database.collection('tours').deleteOne({ _id: tourId }),
+  ]);
+});
 
 test('refuse l’ajout de produit sans la permission dédiée', async () => {
   const { token } = await createUserSession(

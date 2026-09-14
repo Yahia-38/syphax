@@ -127,7 +127,7 @@ const TourPage = async ({ params, searchParams }) => {
     ? await getTourPaymentPreview({ tourId: tour.id, userId: session.userId })
     : null;
   const expensePreview = canReadTourExpenses
-    && tour.status === TOUR_STATUS_COUNTED
+    && [TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status)
     ? await getTourExpensePreview({
         tourId: tour.id,
         userId: session.userId,
@@ -258,7 +258,9 @@ const TourPage = async ({ params, searchParams }) => {
       {expensePreview && (
         <TourExpensePreview
           canDeclareExpenses={canDeclareTourExpenses}
+          initialConfirmationKey={randomUUID()}
           preview={expensePreview}
+          tourId={tour.id}
         />
       )}
 

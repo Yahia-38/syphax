@@ -353,22 +353,37 @@ const DelivererPage = async ({ params, searchParams }) => {
               Aucune tournée comptée
             </p>
           ) : cashSummary.reliable ? (
-            <dl className='grid gap-px bg-slate-200 sm:grid-cols-3'>
-              {[
-                ['Total dû', cashSummary.amountDueInCentimes],
-                ['Total encaissé', cashSummary.amountPaidInCentimes],
-                ['Reste à payer', cashSummary.remainingDueInCentimes],
-              ].map(([label, amount]) => (
-                <div className='bg-white px-5 py-5 sm:px-6' key={label}>
-                  <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                    {label}
-                  </dt>
-                  <dd className='mt-2 text-2xl font-bold tabular-nums text-slate-950'>
-                    {formatCashAmount(amount)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <>
+              <dl className='grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
+                {[
+                  ['Ventes brutes', cashSummary.grossSalesInCentimes],
+                  ['Frais enregistrés', cashSummary.totalExpensesInCentimes],
+                  ['Net à remettre', cashSummary.netDueInCentimes],
+                  ['Total encaissé', cashSummary.amountPaidInCentimes],
+                  ['Reste à payer', cashSummary.remainingDueInCentimes],
+                ].map(([label, amount]) => (
+                  <div className='bg-white px-5 py-5 sm:px-6' key={label}>
+                    <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                      {label}
+                    </dt>
+                    <dd className='mt-2 text-2xl font-bold tabular-nums text-slate-950'>
+                      {formatCashAmount(amount)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {(cashSummary.expenseDeclarationsMissingCount > 0
+                || cashSummary.historicalExpenseDeclarationsMissingCount > 0) && (
+                <p className='border-t border-blue-200 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-950 sm:px-6'>
+                  {cashSummary.expenseDeclarationsMissingCount > 0
+                    ? `${cashSummary.expenseDeclarationsMissingCount} tournée(s) comptée(s) ont des frais non encore déclarés. `
+                    : ''}
+                  {cashSummary.historicalExpenseDeclarationsMissingCount > 0
+                    ? `${cashSummary.historicalExpenseDeclarationsMissingCount} tournée(s) historique(s) sont clôturée(s) sans déclaration.`
+                    : ''}
+                </p>
+              )}
+            </>
           ) : (
             <div className='border-b border-red-200 bg-red-50 px-5 py-5 text-sm text-red-900 sm:px-6' role='alert'>
               <p className='font-semibold'>

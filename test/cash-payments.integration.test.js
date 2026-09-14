@@ -151,6 +151,27 @@ const insertTour = async ({
   };
 };
 
+const insertExpenseDeclaration = async ({
+  choice = 'DECLARE',
+  lines = [{ amountInCentimes: 100_000, reason: 'Frais de test' }],
+  totalInCentimes = 100_000,
+  ...tour
+}) => {
+  await database.collection('tourExpenses').insertOne({
+    _id: new ObjectId(),
+    choice,
+    confirmationKey: randomUUID(),
+    declaredAt: new Date(),
+    declaredBy: cashierId,
+    delivererId: tour.delivererId,
+    lines,
+    requestDigest: randomUUID(),
+    sourceTourCountingId: tour.countingId,
+    totalInCentimes,
+    tourId: tour.tourId,
+  });
+};
+
 const submitPayment = async ({
   amount,
   cashRegisterId,
@@ -290,6 +311,7 @@ beforeEach(async () => {
     database.collection('products').deleteMany({}),
     database.collection('stockMovements').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
+    database.collection('tourExpenses').deleteMany({}),
     database.collection('tourReservations').deleteMany({}),
     database.collection('tours').deleteMany({}),
   ]);
@@ -1028,6 +1050,121 @@ test('calcule les restes par livreur sans doubler le dû et les actualise après
   assert.equal(updated.totalRemainingDueInCentimes, 520_000);
 });
 
+test('utilise le net déclaré partout sans réécrire ni invalider un ancien versement', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ totalDueInCentimes: 750_000 });
+  const confirmationKey = randomUUID();
+  const firstRequest = {
+    amount: '3000',
+    cashRegisterId: new ObjectId(cashRegister.id),
+    confirmationKey,
+    expectedRemainingDueInCentimes: 750_000,
+    tourId: tour.tourId,
+  };
+  const first = await submitPayment(firstRequest);
+  const paymentBeforeExpense = await database.collection('cashPayments')
+    .findOne({ confirmationKey });
+
+  await insertExpenseDeclaration({
+    lines: [{ amountInCentimes: 220_000, reason: 'Carburant' }],
+    totalInCentimes: 220_000,
+    ...tour,
+  });
+
+  const [preview, remainder, summary, replay] = await Promise.all([
+    getTourPaymentPreview({
+      tourId: tour.tourId.toString(),
+      userId: cashierId.toString(),
+    }),
+    readDelivererRemainder(tour.delivererId),
+    getDelivererCashSummary({
+      delivererId: tour.delivererId.toString(),
+      userId: cashierId.toString(),
+    }),
+    submitPayment(firstRequest),
+  ]);
+
+  assert.equal(first.replayed, false);
+  assert.equal(replay.replayed, true);
+  assert.equal(preview.grossSalesInCentimes, 750_000);
+  assert.equal(preview.totalExpensesInCentimes, 220_000);
+  assert.equal(preview.netDueInCentimes, 530_000);
+  assert.equal(preview.amountPaidInCentimes, 300_000);
+  assert.equal(preview.remainingDueInCentimes, 230_000);
+  assert.equal(Object.hasOwn(preview, 'declaration'), false);
+  assert.equal(remainder.tours[0].grossSalesInCentimes, 750_000);
+  assert.equal(remainder.tours[0].totalExpensesInCentimes, 220_000);
+  assert.equal(remainder.tours[0].netDueInCentimes, 530_000);
+  assert.equal(Object.hasOwn(remainder.tours[0], 'lines'), false);
+  assert.equal(JSON.stringify(remainder).includes('Carburant'), false);
+  assert.equal(summary.grossSalesInCentimes, 750_000);
+  assert.equal(summary.totalExpensesInCentimes, 220_000);
+  assert.equal(summary.netDueInCentimes, 530_000);
+  assert.deepEqual(
+    await database.collection('cashPayments').findOne({ confirmationKey }),
+    paymentBeforeExpense,
+  );
+
+  const finalPayment = await submitPayment({
+    amount: '2300',
+    cashRegisterId: new ObjectId(cashRegister.id),
+    expectedRemainingDueInCentimes: 230_000,
+    tourId: tour.tourId,
+  });
+
+  assert.equal(finalPayment.remainingDueInCentimes, 0);
+  assert.equal(await readDelivererRemainder(tour.delivererId), null);
+});
+
+test('répartit un versement multi-tournées sur les nets et conserve leurs snapshots', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({ totalDueInCentimes: 200_000 });
+  const second = await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    totalDueInCentimes: 400_000,
+  });
+
+  await insertExpenseDeclaration({
+    lines: [{ amountInCentimes: 50_000, reason: 'Péage' }],
+    totalInCentimes: 50_000,
+    ...first,
+  });
+
+  const request = await prepareDelivererPayment({
+    amount: '3000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const result = await recordDelivererCashPayment(request);
+  const stored = await database.collection('cashPayments').findOne({
+    confirmationKey: request.confirmationKey,
+  });
+
+  assert.deepEqual(
+    request.expectedSummary.allocations.map((allocation) => ({
+      amount: allocation.allocatedAmountInCentimes,
+      expenses: allocation.totalExpensesInCentimes,
+      gross: allocation.grossSalesInCentimes,
+      net: allocation.netDueInCentimes,
+    })),
+    [
+      { amount: 150_000, expenses: 50_000, gross: 200_000, net: 150_000 },
+      { amount: 150_000, expenses: 0, gross: 400_000, net: 400_000 },
+    ],
+  );
+  assert.equal(result.replayed, false);
+  assert.deepEqual(
+    stored.allocations.map((allocation) => allocation.amountDueInCentimes),
+    [150_000, 400_000],
+  );
+  assert.deepEqual(
+    stored.allocations.map((allocation) =>
+      allocation.remainingAfterPaymentInCentimes),
+    [0, 250_000],
+  );
+});
+
 test('synthétise toutes les tournées comptées avec versements anciens et affectations explicites sans écriture', async () => {
   const cashRegister = await initializeMainCashRegister();
   const first = await insertTour({
@@ -1092,8 +1229,13 @@ test('synthétise toutes les tournées comptées avec versements anciens et affe
     amountPaidInCentimes: 500_000,
     anomalies: [],
     countedTourCount: 2,
+    expenseDeclarationsMissingCount: 0,
+    grossSalesInCentimes: 600_000,
+    historicalExpenseDeclarationsMissingCount: 2,
+    netDueInCentimes: 600_000,
     reliable: true,
     remainingDueInCentimes: 100_000,
+    totalExpensesInCentimes: 0,
   });
   assert.deepEqual(afterPartialRead, beforePartialRead);
 
@@ -1122,8 +1264,13 @@ test('synthétise toutes les tournées comptées avec versements anciens et affe
     amountPaidInCentimes: 600_000,
     anomalies: [],
     countedTourCount: 2,
+    expenseDeclarationsMissingCount: 0,
+    grossSalesInCentimes: 600_000,
+    historicalExpenseDeclarationsMissingCount: 2,
+    netDueInCentimes: 600_000,
     reliable: true,
     remainingDueInCentimes: 0,
+    totalExpensesInCentimes: 0,
   });
   assert.equal(
     await database.collection('cashPayments').countDocuments({}),
@@ -1179,8 +1326,13 @@ test('distingue l’absence de comptage, bloque les anomalies et exige cash.read
     amountPaidInCentimes: null,
     anomalies: [],
     countedTourCount: 0,
+    expenseDeclarationsMissingCount: 0,
+    grossSalesInCentimes: null,
+    historicalExpenseDeclarationsMissingCount: 0,
+    netDueInCentimes: null,
     reliable: true,
     remainingDueInCentimes: null,
+    totalExpensesInCentimes: null,
   });
   assert.equal(anomalous.reliable, false);
   assert.equal(anomalous.amountDueInCentimes, null);
@@ -1597,6 +1749,12 @@ test('enregistre un versement global unique avec ses affectations et alimente to
   const result = await recordDelivererCashPayment({
     ...request,
     note: 'Remise groupée',
+  });
+  await insertExpenseDeclaration({
+    choice: 'NONE',
+    lines: [],
+    totalInCentimes: 0,
+    ...first,
   });
   const [storedPayments, journal, remainder, firstPreview, secondPreview,
     firstClosure] = await Promise.all([

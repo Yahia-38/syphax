@@ -121,18 +121,19 @@ test('conserve un reste nul sans le transformer', () => {
 
   assert.equal(result.complete, true);
   assert.equal(result.remainingDueInCentimes, 0);
-  assert.equal(result.reimbursementDueInCentimes, 0);
+  assert.equal(result.maximumExpensesInCentimes, 250_000);
 });
 
-test('conserve le reste négatif et expose séparément le remboursement', () => {
+test('refuse les frais qui créeraient un reste négatif et expose le maximum', () => {
   const result = calculate({
     expenses: [{ amount: '2500', id: 'expense-1', reason: 'Carburant' }],
     grossSalesInCentimes: 500_000,
     totalPaidInCentimes: 300_000,
   });
 
-  assert.equal(result.complete, true);
+  assert.equal(result.complete, false);
   assert.equal(result.netDueInCentimes, 250_000);
-  assert.equal(result.remainingDueInCentimes, -50_000);
-  assert.equal(result.reimbursementDueInCentimes, 50_000);
+  assert.equal(result.remainingDueInCentimes, null);
+  assert.equal(result.maximumExpensesInCentimes, 200_000);
+  assert.match(result.financialError, /maximum actuellement déclarable/u);
 });

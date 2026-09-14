@@ -103,6 +103,17 @@ const TourPaymentPreview = ({
             Ces chiffres concernent uniquement cette tournée. Ils ne représentent
             ni le solde global du livreur, ni l’inventaire réel du tiroir-caisse.
           </p>
+          {preview.expenseDeclarationStatus === 'MISSING' && (
+            <p className='mt-2 text-sm font-semibold text-blue-800'>
+              Frais non encore déclarés : le net reste égal aux ventes brutes
+              et pourra encore diminuer dans la limite des encaissements.
+            </p>
+          )}
+          {preview.expenseDeclarationStatus === 'HISTORICAL_MISSING' && (
+            <p className='mt-2 text-sm font-semibold text-slate-700'>
+              Tournée historique clôturée sans déclaration de frais.
+            </p>
+          )}
         </div>
 
         {!nothingToCollect
@@ -119,18 +130,26 @@ const TourPaymentPreview = ({
         )}
       </div>
 
-      <dl className='grid gap-px border-t border-amber-200 bg-amber-200 sm:grid-cols-3'>
+      <dl className='grid gap-px border-t border-amber-200 bg-amber-200 sm:grid-cols-2 lg:grid-cols-5'>
         {[
-          ['Dû pour cette tournée', preview.amountDueInCentimes],
-          ['Encaissé pour cette tournée', preview.amountPaidInCentimes],
-          ['Reste dû pour cette tournée', remainingDueInCentimes],
+          ['Ventes brutes', preview.grossSalesInCentimes],
+          ['Frais déclarés', preview.expenseDeclarationStatus === 'DECLARED'
+            ? preview.totalExpensesInCentimes
+            : null],
+          ['Net à remettre', preview.netDueInCentimes],
+          ['Encaissé', preview.amountPaidInCentimes],
+          ['Reste à payer', remainingDueInCentimes],
         ].map(([label, value]) => (
           <div className='bg-white/80 px-5 py-4 sm:px-6' key={label}>
             <dt className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
               {label}
             </dt>
             <dd className='mt-1 text-xl font-bold tabular-nums text-slate-950'>
-              {formatReceptionMoney(value)}
+              {value === null
+                ? preview.expenseDeclarationStatus === 'HISTORICAL_MISSING'
+                  ? 'Absence historique'
+                  : 'Non déclarés'
+                : formatReceptionMoney(value)}
             </dd>
           </div>
         ))}

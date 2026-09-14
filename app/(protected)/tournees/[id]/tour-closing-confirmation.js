@@ -61,9 +61,11 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
         </p>
       </div>
 
-      <dl className='grid gap-px border-t border-slate-300 bg-slate-300 sm:grid-cols-3'>
+      <dl className='grid gap-px border-t border-slate-300 bg-slate-300 sm:grid-cols-2 lg:grid-cols-5'>
         {[
-          ['Montant dû', preview.amountDueInCentimes],
+          ['Ventes brutes', preview.grossSalesInCentimes],
+          ['Frais déclarés', preview.totalExpensesInCentimes],
+          ['Net à remettre', preview.netDueInCentimes],
           ['Total encaissé', preview.amountPaidInCentimes],
           ['Reste à payer', preview.remainingDueInCentimes],
         ].map(([label, value]) => (
@@ -119,9 +121,11 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
             Tournée <strong className='text-slate-950'>{preview.tourReference}</strong>
             {' '}de {preview.deliverer.code} — {preview.deliverer.name}.
           </p>
-          <dl className='grid gap-2 rounded-xl bg-slate-50 p-4 sm:grid-cols-3'>
+          <dl className='grid gap-2 rounded-xl bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-5'>
             {[
-              ['Montant dû', preview.amountDueInCentimes],
+              ['Ventes brutes', preview.grossSalesInCentimes],
+              ['Frais déclarés', preview.totalExpensesInCentimes],
+              ['Net à remettre', preview.netDueInCentimes],
               ['Total encaissé', preview.amountPaidInCentimes],
               ['Reste à payer', preview.remainingDueInCentimes],
             ].map(([label, value]) => (

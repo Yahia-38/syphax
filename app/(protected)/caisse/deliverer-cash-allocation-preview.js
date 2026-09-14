@@ -381,33 +381,49 @@ const DelivererCashAllocationPreview = ({
                 </div>
               </div>
 
-              <div className='hidden grid-cols-[minmax(0,1fr)_10rem_repeat(3,minmax(8rem,1fr))] gap-4 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid'>
-                <span>Tournée</span>
-                <span>Date du comptage</span>
-                <span>Reste avant</span>
-                <span>Montant affecté</span>
-                <span>Reste après</span>
-              </div>
-
               {paginatedAllocations.length > 0 ? paginatedAllocations.map((allocation) => (
                 <article
-                  className='grid gap-3 border-t border-slate-200 px-4 py-4 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_10rem_repeat(3,minmax(8rem,1fr))] sm:gap-4'
+                  className='border-t border-slate-200 px-4 py-4 first:border-t-0'
                   key={allocation.tourId}
                 >
-                  {[
-                    ['Tournée', allocation.tourReference],
-                    ['Date du comptage', formatCountingDate(allocation.countedAt)],
-                    ['Reste avant', formatReceptionMoney(allocation.remainingBeforePaymentInCentimes)],
-                    ['Montant affecté', formatReceptionMoney(allocation.allocatedAmountInCentimes)],
-                    ['Reste après', formatReceptionMoney(allocation.remainingAfterPaymentInCentimes)],
-                  ].map(([label, value]) => (
-                    <p className='break-words text-xs text-slate-800' key={label}>
-                      <span className='mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden'>
-                        {label}
-                      </span>
-                      {value}
+                  <div className='flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between'>
+                    <p className='break-all font-mono text-sm font-semibold text-slate-950'>
+                      {allocation.tourReference}
                     </p>
-                  ))}
+                    <p className='text-xs text-slate-600'>
+                      Comptée le {formatCountingDate(allocation.countedAt)}
+                    </p>
+                  </div>
+                  {allocation.expenseDeclarationStatus === 'MISSING' && (
+                    <p className='mt-2 text-xs font-semibold text-blue-700'>
+                      Frais non encore déclarés.
+                    </p>
+                  )}
+                  {allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' && (
+                    <p className='mt-2 text-xs font-semibold text-slate-600'>
+                      Absence historique de déclaration de frais.
+                    </p>
+                  )}
+                  <dl className='mt-3 grid gap-px overflow-hidden rounded-lg bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
+                    {[
+                      ['Ventes brutes', allocation.grossSalesInCentimes],
+                      ['Frais', allocation.expenseDeclarationStatus === 'DECLARED' ? allocation.totalExpensesInCentimes : null],
+                      ['Net à remettre', allocation.netDueInCentimes],
+                      ['Affecté', allocation.allocatedAmountInCentimes],
+                      ['Reste après', allocation.remainingAfterPaymentInCentimes],
+                    ].map(([label, value]) => (
+                      <div className='bg-slate-50 p-3' key={label}>
+                        <dt className='text-[11px] font-semibold uppercase tracking-wide text-slate-500'>
+                          {label}
+                        </dt>
+                        <dd className='mt-1 text-xs font-semibold text-slate-900'>
+                          {value === null
+                            ? 'Non déclarés'
+                            : formatReceptionMoney(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 </article>
               )) : (
                 <p className='border-t border-slate-200 px-4 py-8 text-center text-sm text-slate-600'>

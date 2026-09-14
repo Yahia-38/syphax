@@ -89,10 +89,29 @@ const insertCountedTour = async () => {
   const tourId = new ObjectId();
 
   await Promise.all([
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: true,
+      code: 'LIV-ACTION-CLOTURE',
+      name: 'Livreur action clôture',
+    }),
     database.collection('tourCountings').insertOne({
       _id: countingId,
       lines: [],
       totalDueInCentimes: 750_000,
+      tourId,
+    }),
+    database.collection('tourExpenses').insertOne({
+      _id: new ObjectId(),
+      choice: 'NONE',
+      confirmationKey: randomUUID(),
+      declaredAt: new Date(),
+      declaredBy: new ObjectId(),
+      delivererId,
+      lines: [],
+      requestDigest: randomUUID(),
+      sourceTourCountingId: countingId,
+      totalInCentimes: 0,
       tourId,
     }),
     database.collection('tours').insertOne({
@@ -128,9 +147,11 @@ before(async () => {
 beforeEach(async () => {
   await Promise.all([
     database.collection('cashPayments').deleteMany({}),
+    database.collection('deliverers').deleteMany({}),
     database.collection('roles').deleteMany({}),
     database.collection('sessions').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
+    database.collection('tourExpenses').deleteMany({}),
     database.collection('tours').deleteMany({}),
     database.collection('users').deleteMany({}),
   ]);
