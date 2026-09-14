@@ -5,6 +5,7 @@ const permissions = [
   'tours.read',
   'tours.create',
   'tours.load',
+  'tours.count.prepare',
   'tours.products.add',
   'tours.products.release',
 ];

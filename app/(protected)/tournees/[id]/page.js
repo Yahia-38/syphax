@@ -6,6 +6,10 @@ import { notFound } from 'next/navigation';
 import { getUserPermissions } from '../../../../lib/access.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import {
+  TOUR_COUNTING_PERMISSIONS,
+  getTourCountingSheet,
+} from '../../../../lib/tour-countings.js';
 import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
   TOUR_STATUS_LOADED,
@@ -18,6 +22,7 @@ import {
 } from '../../../../lib/tours.js';
 import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
+import TourCountingSheet from './tour-counting-sheet.js';
 import TourLoadingConfirmation from './tour-loading-confirmation.js';
 
 export const metadata = {
@@ -51,6 +56,9 @@ const TourPage = async ({ params, searchParams }) => {
     'tours.products.release',
   );
   const canLoadTour = permissions.includes('tours.load') && canReadPricing;
+  const canPrepareCounting = TOUR_COUNTING_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -58,6 +66,10 @@ const TourPage = async ({ params, searchParams }) => {
     && tour.status === TOUR_STATUS_PREPARATION
     && tour.lines.length > 0
     ? await getTourLoadingPreview({ tourId: tour.id, userId: session.userId })
+    : null;
+  const countingSheet = canPrepareCounting
+    && tour.status === TOUR_STATUS_LOADED
+    ? await getTourCountingSheet({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
@@ -132,6 +144,8 @@ const TourPage = async ({ params, searchParams }) => {
           tourId={tour.id}
         />
       )}
+
+      {countingSheet && <TourCountingSheet sheet={countingSheet} />}
 
       {tour.lines.length > 0 ? (
         <TourProductList
