@@ -18,9 +18,12 @@ const { deleteProduct, updateProduct } = await import('../lib/products.js');
 const { getProductStockSummaries } = await import(
   '../lib/stock-movements.js'
 );
-const { addAndReserveTourProduct, listTourReservations } = await import(
-  '../lib/tour-reservations.js'
-);
+const {
+  addAndReserveTourProduct,
+  ensureTourReservationIndexes,
+  listTourReservations,
+  releaseTourReservation,
+} = await import('../lib/tour-reservations.js');
 
 let authorId;
 let database;
@@ -112,6 +115,50 @@ const createRequest = ({
   productId: productId.toString(),
   quantityMode,
   tourId: tourId.toString(),
+});
+
+const releaseRequest = ({
+  releasedBy = authorId,
+  reservationId,
+  tourId,
+}) => ({
+  releasedBy: releasedBy.toString(),
+  reservationId,
+  tourId: tourId.toString(),
+});
+
+test('remplace l’index unique global par un index unique ACTIVE sans perdre de données', async () => {
+  const preservedReservationId = new ObjectId();
+  const reservations = database.collection('tourReservations');
+
+  await reservations.createIndex(
+    { tourId: 1, productId: 1 },
+    { name: 'unique_tour_product', unique: true },
+  );
+  await reservations.insertOne({
+    _id: preservedReservationId,
+    productId: new ObjectId(),
+    status: 'RELEASED',
+    tourId: new ObjectId(),
+  });
+
+  await ensureTourReservationIndexes(database);
+
+  const indexes = await reservations.listIndexes().toArray();
+  const activeIndex = indexes.find(
+    (index) => index.name === 'unique_active_tour_product',
+  );
+
+  assert.equal(await reservations.countDocuments({
+    _id: preservedReservationId,
+  }), 1);
+  assert.equal(indexes.some(
+    (index) => index.name === 'unique_tour_product',
+  ), false);
+  assert.equal(activeIndex.unique, true);
+  assert.deepEqual(activeIndex.partialFilterExpression, { status: 'ACTIVE' });
+
+  await reservations.deleteOne({ _id: preservedReservationId });
 });
 
 test('réserve une quantité directe sans modifier le stock physique', async () => {
@@ -329,6 +376,230 @@ test('sérialise la réservation avec une désactivation du livreur', async () =
     reservation.errors?.form ?? '',
   ));
   assert.equal(Boolean(storedReservation), Boolean(reservation.reservation));
+});
+
+test('libère la réservation sans mouvement et actualise les lectures de stock', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const addition = await addAndReserveTourProduct(createRequest({
+    productId,
+    tourId,
+  }));
+  const movementCountBefore = await database.collection('stockMovements')
+    .countDocuments({ productId });
+  const result = await releaseTourReservation(releaseRequest({
+    reservationId: addition.reservation.id,
+    tourId,
+  }));
+  const reservation = await database.collection('tourReservations').findOne({
+    _id: new ObjectId(addition.reservation.id),
+  });
+  const stock = (await getProductStockSummaries([productId], { database }))
+    .get(productId.toString());
+  const lines = await listTourReservations({
+    database,
+    tourId: tourId.toString(),
+  });
+
+  assert.equal(result.replayed, false);
+  assert.equal(reservation.status, 'RELEASED');
+  assert.ok(reservation.releasedAt instanceof Date);
+  assert.ok(reservation.releasedBy.equals(authorId));
+  assert.deepEqual(lines, []);
+  assert.equal(stock.quantityInBaseUnits, 100);
+  assert.equal(stock.reservedQuantityInBaseUnits, 0);
+  assert.equal(stock.availableQuantityInBaseUnits, 100);
+  assert.equal(await database.collection('stockMovements').countDocuments({
+    productId,
+  }), movementCountBefore);
+  assert.equal('amount' in reservation, false);
+  assert.equal('debt' in reservation, false);
+});
+
+test('sérialise deux retraits et conserve la première trace de libération', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const addition = await addAndReserveTourProduct(createRequest({
+    productId,
+    tourId,
+  }));
+  const firstAuthorId = new ObjectId();
+  const secondAuthorId = new ObjectId();
+  const results = await Promise.all([
+    releaseTourReservation(releaseRequest({
+      releasedBy: firstAuthorId,
+      reservationId: addition.reservation.id,
+      tourId,
+    })),
+    releaseTourReservation(releaseRequest({
+      releasedBy: secondAuthorId,
+      reservationId: addition.reservation.id,
+      tourId,
+    })),
+  ]);
+  const releasedOnce = await database.collection('tourReservations').findOne({
+    _id: new ObjectId(addition.reservation.id),
+  });
+  const replay = await releaseTourReservation(releaseRequest({
+    releasedBy: new ObjectId(),
+    reservationId: addition.reservation.id,
+    tourId,
+  }));
+  const releasedTwice = await database.collection('tourReservations').findOne({
+    _id: new ObjectId(addition.reservation.id),
+  });
+  const [tour, product] = await Promise.all([
+    database.collection('tours').findOne({ _id: tourId }),
+    database.collection('products').findOne({ _id: productId }),
+  ]);
+
+  assert.equal(results.filter((result) => result.replayed === false).length, 1);
+  assert.equal(results.filter((result) => result.replayed === true).length, 1);
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(releasedTwice.releasedAt, releasedOnce.releasedAt);
+  assert.ok(
+    releasedTwice.releasedBy.equals(firstAuthorId)
+    || releasedTwice.releasedBy.equals(secondAuthorId),
+  );
+  assert.equal(tour.reservationReferenceVersion, 2);
+  assert.equal(product.stockReferenceVersion, 2);
+});
+
+test('refuse une autre tournée et une tournée qui n’est plus en préparation', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const otherTourId = await insertTour();
+  const addition = await addAndReserveTourProduct(createRequest({
+    productId,
+    tourId,
+  }));
+  const wrongTour = await releaseTourReservation(releaseRequest({
+    reservationId: addition.reservation.id,
+    tourId: otherTourId,
+  }));
+
+  await database.collection('tours').updateOne(
+    { _id: tourId },
+    { $set: { status: 'CHARGEE' } },
+  );
+
+  const closedTour = await releaseTourReservation(releaseRequest({
+    reservationId: addition.reservation.id,
+    tourId,
+  }));
+  const reservation = await database.collection('tourReservations').findOne({
+    _id: new ObjectId(addition.reservation.id),
+  });
+
+  assert.match(wrongTour.errors.form, /n’appartient pas/u);
+  assert.match(closedTour.errors.form, /n’est plus en préparation/u);
+  assert.equal(reservation.status, 'ACTIVE');
+  assert.equal('releasedAt' in reservation, false);
+  assert.equal('releasedBy' in reservation, false);
+});
+
+test('libère après désactivation du livreur', async () => {
+  const delivererId = await insertDeliverer();
+  const tourId = await insertTour({ delivererId });
+  const productId = await insertProduct();
+  const addition = await addAndReserveTourProduct(createRequest({
+    productId,
+    tourId,
+  }));
+
+  await deactivateDeliverer({
+    changedBy: authorId.toString(),
+    delivererId: delivererId.toString(),
+  });
+
+  const result = await releaseTourReservation(releaseRequest({
+    reservationId: addition.reservation.id,
+    tourId,
+  }));
+
+  assert.equal(result.replayed, false);
+  assert.equal(await database.collection('tourReservations').countDocuments({
+    _id: new ObjectId(addition.reservation.id),
+    status: 'RELEASED',
+  }), 1);
+});
+
+test('réserve à nouveau avec une nouvelle clé sans réactiver l’ancienne demande', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const additionKey = randomUUID();
+  const oldRequest = createRequest({ additionKey, productId, tourId });
+  const oldAddition = await addAndReserveTourProduct(oldRequest);
+
+  await releaseTourReservation(releaseRequest({
+    reservationId: oldAddition.reservation.id,
+    tourId,
+  }));
+
+  const newAddition = await addAndReserveTourProduct(createRequest({
+    additionKey: randomUUID(),
+    directQuantity: '20',
+    productId,
+    tourId,
+  }));
+  const oldReplay = await addAndReserveTourProduct(oldRequest);
+  const oldReleaseReplay = await releaseTourReservation(releaseRequest({
+    reservationId: oldAddition.reservation.id,
+    tourId,
+  }));
+  const reservations = await database.collection('tourReservations').find({
+    productId,
+    tourId,
+  }).sort({ reservedAt: 1 }).toArray();
+
+  assert.notEqual(newAddition.reservation.id, oldAddition.reservation.id);
+  assert.equal(oldReplay.replayed, true);
+  assert.equal(oldReplay.released, true);
+  assert.equal(oldReplay.reservation.id, oldAddition.reservation.id);
+  assert.equal(oldReleaseReplay.replayed, true);
+  assert.deepEqual(reservations.map((reservation) => reservation.status), [
+    'RELEASED',
+    'ACTIVE',
+  ]);
+  assert.equal(reservations[1].quantityInBaseUnits, 20);
+});
+
+test('conserve un stock cohérent lors d’un retrait et d’un ajout concurrents', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const initialAddition = await addAndReserveTourProduct(createRequest({
+    directQuantity: '30',
+    productId,
+    tourId,
+  }));
+  const [release, addition] = await Promise.all([
+    releaseTourReservation(releaseRequest({
+      reservationId: initialAddition.reservation.id,
+      tourId,
+    })),
+    addAndReserveTourProduct(createRequest({
+      additionKey: randomUUID(),
+      directQuantity: '40',
+      productId,
+      tourId,
+    })),
+  ]);
+  const activeReservations = await database.collection('tourReservations')
+    .find({ productId, status: 'ACTIVE', tourId })
+    .toArray();
+  const stock = (await getProductStockSummaries([productId], { database }))
+    .get(productId.toString());
+  const expectedReserved = activeReservations.reduce(
+    (total, reservation) => total + reservation.quantityInBaseUnits,
+    0,
+  );
+
+  assert.equal(release.replayed, false);
+  assert.ok(addition.reservation || addition.errors?.productId);
+  assert.ok(activeReservations.length <= 1);
+  assert.equal(stock.quantityInBaseUnits, 100);
+  assert.equal(stock.reservedQuantityInBaseUnits, expectedReserved);
+  assert.equal(stock.availableQuantityInBaseUnits, 100 - expectedReserved);
 });
 
 test('protège suppression et changement d’unité avec une réservation référencée', async () => {

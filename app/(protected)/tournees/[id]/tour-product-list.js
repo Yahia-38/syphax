@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from 'react';
 
+import TourReservationReleaseButton from './tour-reservation-release-button.js';
+
 const LINES_PER_PAGE = 5;
 
 const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const TourProductList = ({ lines }) => {
+const TourProductList = ({ canRelease, lines, tourId }) => {
   const [query, setQuery] = useState('');
   const [quantityMode, setQuantityMode] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -128,13 +130,25 @@ const TourProductList = ({ lines }) => {
                       : 'Quantité saisie directement en unité de base'}
                   </p>
                 </div>
-                <div className='shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:text-right'>
-                  <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
-                    Réservé
-                  </p>
-                  <p className='mt-1 text-xl font-bold tabular-nums text-amber-950'>
-                    {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
-                  </p>
+                <div className='shrink-0 sm:text-right'>
+                  <div className='rounded-xl border border-amber-200 bg-amber-50 px-4 py-3'>
+                    <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
+                      Réservé
+                    </p>
+                    <p className='mt-1 text-xl font-bold tabular-nums text-amber-950'>
+                      {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
+                    </p>
+                  </div>
+                  {canRelease && (
+                    <TourReservationReleaseButton
+                      productCode={line.productCode}
+                      productDesignation={line.productDesignation}
+                      quantity={formatQuantity(line.quantityInBaseUnits)}
+                      reservationId={line.id}
+                      tourId={tourId}
+                      unit={line.baseUnit}
+                    />
+                  )}
                 </div>
               </div>
             </article>

@@ -29,7 +29,7 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
-const { addTourProduct } = await import(
+const { addTourProduct, releaseTourProduct } = await import(
   '../app/(protected)/tournees/[id]/actions.js'
 );
 
@@ -168,6 +168,67 @@ test('refuse l’ajout de produit sans la permission dédiée', async () => {
     database.collection('deliverers').deleteOne({ _id: delivererId }),
     database.collection('products').deleteOne({ _id: productId }),
     database.collection('stockMovements').deleteMany({ productId }),
+    database.collection('tours').deleteOne({ _id: tourId }),
+  ]);
+});
+
+test('refuse le retrait sans la permission dédiée et sans écrire', async () => {
+  const { token } = await createUserSession(
+    'lecture-tournee-sans-retrait',
+    ['tours.read'],
+  );
+  const productId = new ObjectId();
+  const reservationId = new ObjectId();
+  const tourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('products').insertOne({
+      _id: productId,
+      baseUnit: 'PIECE',
+      code: 'PRD-SANS-RETRAIT',
+      designation: 'Produit protégé du retrait',
+    }),
+    database.collection('tours').insertOne({
+      _id: tourId,
+      reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+      status: 'PREPARATION',
+    }),
+    database.collection('tourReservations').insertOne({
+      _id: reservationId,
+      productId,
+      quantityInBaseUnits: 10,
+      status: 'ACTIVE',
+      tourId,
+    }),
+  ]);
+
+  await assert.rejects(
+    callWithSession(token, () => releaseTourProduct(
+      tourId.toString(),
+      reservationId.toString(),
+      { revision: 0 },
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.products.release',
+  );
+
+  const reservation = await database.collection('tourReservations').findOne({
+    _id: reservationId,
+  });
+  const tour = await database.collection('tours').findOne({ _id: tourId });
+  const product = await database.collection('products').findOne({
+    _id: productId,
+  });
+
+  assert.equal(reservation.status, 'ACTIVE');
+  assert.equal('releasedAt' in reservation, false);
+  assert.equal('releasedBy' in reservation, false);
+  assert.equal('reservationReferenceVersion' in tour, false);
+  assert.equal('stockReferenceVersion' in product, false);
+
+  await Promise.all([
+    database.collection('products').deleteOne({ _id: productId }),
+    database.collection('tourReservations').deleteOne({ _id: reservationId }),
     database.collection('tours').deleteOne({ _id: tourId }),
   ]);
 });

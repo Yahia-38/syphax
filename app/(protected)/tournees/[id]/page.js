@@ -40,6 +40,9 @@ const TourPage = async ({ params, searchParams }) => {
     'products.read',
     'packaging.read',
   ].every((permission) => permissions.includes(permission));
+  const canReleaseTourProducts = permissions.includes(
+    'tours.products.release',
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -103,7 +106,12 @@ const TourPage = async ({ params, searchParams }) => {
       )}
 
       {tour.lines.length > 0 ? (
-        <TourProductList lines={tour.lines} />
+        <TourProductList
+          canRelease={canReleaseTourProducts
+            && tour.status === TOUR_STATUS_PREPARATION}
+          lines={tour.lines}
+          tourId={tour.id}
+        />
       ) : (
         <section
           aria-labelledby='tour-products-title'

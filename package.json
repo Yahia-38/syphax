@@ -13,6 +13,7 @@
     "access:grant-deliverer-status": "node --env-file=.env.local scripts/grant-deliverer-status-permission.js",
     "access:grant-tours": "node --env-file=.env.local scripts/grant-tour-permissions.js",
     "stock:backfill": "node --env-file-if-exists=.env.local scripts/backfill-reception-stock.js",
+    "tour-reservations:migrate-indexes": "node --env-file-if-exists=.env.local scripts/migrate-tour-reservation-indexes.js",
     "user:create": "node --env-file=.env.local scripts/create-user.js"
   },
   "dependencies": {
