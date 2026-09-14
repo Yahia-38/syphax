@@ -49,11 +49,18 @@ const createUser = async (permissions) => {
 };
 
 const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
+  const delivererId = new ObjectId();
   const productId = new ObjectId();
   const reservationId = new ObjectId();
   const tourId = new ObjectId();
 
   await Promise.all([
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: true,
+      code: `LIV-${delivererId.toHexString().slice(-6)}`,
+      name: 'Livreur comptage',
+    }),
     database.collection('products').insertOne({
       _id: productId,
       active: true,
@@ -71,6 +78,7 @@ const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
       _id: tourId,
       loadedAt: new Date('2026-09-14T10:00:00.000Z'),
       loadedBy: fullAccessUserId,
+      delivererId,
       reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
       status: 'LOADED',
     }),
@@ -118,7 +126,7 @@ const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
     ]),
   ]);
 
-  return { productId, reservationId, tourId };
+  return { delivererId, productId, reservationId, tourId };
 };
 
 before(async () => {
@@ -741,7 +749,10 @@ test('annule comptage, retours et statut si une écriture échoue', async () => 
       (error) => error?.code === 11000,
     );
 
-    const [tour, countingCount, returnCount] = await Promise.all([
+    const [deliverer, tour, countingCount, returnCount] = await Promise.all([
+      database.collection('deliverers').findOne({
+        _id: counting.delivererId,
+      }),
       database.collection('tours').findOne({ _id: counting.tourId }),
       database.collection('tourCountings').countDocuments({
         tourId: counting.tourId,
@@ -753,6 +764,8 @@ test('annule comptage, retours et statut si une écriture échoue', async () => 
     ]);
 
     assert.equal(tour.status, 'LOADED');
+    assert.equal(deliverer.cashPaymentReferenceVersion, undefined);
+    assert.equal(tour.cashPaymentReferenceVersion, undefined);
     assert.equal(tour.countingReferenceVersion, undefined);
     assert.equal(countingCount, 0);
     assert.equal(returnCount, 0);

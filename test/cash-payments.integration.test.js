@@ -14,17 +14,22 @@ process.env.MONGODB_URI = testUri.toString();
 
 const { PermissionDeniedError } = await import('../lib/access.js');
 const {
+  calculateDelivererCashAllocationPreview,
+} = await import('../lib/cash-payment-calculations.js');
+const {
   CASH_PAYMENT_CREATE_PERMISSION,
   CASH_PAYMENT_MODE,
   CASH_READ_PERMISSION,
   buildCashJournalHref,
   buildCashRemaindersHref,
+  createDelivererCashPaymentSummaryDigest,
   getTourPaymentPreview,
   listCashJournalFilterOptions,
   listCashPayments,
   listCashRemainders,
   readCashJournalState,
   readCashRemaindersState,
+  recordDelivererCashPayment,
   recordTourCashPayment,
 } = await import('../lib/cash-payments.js');
 const {
@@ -34,6 +39,11 @@ const {
   initializeMainCashRegister,
 } = await import('../lib/cash-registers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
+const {
+  confirmTourCounting,
+  getTourCountingSheet,
+} = await import('../lib/tour-countings.js');
+const { getTourClosurePreview } = await import('../lib/tour-closures.js');
 
 let database;
 let cashierId;
@@ -185,11 +195,88 @@ const submitPayment = async ({
   });
 };
 
+const readDelivererRemainder = async (delivererId, userId = cashierId) => {
+  const result = await listCashRemainders({
+    pageSize: 100,
+    userId: userId.toString(),
+  });
+
+  return result.remainders.find((remainder) =>
+    remainder.deliverer.id === delivererId.toString()) ?? null;
+};
+
+const prepareDelivererPayment = async ({
+  amount,
+  cashRegisterId,
+  delivererId,
+  userId = cashierId,
+}) => {
+  const remainder = await readDelivererRemainder(delivererId, userId);
+  const summary = calculateDelivererCashAllocationPreview({
+    amount,
+    blockingAnomalies: remainder?.blockingAnomalies ?? [],
+    tours: remainder?.tours ?? [],
+  });
+
+  return {
+    amount,
+    confirmationKey: randomUUID(),
+    delivererId: delivererId.toString(),
+    expectedCashRegisterId: cashRegisterId.toString(),
+    expectedSummary: summary,
+    note: '',
+    receivedBy: userId.toString(),
+  };
+};
+
+const insertLoadedTour = async ({ deliverer, totalDueInCentimes }) => {
+  const productId = new ObjectId();
+  const reservationId = new ObjectId();
+  const tourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('products').insertOne({
+      _id: productId,
+      active: true,
+      baseUnit: 'PIECE',
+      code: `PRD-${productId.toString().slice(-6)}`,
+      designation: 'Produit comptage concurrent',
+    }),
+    database.collection('tours').insertOne({
+      _id: tourId,
+      delivererCode: deliverer.delivererCode,
+      delivererId: deliverer.delivererId,
+      delivererName: deliverer.delivererName,
+      reference: `TRN-${tourId.toString().toUpperCase()}`,
+      status: 'LOADED',
+    }),
+    database.collection('tourReservations').insertOne({
+      _id: reservationId,
+      baseUnit: 'PIECE',
+      productCode: `PRD-${productId.toString().slice(-6)}`,
+      productDesignation: 'Produit comptage concurrent',
+      productId,
+      quantityInBaseUnits: 1,
+      salePriceAtLoading: {
+        amountInCentimes: totalDueInCentimes,
+        currency: CASH_CURRENCY,
+        taxIncluded: true,
+        unit: 'PIECE',
+      },
+      status: 'LOADED',
+      tourId,
+    }),
+  ]);
+
+  return { reservationId, tourId };
+};
+
 before(async () => {
   database = await getDatabase();
   cashierId = await createUser([
     CASH_READ_PERMISSION,
     CASH_PAYMENT_CREATE_PERMISSION,
+    'tours.close',
     'tours.read',
   ], 'caissier-test');
 });
@@ -199,8 +286,10 @@ beforeEach(async () => {
     database.collection('cashPayments').deleteMany({}),
     database.collection('cashRegisters').deleteMany({}),
     database.collection('deliverers').deleteMany({}),
+    database.collection('products').deleteMany({}),
     database.collection('stockMovements').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
+    database.collection('tourReservations').deleteMany({}),
     database.collection('tours').deleteMany({}),
   ]);
 });
@@ -1291,6 +1380,457 @@ test('annule les verrous et le versement si son insertion échoue', async () => 
   } finally {
     await database.collection('cashPayments').dropIndex(
       'force_cash_payment_failure',
+    );
+  }
+});
+
+test('enregistre un versement global unique avec ses affectations et alimente toutes les lectures', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({
+    countedAt: new Date('2026-09-01T08:00:00.000Z'),
+    delivererCode: 'LIV-GLOBAL',
+    delivererName: 'Livreur global',
+    totalDueInCentimes: 200_000,
+  });
+  const second = await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    totalDueInCentimes: 400_000,
+  });
+  const request = await prepareDelivererPayment({
+    amount: '5000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const result = await recordDelivererCashPayment({
+    ...request,
+    note: 'Remise groupée',
+  });
+  const [storedPayments, journal, remainder, firstPreview, secondPreview,
+    firstClosure] = await Promise.all([
+    database.collection('cashPayments').find({}).toArray(),
+    listCashPayments({ userId: cashierId.toString() }),
+    readDelivererRemainder(first.delivererId),
+    getTourPaymentPreview({
+      tourId: first.tourId.toString(),
+      userId: cashierId.toString(),
+    }),
+    getTourPaymentPreview({
+      tourId: second.tourId.toString(),
+      userId: cashierId.toString(),
+    }),
+    getTourClosurePreview({
+      tourId: first.tourId.toString(),
+      userId: cashierId.toString(),
+    }),
+  ]);
+
+  assert.equal(result.replayed, false);
+  assert.equal(storedPayments.length, 1);
+  assert.equal(storedPayments[0].amountInCentimes, 500_000);
+  assert.equal(storedPayments[0].note, 'Remise groupée');
+  assert.equal(storedPayments[0].requestDigest.length, 64);
+  assert.equal(storedPayments[0].allocationSummaryDigest.length, 64);
+  assert.equal(
+    storedPayments[0].allocationSummaryDigest,
+    createDelivererCashPaymentSummaryDigest(request.expectedSummary),
+  );
+  assert.deepEqual(
+    storedPayments[0].allocations.map((allocation) =>
+      allocation.allocatedAmountInCentimes),
+    [200_000, 300_000],
+  );
+  assert.ok(storedPayments[0].allocations.every((allocation) =>
+    allocation.countedAt instanceof Date
+    && allocation.sourceTourCountingId instanceof ObjectId
+    && Number.isSafeInteger(allocation.remainingBeforePaymentInCentimes)
+    && Number.isSafeInteger(allocation.remainingAfterPaymentInCentimes)));
+  assert.equal(Object.hasOwn(storedPayments[0], 'tourId'), false);
+  assert.deepEqual(
+    result.payment.allocations.map((allocation) =>
+      allocation.allocatedAmountInCentimes),
+    [200_000, 300_000],
+  );
+  assert.equal(journal.totalItems, 1);
+  assert.deepEqual(
+    journal.payments[0].allocations.map((allocation) =>
+      allocation.amountInCentimes),
+    [200_000, 300_000],
+  );
+  assert.equal(remainder.remainingDueInCentimes, 100_000);
+  assert.equal(remainder.tours.length, 1);
+  assert.equal(remainder.tours[0].id, second.tourId.toString());
+  assert.equal(firstPreview.amountPaidInCentimes, 200_000);
+  assert.equal(firstPreview.remainingDueInCentimes, 0);
+  assert.equal(secondPreview.amountPaidInCentimes, 300_000);
+  assert.equal(secondPreview.remainingDueInCentimes, 100_000);
+  assert.equal(firstClosure.amountPaidInCentimes, 200_000);
+  assert.equal(firstClosure.remainingDueInCentimes, 0);
+});
+
+test('gère le paiement partiel de la première tournée puis le règlement exact de toutes les tournées', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({ totalDueInCentimes: 200_000 });
+  const second = await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    totalDueInCentimes: 400_000,
+  });
+  const partialRequest = await prepareDelivererPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const partial = await recordDelivererCashPayment(partialRequest);
+  const exactRequest = await prepareDelivererPayment({
+    amount: '5000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const exact = await recordDelivererCashPayment(exactRequest);
+
+  assert.deepEqual(
+    partial.payment.allocations.map((allocation) =>
+      allocation.allocatedAmountInCentimes),
+    [100_000],
+  );
+  assert.deepEqual(
+    exact.payment.allocations.map((allocation) =>
+      allocation.allocatedAmountInCentimes),
+    [100_000, 400_000],
+  );
+  assert.equal(await readDelivererRemainder(first.delivererId), null);
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 2);
+  assert.equal(
+    await database.collection('cashPayments').countDocuments({
+      allocations: { $exists: true },
+    }),
+    2,
+  );
+  assert.ok(second.tourId instanceof ObjectId);
+});
+
+test('encaisse un livreur désactivé et ses tournées terminées', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({
+    delivererActive: false,
+    status: 'CLOSED',
+    totalDueInCentimes: 200_000,
+  });
+  await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    status: 'CLOSED',
+    totalDueInCentimes: 400_000,
+  });
+  const request = await prepareDelivererPayment({
+    amount: '6000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const result = await recordDelivererCashPayment(request);
+
+  assert.equal(result.replayed, false);
+  assert.equal(result.payment.allocations.length, 2);
+  assert.equal(result.summary.totalRemainingAfterPaymentInCentimes, 0);
+});
+
+test('refuse les entrées globales invalides, les anomalies, les droits absents et la caisse indisponible', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ totalDueInCentimes: 200_000 });
+  const validRequest = await prepareDelivererPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    delivererId: tour.delivererId,
+  });
+  const invalidAmount = await recordDelivererCashPayment({
+    ...validRequest,
+    amount: '0',
+  });
+  const unauthorizedId = await createUser([CASH_READ_PERMISSION]);
+
+  await assert.rejects(
+    recordDelivererCashPayment({
+      ...validRequest,
+      receivedBy: unauthorizedId.toString(),
+    }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === CASH_PAYMENT_CREATE_PERMISSION,
+  );
+
+  await database.collection('tourCountings').updateOne(
+    { _id: tour.countingId },
+    { $set: { totalDueInCentimes: 50_000 } },
+  );
+  const overLimit = await recordDelivererCashPayment(validRequest);
+  await database.collection('tourCountings').updateOne(
+    { _id: tour.countingId },
+    { $set: { totalDueInCentimes: 200_000 } },
+  );
+
+  await database.collection('tourCountings').deleteOne({
+    _id: tour.countingId,
+  });
+  const anomalous = await recordDelivererCashPayment(validRequest);
+
+  await database.collection('tourCountings').insertOne({
+    _id: tour.countingId,
+    countedAt: new Date('2026-09-01T08:00:00.000Z'),
+    totalDueInCentimes: 200_000,
+    tourId: tour.tourId,
+  });
+  await database.collection('cashRegisters').updateOne(
+    { _id: new ObjectId(cashRegister.id) },
+    { $set: { active: false } },
+  );
+  const unavailableCashRegister = await recordDelivererCashPayment(
+    validRequest,
+  );
+
+  assert.ok(invalidAmount.errors.amount);
+  assert.equal(overLimit.stale, true);
+  assert.match(overLimit.errors.form, /dépasser/u);
+  assert.equal(anomalous.stale, true);
+  assert.match(anomalous.errors.form, /anomalies financières/u);
+  assert.equal(anomalous.summary.blocked, true);
+  assert.equal(unavailableCashRegister.stale, true);
+  assert.match(unavailableCashRegister.errors.form, /caisse/u);
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 0);
+});
+
+test('rejoue exactement un versement global soldé et refuse une clé détournée', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ totalDueInCentimes: 200_000 });
+  const request = await prepareDelivererPayment({
+    amount: '2000',
+    cashRegisterId: cashRegister.id,
+    delivererId: tour.delivererId,
+  });
+  const concurrentResults = await Promise.all([
+    recordDelivererCashPayment(request),
+    recordDelivererCashPayment(request),
+  ]);
+  const first = concurrentResults.find((result) => result.replayed === false);
+  const concurrentReplay = concurrentResults.find((result) =>
+    result.replayed === true);
+  const replay = await recordDelivererCashPayment(request);
+  const diverted = await recordDelivererCashPayment({
+    ...request,
+    note: 'Contenu différent',
+  });
+
+  assert.equal(first.replayed, false);
+  assert.equal(concurrentReplay.payment.id, first.payment.id);
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.payment.id, first.payment.id);
+  assert.deepEqual(replay.payment.allocations, first.payment.allocations);
+  assert.match(diverted.errors.form, /contenu différent/u);
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 1);
+});
+
+test('sérialise deux versements globaux concurrents sans dépasser le reste', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({ totalDueInCentimes: 200_000 });
+  await insertTour({ deliverer: first, totalDueInCentimes: 400_000 });
+  const firstRequest = await prepareDelivererPayment({
+    amount: '4000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+  const secondRequest = {
+    ...firstRequest,
+    confirmationKey: randomUUID(),
+  };
+  const results = await Promise.all([
+    recordDelivererCashPayment(firstRequest),
+    recordDelivererCashPayment(secondRequest),
+  ]);
+  const accepted = results.filter((result) => !result.errors);
+  const refused = results.filter((result) => result.errors);
+  const stored = await database.collection('cashPayments').find({}).toArray();
+
+  assert.equal(accepted.length, 1);
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0].stale, true);
+  assert.equal(refused[0].summary.totalRemainingDueInCentimes, 200_000);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].amountInCentimes, 400_000);
+});
+
+test('sérialise un versement global concurrent avec un versement unitaire', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ totalDueInCentimes: 500_000 });
+  const globalRequest = await prepareDelivererPayment({
+    amount: '4000',
+    cashRegisterId: cashRegister.id,
+    delivererId: tour.delivererId,
+  });
+  const [globalResult, unitResult] = await Promise.all([
+    recordDelivererCashPayment(globalRequest),
+    submitPayment({
+      amount: '4000',
+      cashRegisterId: cashRegister.id,
+      expectedRemainingDueInCentimes: 500_000,
+      tourId: tour.tourId,
+    }),
+  ]);
+  const accepted = [globalResult, unitResult].filter((result) => !result.errors);
+  const stored = await database.collection('cashPayments').find({}).toArray();
+
+  assert.equal(accepted.length, 1);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].amountInCentimes, 400_000);
+  assert.equal((await readDelivererRemainder(tour.delivererId))
+    .remainingDueInCentimes, 100_000);
+});
+
+test('refuse un récapitulatif global périmé après un versement unitaire et retourne la nouvelle répartition', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({ totalDueInCentimes: 200_000 });
+  const second = await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    totalDueInCentimes: 400_000,
+  });
+  const globalRequest = await prepareDelivererPayment({
+    amount: '5000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+
+  await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    expectedRemainingDueInCentimes: 200_000,
+    tourId: first.tourId,
+  });
+
+  const stale = await recordDelivererCashPayment(globalRequest);
+
+  assert.equal(stale.stale, true);
+  assert.match(stale.errors.form, /répartition a changé/u);
+  assert.deepEqual(
+    stale.summary.allocations.map((allocation) => ({
+      amount: allocation.allocatedAmountInCentimes,
+      tourId: allocation.tourId,
+    })),
+    [
+      { amount: 100_000, tourId: first.tourId.toString() },
+      { amount: 400_000, tourId: second.tourId.toString() },
+    ],
+  );
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 1);
+  assert.equal(await database.collection('cashPayments').countDocuments({
+    allocations: { $exists: true },
+  }), 0);
+});
+
+test('coordonne un nouveau comptage avec le global sans modifier silencieusement la répartition confirmée', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const existing = await insertTour({
+    countedAt: new Date('2027-01-01T08:00:00.000Z'),
+    totalDueInCentimes: 200_000,
+  });
+  const loaded = await insertLoadedTour({
+    deliverer: existing,
+    totalDueInCentimes: 100_000,
+  });
+  const counterId = await createUser([
+    'pricing.read',
+    'tours.count.confirm',
+    'tours.count.prepare',
+    'tours.read',
+  ]);
+  const sheet = await getTourCountingSheet({
+    tourId: loaded.tourId.toString(),
+    userId: counterId.toString(),
+  });
+  const globalRequest = await prepareDelivererPayment({
+    amount: '1500',
+    cashRegisterId: cashRegister.id,
+    delivererId: existing.delivererId,
+  });
+  const [paymentResult, countingResult] = await Promise.all([
+    recordDelivererCashPayment(globalRequest),
+    confirmTourCounting({
+      confirmationKey: randomUUID(),
+      countedBy: counterId.toString(),
+      expectedSheetDigest: sheet.digest,
+      lines: [{
+        lineId: loaded.reservationId.toString(),
+        returnedQuantity: '0',
+      }],
+      tourId: loaded.tourId.toString(),
+    }),
+  ]);
+  const storedPayments = await database.collection('cashPayments').find({
+    delivererId: existing.delivererId,
+  }).toArray();
+
+  assert.equal(countingResult.replayed, false);
+
+  if (paymentResult.errors) {
+    assert.equal(paymentResult.stale, true);
+    assert.equal(storedPayments.length, 0);
+    assert.equal(
+      paymentResult.summary.allocations[0].tourId,
+      loaded.tourId.toString(),
+    );
+  } else {
+    assert.equal(storedPayments.length, 1);
+    assert.deepEqual(
+      storedPayments[0].allocations.map((allocation) =>
+        allocation.tourId.toString()),
+      globalRequest.expectedSummary.allocations.map((allocation) =>
+        allocation.tourId),
+    );
+  }
+});
+
+test('annule le versement global et toutes ses écritures de coordination si l’insertion échoue', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ totalDueInCentimes: 200_000 });
+  const request = await prepareDelivererPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    delivererId: tour.delivererId,
+  });
+
+  await database.collection('cashPayments').createIndex(
+    { receivedBy: 1 },
+    { name: 'force_global_cash_payment_failure', unique: true },
+  );
+  await database.collection('cashPayments').insertOne({
+    _id: new ObjectId(),
+    amountInCentimes: 1,
+    confirmationKey: randomUUID(),
+    currency: CASH_CURRENCY,
+    receivedBy: cashierId,
+    reference: `VRS-${new ObjectId().toString().toUpperCase()}`,
+  });
+
+  try {
+    await assert.rejects(
+      recordDelivererCashPayment(request),
+      (error) => error?.code === 11000,
+    );
+    const [deliverer, storedTour, storedCashRegister] = await Promise.all([
+      database.collection('deliverers').findOne({ _id: tour.delivererId }),
+      database.collection('tours').findOne({ _id: tour.tourId }),
+      database.collection('cashRegisters').findOne({
+        _id: new ObjectId(cashRegister.id),
+      }),
+    ]);
+
+    assert.equal(deliverer.cashPaymentReferenceVersion, undefined);
+    assert.equal(storedTour.cashPaymentReferenceVersion, undefined);
+    assert.equal(storedCashRegister.paymentReferenceVersion, undefined);
+    assert.equal(await database.collection('cashPayments').countDocuments({
+      delivererId: tour.delivererId,
+    }), 0);
+  } finally {
+    await database.collection('cashPayments').dropIndex(
+      'force_global_cash_payment_failure',
     );
   }
 });

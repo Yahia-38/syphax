@@ -436,13 +436,23 @@ test('refuse un récapitulatif devenu périmé après un encaissement', async ()
   const stalePreview = await readClosurePreview(tour.tourId);
 
   await recordPayment({ amount: '5000', tourId: tour.tourId });
+  const coordinatedBeforeRefusal = await database.collection('tours').findOne({
+    _id: tour.tourId,
+  });
   const result = await closeFromPreview(tour.tourId, stalePreview);
   const refreshedPreview = await readClosurePreview(tour.tourId);
+  const coordinatedAfterRefusal = await database.collection('tours').findOne({
+    _id: tour.tourId,
+  });
 
   assert.equal(result.stale, true);
   assert.match(result.errors.form, /montants ont changé/u);
   assert.equal(refreshedPreview.amountPaidInCentimes, 500_000);
   assert.notEqual(refreshedPreview.digest, stalePreview.digest);
+  assert.equal(
+    coordinatedAfterRefusal.cashPaymentReferenceVersion,
+    coordinatedBeforeRefusal.cashPaymentReferenceVersion,
+  );
   assert.equal((await database.collection('tours').findOne({
     _id: tour.tourId,
   })).status, TOUR_STATUS_COUNTED);
