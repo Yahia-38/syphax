@@ -8,6 +8,8 @@ const permissions = [
   'tours.cancel',
   'tours.count.prepare',
   'tours.count.confirm',
+  'tours.expenses.read',
+  'tours.expenses.declare',
   'tours.close',
   'tours.products.add',
   'tours.products.release',

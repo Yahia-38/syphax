@@ -24,6 +24,11 @@ import {
   TOUR_COUNTING_PERMISSIONS,
   getTourCountingSheet,
 } from '../../../../lib/tour-countings.js';
+import {
+  TOUR_EXPENSE_FORM_PERMISSIONS,
+  TOUR_EXPENSE_PREVIEW_PERMISSIONS,
+  getTourExpensePreview,
+} from '../../../../lib/tour-expenses.js';
 import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
   TOUR_STATUS_CANCELLED,
@@ -40,6 +45,7 @@ import {
 import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
 import TourCountingSheet from './tour-counting-sheet.js';
+import TourExpensePreview from './tour-expense-preview.js';
 import TourClosingConfirmation from './tour-closing-confirmation.js';
 import TourCancellationConfirmation from './tour-cancellation-confirmation.js';
 import TourLoadingConfirmation from './tour-loading-confirmation.js';
@@ -90,6 +96,12 @@ const TourPage = async ({ params, searchParams }) => {
   const canCloseTour = TOUR_CLOSE_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
+  const canReadTourExpenses = TOUR_EXPENSE_PREVIEW_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
+  const canDeclareTourExpenses = TOUR_EXPENSE_FORM_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -113,6 +125,13 @@ const TourPage = async ({ params, searchParams }) => {
   const paymentPreview = canReadCash
     && [TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status)
     ? await getTourPaymentPreview({ tourId: tour.id, userId: session.userId })
+    : null;
+  const expensePreview = canReadTourExpenses
+    && tour.status === TOUR_STATUS_COUNTED
+    ? await getTourExpensePreview({
+        tourId: tour.id,
+        userId: session.userId,
+      })
     : null;
   const closurePreview = canCloseTour && tour.status === TOUR_STATUS_COUNTED
     ? await getTourClosurePreview({ tourId: tour.id, userId: session.userId })
@@ -233,6 +252,13 @@ const TourPage = async ({ params, searchParams }) => {
           initialConfirmationKey={randomUUID()}
           preview={paymentPreview}
           tourId={tour.id}
+        />
+      )}
+
+      {expensePreview && (
+        <TourExpensePreview
+          canDeclareExpenses={canDeclareTourExpenses}
+          preview={expensePreview}
         />
       )}
 

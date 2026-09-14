@@ -92,6 +92,8 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   assert.ok(PERMISSION_KEYS.includes('tours.cancel'));
   assert.ok(PERMISSION_KEYS.includes('tours.count.prepare'));
   assert.ok(PERMISSION_KEYS.includes('tours.count.confirm'));
+  assert.ok(PERMISSION_KEYS.includes('tours.expenses.read'));
+  assert.ok(PERMISSION_KEYS.includes('tours.expenses.declare'));
   assert.ok(PERMISSION_KEYS.includes('tours.products.add'));
   assert.ok(PERMISSION_KEYS.includes('tours.products.release'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.read'), false);
@@ -104,6 +106,14 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   );
   assert.equal(
     INITIAL_MANAGER_PERMISSIONS.includes('tours.count.confirm'),
+    false,
+  );
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('tours.expenses.read'),
+    false,
+  );
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('tours.expenses.declare'),
     false,
   );
   assert.equal(
@@ -197,6 +207,12 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   const toursCountConfirm = await grantYahiaFullAccessPermission(
     'tours.count.confirm',
   );
+  const toursExpensesRead = await grantYahiaFullAccessPermission(
+    'tours.expenses.read',
+  );
+  const toursExpensesDeclare = await grantYahiaFullAccessPermission(
+    'tours.expenses.declare',
+  );
   const toursProductsAdd = await grantYahiaFullAccessPermission(
     'tours.products.add',
   );
@@ -225,6 +241,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.equal(toursCancel.granted, true);
   assert.equal(toursCountPrepare.granted, true);
   assert.equal(toursCountConfirm.granted, true);
+  assert.equal(toursExpensesRead.granted, true);
+  assert.equal(toursExpensesDeclare.granted, true);
   assert.equal(toursProductsAdd.granted, true);
   assert.equal(toursProductsRelease.granted, true);
   assert.equal(cashRead.granted, true);
@@ -241,6 +259,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
     'tours.cancel',
     'tours.count.prepare',
     'tours.count.confirm',
+    'tours.expenses.read',
+    'tours.expenses.declare',
     'tours.products.add',
     'tours.products.release',
     'cash.read',
