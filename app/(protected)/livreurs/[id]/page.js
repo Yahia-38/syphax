@@ -5,6 +5,11 @@ import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
 import {
+  CASH_READ_PERMISSION,
+  formatCashAmount,
+  getDelivererCashSummary,
+} from '../../../../lib/cash-payments.js';
+import {
   formatDelivererCreatedAt,
   getDelivererById,
   requireDelivererEditPermission,
@@ -48,6 +53,7 @@ const DelivererPage = async ({ params, searchParams }) => {
     'deliverers.status.update',
   );
   const canCreateTour = permissions.includes('tours.create');
+  const canReadCash = permissions.includes(CASH_READ_PERMISSION);
   const canReadTours = permissions.includes('tours.read');
   const editing = query.modifier === '1';
 
@@ -63,6 +69,13 @@ const DelivererPage = async ({ params, searchParams }) => {
   if (!deliverer) {
     notFound();
   }
+
+  const cashSummary = canReadCash
+    ? await getDelivererCashSummary({
+        delivererId: deliverer.id,
+        userId: session.userId,
+      })
+    : null;
 
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
@@ -277,6 +290,62 @@ const DelivererPage = async ({ params, searchParams }) => {
           </aside>
         </div>
       </header>
+
+      {cashSummary && (
+        <section
+          aria-labelledby='deliverer-cash-summary-title'
+          className='mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+        >
+          <div className='border-b border-slate-200 px-5 py-4 sm:px-6'>
+            <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
+              Synthèse financière
+            </p>
+            <h2
+              className='mt-1 text-xl font-semibold text-slate-950'
+              id='deliverer-cash-summary-title'
+            >
+              Situation des tournées comptées
+            </h2>
+          </div>
+
+          {cashSummary.countedTourCount === 0 ? (
+            <p className='px-5 py-6 text-sm font-semibold text-slate-700 sm:px-6'>
+              Aucune tournée comptée
+            </p>
+          ) : cashSummary.reliable ? (
+            <dl className='grid gap-px bg-slate-200 sm:grid-cols-3'>
+              {[
+                ['Total dû', cashSummary.amountDueInCentimes],
+                ['Total encaissé', cashSummary.amountPaidInCentimes],
+                ['Reste à payer', cashSummary.remainingDueInCentimes],
+              ].map(([label, amount]) => (
+                <div className='bg-white px-5 py-5 sm:px-6' key={label}>
+                  <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                    {label}
+                  </dt>
+                  <dd className='mt-2 text-2xl font-bold tabular-nums text-slate-950'>
+                    {formatCashAmount(amount)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <div className='border-b border-red-200 bg-red-50 px-5 py-5 text-sm text-red-900 sm:px-6' role='alert'>
+              <p className='font-semibold'>
+                La situation financière ne peut pas être calculée de manière fiable.
+              </p>
+              <p className='mt-2 leading-6'>
+                Anomalies détectées : {cashSummary.anomalies.map((anomaly) =>
+                  `${anomaly.tourReference} — ${anomaly.label}`).join(' ; ')}.
+              </p>
+            </div>
+          )}
+
+          <p className='border-t border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-6 text-slate-600 sm:px-6'>
+            Cette synthèse couvre toutes les tournées comptées et terminées, y compris celles qui sont soldées. Les tournées en préparation ou chargées ne sont pas encore comptées et ne sont donc pas incluses.
+          </p>
+        </section>
+      )}
 
       {tourList && (
         <DelivererTourList

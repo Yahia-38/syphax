@@ -18,10 +18,14 @@ const readTextField = (formData, name) => {
   return typeof value === 'string' ? value : '';
 };
 
-const revalidatePaymentReads = (tourId) => {
+const revalidatePaymentReads = ({ delivererId, tourIds = [] }) => {
   revalidatePath('/caisse');
 
-  if (tourId) {
+  if (delivererId) {
+    revalidatePath(`/livreurs/${delivererId}`);
+  }
+
+  for (const tourId of new Set(tourIds.filter(Boolean))) {
     revalidatePath(`/tournees/${tourId}`);
   }
 };
@@ -85,20 +89,6 @@ const readDelivererPaymentRequest = (formData) => {
   };
 };
 
-const revalidateDelivererPaymentReads = (payment) => {
-  revalidatePath('/caisse');
-
-  const tourIds = new Set(
-    payment.allocations
-      .map((allocation) => allocation.tourId)
-      .filter(Boolean),
-  );
-
-  for (const tourId of tourIds) {
-    revalidatePath(`/tournees/${tourId}`);
-  }
-};
-
 export const recordDelivererPayment = async (formData) => {
   const session = await requirePermission(CASH_PAYMENT_CREATE_PERMISSION);
 
@@ -135,7 +125,11 @@ export const recordDelivererPayment = async (formData) => {
       };
     }
 
-    revalidateDelivererPaymentReads(result.payment);
+    revalidatePaymentReads({
+      delivererId: result.payment.delivererId,
+      tourIds: result.payment.allocations.map((allocation) =>
+        allocation.tourId),
+    });
 
     return {
       errors: {},
@@ -196,7 +190,7 @@ export const recordTourPayment = async (previousState, formData) => {
 
     if (result.errors) {
       if (result.stale) {
-        revalidatePaymentReads(tourId);
+        revalidatePaymentReads({ tourIds: [tourId] });
       }
 
       return {
@@ -212,7 +206,10 @@ export const recordTourPayment = async (previousState, formData) => {
       };
     }
 
-    revalidatePaymentReads(tourId);
+    revalidatePaymentReads({
+      delivererId: result.payment.delivererId,
+      tourIds: [tourId],
+    });
 
     return {
       confirmationKey: randomUUID(),

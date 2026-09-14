@@ -23,6 +23,7 @@ const {
   buildCashJournalHref,
   buildCashRemaindersHref,
   createDelivererCashPaymentSummaryDigest,
+  getDelivererCashSummary,
   getTourPaymentPreview,
   listCashJournalFilterOptions,
   listCashPayments,
@@ -1007,6 +1008,179 @@ test('calcule les restes par livreur sans doubler le dû et les actualise après
 
   assert.equal(updatedAhmed.remainingDueInCentimes, 400_000);
   assert.equal(updated.totalRemainingDueInCentimes, 520_000);
+});
+
+test('synthétise toutes les tournées comptées avec versements anciens et affectations explicites sans écriture', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const first = await insertTour({
+    delivererActive: false,
+    delivererCode: 'LIV-SYNTHESE',
+    delivererName: 'Livreur synthèse',
+    status: 'CLOSED',
+    totalDueInCentimes: 200_000,
+  });
+  const second = await insertTour({
+    countedAt: new Date('2026-09-02T08:00:00.000Z'),
+    deliverer: first,
+    status: 'CLOSED',
+    totalDueInCentimes: 400_000,
+  });
+
+  await insertTour({
+    deliverer: first,
+    status: 'PREPARATION',
+    totalDueInCentimes: 900_000,
+  });
+  await insertTour({
+    deliverer: first,
+    status: 'LOADED',
+    totalDueInCentimes: 800_000,
+  });
+
+  for (let index = 0; index < 3; index += 1) {
+    await insertTour({
+      delivererCode: `LIV-PAGE-${index}`,
+      totalDueInCentimes: 100_000,
+    });
+  }
+
+  const globalRequest = await prepareDelivererPayment({
+    amount: '5000',
+    cashRegisterId: cashRegister.id,
+    delivererId: first.delivererId,
+  });
+
+  await recordDelivererCashPayment(globalRequest);
+
+  const beforePartialRead = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const partial = await getDelivererCashSummary({
+    delivererId: first.delivererId.toString(),
+    userId: cashierId.toString(),
+  });
+  const afterPartialRead = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+
+  assert.deepEqual(partial, {
+    amountDueInCentimes: 600_000,
+    amountPaidInCentimes: 500_000,
+    anomalies: [],
+    countedTourCount: 2,
+    reliable: true,
+    remainingDueInCentimes: 100_000,
+  });
+  assert.deepEqual(afterPartialRead, beforePartialRead);
+
+  await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    expectedRemainingDueInCentimes: 100_000,
+    tourId: second.tourId,
+  });
+  await listCashRemainders({
+    page: 99,
+    pageSize: 1,
+    query: 'aucun résultat',
+    userId: cashierId.toString(),
+  });
+
+  const beforeSettledRead = await database.collection('cashPayments')
+    .countDocuments({});
+  const settled = await getDelivererCashSummary({
+    delivererId: first.delivererId.toString(),
+    userId: cashierId.toString(),
+  });
+
+  assert.deepEqual(settled, {
+    amountDueInCentimes: 600_000,
+    amountPaidInCentimes: 600_000,
+    anomalies: [],
+    countedTourCount: 2,
+    reliable: true,
+    remainingDueInCentimes: 0,
+  });
+  assert.equal(
+    await database.collection('cashPayments').countDocuments({}),
+    beforeSettledRead,
+  );
+  assert.equal(
+    await database.collection('cashPayments').countDocuments({
+      allocations: { $exists: false },
+    }),
+    1,
+  );
+  assert.equal(
+    await database.collection('cashPayments').countDocuments({
+      allocations: { $exists: true },
+    }),
+    1,
+  );
+});
+
+test('distingue l’absence de comptage, bloque les anomalies et exige cash.read', async () => {
+  const uncounted = await insertTour({
+    delivererCode: 'LIV-SANS-COMPTAGE',
+    delivererName: 'Livreur sans comptage',
+    status: 'PREPARATION',
+  });
+
+  await insertTour({
+    deliverer: uncounted,
+    status: 'LOADED',
+  });
+
+  const empty = await getDelivererCashSummary({
+    delivererId: uncounted.delivererId.toString(),
+    userId: cashierId.toString(),
+  });
+  const anomalousTour = await insertTour({
+    delivererCode: 'LIV-SYNTHESE-ANOMALIE',
+    totalDueInCentimes: 300_000,
+  });
+
+  await database.collection('tourCountings').deleteOne({
+    _id: anomalousTour.countingId,
+  });
+
+  const anomalous = await getDelivererCashSummary({
+    delivererId: anomalousTour.delivererId.toString(),
+    userId: cashierId.toString(),
+  });
+  const delivererReaderId = await createUser(['deliverers.read']);
+
+  assert.deepEqual(empty, {
+    amountDueInCentimes: null,
+    amountPaidInCentimes: null,
+    anomalies: [],
+    countedTourCount: 0,
+    reliable: true,
+    remainingDueInCentimes: null,
+  });
+  assert.equal(anomalous.reliable, false);
+  assert.equal(anomalous.amountDueInCentimes, null);
+  assert.equal(anomalous.amountPaidInCentimes, null);
+  assert.equal(anomalous.remainingDueInCentimes, null);
+  assert.deepEqual(anomalous.anomalies, [{
+    code: 'MISSING_COUNTING',
+    label: 'comptage définitif introuvable',
+    tourReference: anomalousTour.tourReference,
+  }]);
+  await assert.rejects(
+    getDelivererCashSummary({
+      delivererId: uncounted.delivererId.toString(),
+      userId: delivererReaderId.toString(),
+    }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === CASH_READ_PERMISSION,
+  );
 });
 
 test('charge toutes les tournées éligibles avec la vraie date de comptage sans écriture', async () => {

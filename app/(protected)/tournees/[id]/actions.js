@@ -233,6 +233,7 @@ export const countTour = async (tourId, previousState, formData) => {
     }
 
     revalidatePath(`/tournees/${tourId}`);
+    revalidatePath(`/livreurs/${result.delivererId}`);
     revalidatePath('/produits');
     revalidatePath('/caisse');
 
