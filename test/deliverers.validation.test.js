@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildDelivererListHref,
+  formatDelivererCreatedAt,
   readDelivererListState,
+  validateDelivererListHref,
   validateDeliverer,
 } from '../lib/deliverers.js';
 
@@ -74,4 +77,37 @@ test('normalise la recherche et la page demandées', () => {
     page: 1,
     query: '',
   });
+});
+
+test('conserve la recherche et la pagination dans le retour à la liste', () => {
+  const href = buildDelivererListHref({
+    page: 3,
+    query: ' Livreur nord ',
+  });
+
+  assert.equal(href, '/livreurs?q=Livreur+nord&page=3');
+  assert.equal(validateDelivererListHref(href), href);
+  assert.equal(buildDelivererListHref(), '/livreurs');
+});
+
+test('refuse une destination de retour externe ou étrangère à la liste', () => {
+  assert.equal(
+    validateDelivererListHref('https://example.com/livreurs'),
+    '/livreurs',
+  );
+  assert.equal(validateDelivererListHref('//example.com/livreurs'), '/livreurs');
+  assert.equal(validateDelivererListHref('/produits'), '/livreurs');
+  assert.equal(
+    validateDelivererListHref('/livreurs?destination=/administration'),
+    '/livreurs',
+  );
+  assert.equal(validateDelivererListHref(), '/livreurs');
+});
+
+test('formate la date de création dans le fuseau d’Alger', () => {
+  assert.match(
+    formatDelivererCreatedAt('2026-09-12T23:30:00.000Z'),
+    /13 septembre 2026.*00:30/u,
+  );
+  assert.equal(formatDelivererCreatedAt(null), 'Non renseignée');
 });

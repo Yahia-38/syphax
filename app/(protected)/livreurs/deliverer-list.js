@@ -1,19 +1,6 @@
 import Link from 'next/link';
 
-const buildListHref = ({ page, query }) => {
-  const parameters = new URLSearchParams();
-
-  if (query) {
-    parameters.set('q', query);
-  }
-
-  if (page > 1) {
-    parameters.set('page', String(page));
-  }
-
-  const search = parameters.toString();
-  return search ? `/livreurs?${search}` : '/livreurs';
-};
+import { buildDelivererListHref } from '../../../lib/deliverers.js';
 
 const PaginationLink = ({ children, disabled, href }) => disabled ? (
   <span
@@ -42,6 +29,12 @@ const DelivererList = ({
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + deliverers.length - 1;
   const searching = Boolean(query);
+  const returnHref = buildDelivererListHref({ page, query });
+  const getDelivererHref = (delivererId) => {
+    const parameters = new URLSearchParams({ retour: returnHref });
+
+    return `/livreurs/${delivererId}?${parameters.toString()}`;
+  };
 
   return (
     <section
@@ -126,7 +119,12 @@ const DelivererList = ({
               {deliverers.map((deliverer) => (
                 <tr className='hover:bg-slate-50' key={deliverer.id}>
                   <td className='break-all px-4 py-3 font-mono text-[13px] font-semibold text-slate-900 sm:px-6'>
-                    {deliverer.code}
+                    <Link
+                      className='text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                      href={getDelivererHref(deliverer.id)}
+                    >
+                      {deliverer.code}
+                    </Link>
                   </td>
                   <td className='break-words px-4 py-3 text-sm text-slate-700 sm:px-6'>
                     {deliverer.name}
@@ -145,7 +143,7 @@ const DelivererList = ({
           >
             <PaginationLink
               disabled={page === 1}
-              href={buildListHref({ page: page - 1, query })}
+              href={buildDelivererListHref({ page: page - 1, query })}
             >
               Précédent
             </PaginationLink>
@@ -154,7 +152,7 @@ const DelivererList = ({
             </p>
             <PaginationLink
               disabled={page === totalPages}
-              href={buildListHref({ page: page + 1, query })}
+              href={buildDelivererListHref({ page: page + 1, query })}
             >
               Suivant
             </PaginationLink>

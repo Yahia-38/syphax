@@ -12,7 +12,11 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
-const { createDeliverer, listDeliverers } = await import('../lib/deliverers.js');
+const {
+  createDeliverer,
+  getDelivererById,
+  listDeliverers,
+} = await import('../lib/deliverers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 
 let database;
@@ -87,6 +91,44 @@ test('enregistre les données métier et les métadonnées serveur', async () =>
   ]);
   assert.ok(deliverer.createdAt instanceof Date);
   assert.ok(deliverer.createdBy.equals(authorId));
+});
+
+test('retourne la fiche du livreur et le nom de son créateur', async () => {
+  const createdAt = new Date('2026-09-14T08:15:00.000Z');
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    code: 'FICHE-001',
+    name: 'Livreur de consultation',
+    phone: '',
+    createdAt,
+    createdBy: readerId,
+  });
+
+  assert.deepEqual(
+    await getDelivererById(delivererId.toString(), {
+      userId: readerId.toString(),
+    }),
+    {
+      id: delivererId.toString(),
+      code: 'FICHE-001',
+      name: 'Livreur de consultation',
+      phone: '',
+      createdAt: createdAt.toISOString(),
+      createdBy: 'lecteur-livreurs',
+    },
+  );
+});
+
+test('renvoie une absence pour un identifiant invalide ou inconnu', async () => {
+  const options = { userId: readerId.toString() };
+
+  assert.equal(await getDelivererById('identifiant-invalide', options), null);
+  assert.equal(
+    await getDelivererById(new ObjectId().toString(), options),
+    null,
+  );
 });
 
 test('empêche deux créations concurrentes avec le même code normalisé', async () => {

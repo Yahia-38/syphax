@@ -26,7 +26,7 @@ const { RequestCookies } = await import(
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
-const { listDeliverers } = await import('../lib/deliverers.js');
+const { getDelivererById, listDeliverers } = await import('../lib/deliverers.js');
 const { requirePermission } = await import('../lib/sessions.js');
 const { createDeliverer } = await import(
   '../app/(protected)/livreurs/nouveau/actions.js'
@@ -121,6 +121,13 @@ test('refuse la consultation sans deliverers.read', async () => {
   );
   await assert.rejects(
     listDeliverers({ userId: userId.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'deliverers.read',
+  );
+  await assert.rejects(
+    getDelivererById(new ObjectId().toString(), {
+      userId: userId.toString(),
+    }),
     (error) => error instanceof PermissionDeniedError
       && error.permission === 'deliverers.read',
   );
