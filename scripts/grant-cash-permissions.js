@@ -4,6 +4,7 @@ import { closeMongoConnection } from '../lib/mongodb.js';
 const permissions = [
   'cash.read',
   'cash.payments.create',
+  'cash.withdrawals.create',
 ];
 
 try {

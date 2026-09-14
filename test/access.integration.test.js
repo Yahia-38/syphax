@@ -55,9 +55,14 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   );
   assert.ok(PERMISSION_KEYS.includes('cash.read'));
   assert.ok(PERMISSION_KEYS.includes('cash.payments.create'));
+  assert.ok(PERMISSION_KEYS.includes('cash.withdrawals.create'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('cash.read'), false);
   assert.equal(
     INITIAL_MANAGER_PERMISSIONS.includes('cash.payments.create'),
+    false,
+  );
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('cash.withdrawals.create'),
     false,
   );
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
@@ -202,6 +207,9 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   const cashPaymentsCreate = await grantYahiaFullAccessPermission(
     'cash.payments.create',
   );
+  const cashWithdrawalsCreate = await grantYahiaFullAccessPermission(
+    'cash.withdrawals.create',
+  );
   const [yahiaRole, otherRole] = await Promise.all([
     database.collection('roles').findOne({ _id: yahiaRoleId }),
     database.collection('roles').findOne({ _id: otherRoleId }),
@@ -221,6 +229,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.equal(toursProductsRelease.granted, true);
   assert.equal(cashRead.granted, true);
   assert.equal(cashPaymentsCreate.granted, true);
+  assert.equal(cashWithdrawalsCreate.granted, true);
   assert.deepEqual(yahiaRole.permissions, [
     'deliverers.read',
     'deliverers.status.update',
@@ -236,6 +245,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
     'tours.products.release',
     'cash.read',
     'cash.payments.create',
+    'cash.withdrawals.create',
   ]);
   assert.deepEqual(otherRole.permissions, ['deliverers.read']);
 });
