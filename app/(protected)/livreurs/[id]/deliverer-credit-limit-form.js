@@ -40,6 +40,11 @@ const formatCreditLimit = (amountInCentimes) =>
     ? formatReceptionMoney(amountInCentimes)
     : 'Non configurée';
 
+const formatExposureAmount = (amountInCentimes) =>
+  Number.isSafeInteger(amountInCentimes)
+    ? formatReceptionMoney(amountInCentimes)
+    : 'Non calculable';
+
 const formatDate = (value) => value
   ? new Intl.DateTimeFormat('fr-DZ', {
       dateStyle: 'long',
@@ -53,6 +58,7 @@ const DelivererCreditLimitForm = ({
   canUpdate,
   creditLimit,
   delivererId,
+  exposure,
 }) => {
   const currentAmount = formatAmountInput(creditLimit.amountInCentimes);
   const [amount, setAmount] = useState(currentAmount);
@@ -98,7 +104,7 @@ const DelivererCreditLimitForm = ({
             Limite de crédit
           </h2>
           <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Plafond d’engagement autorisé pour ce livreur.
+            Seuil d’alerte appliqué à l’engagement actuel de ce livreur.
           </p>
         </div>
         {canUpdate && !isEditing && (
@@ -239,7 +245,7 @@ const DelivererCreditLimitForm = ({
         ) : (
           <div className='rounded-xl border border-blue-100 bg-blue-50 p-5'>
             <p className='text-xs font-bold uppercase tracking-wide text-blue-700'>
-              Plafond actuel
+              Limite configurée
             </p>
             <p className={`mt-2 text-3xl font-bold tabular-nums ${creditLimit.configured ? 'text-blue-950' : 'text-slate-500'}`}>
               {formatCreditLimit(creditLimit.amountInCentimes)}
@@ -254,8 +260,74 @@ const DelivererCreditLimitForm = ({
         )}
       </div>
 
+      {exposure && (
+        <div className='border-t border-slate-200'>
+          <dl className='grid gap-px bg-slate-200 md:grid-cols-3'>
+            {[
+              [
+                'Reste dû des tournées comptées',
+                exposure.countedRemainderInCentimes,
+              ],
+              [
+                'Valeur chargée non encore comptée',
+                exposure.loadedValueInCentimes,
+              ],
+              ['Engagement total', exposure.engagementInCentimes],
+            ].map(([label, value]) => (
+              <div className='bg-white px-5 py-5 sm:px-6' key={label}>
+                <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                  {label}
+                </dt>
+                <dd className={`mt-2 text-xl font-bold tabular-nums ${Number.isSafeInteger(value) ? 'text-slate-950' : 'text-red-700'}`}>
+                  {formatExposureAmount(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {!exposure.reliable ? (
+            <div
+              className='border-t border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900 sm:px-6'
+              role='alert'
+            >
+              <p className='font-semibold'>Engagement non calculable</p>
+              <p className='mt-1.5 leading-6'>
+                Données manquantes ou invalides : {exposure.anomalies.map(
+                  (anomaly) => `${anomaly.tourReference} — ${anomaly.label}`,
+                ).join(' ; ')}.
+              </p>
+            </div>
+          ) : exposure.comparison?.status === 'EXCEEDED' ? (
+            <p
+              className='border-t border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold leading-6 text-red-900 sm:px-6'
+              role='alert'
+            >
+              Limite de crédit dépassée de{' '}
+              {formatCreditLimit(exposure.comparison.amountInCentimes)}. Les
+              opérations restent autorisées.
+            </p>
+          ) : exposure.comparison?.status === 'REACHED' ? (
+            <p
+              className='border-t border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold leading-6 text-amber-900 sm:px-6'
+              role='status'
+            >
+              Limite de crédit atteinte.
+            </p>
+          ) : exposure.comparison?.status === 'BELOW' ? (
+            <p
+              className='border-t border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold leading-6 text-emerald-900 sm:px-6'
+              role='status'
+            >
+              {formatCreditLimit(exposure.comparison.amountInCentimes)} avant
+              d’atteindre le seuil.
+            </p>
+          ) : null}
+        </div>
+      )}
+
       <p className='border-t border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900 sm:px-6'>
-        Le contrôle de cette limite au chargement n’est pas encore activé.
+        Seuil indicatif : un dépassement déclenche une alerte sans bloquer les
+        opérations.
       </p>
       {state.message && !isEditing && (
         <p

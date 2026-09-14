@@ -182,6 +182,11 @@ export const loadTour = async (tourId, previousState, formData) => {
     }
 
     revalidatePath(`/tournees/${tourId}`);
+
+    if (result.delivererId) {
+      revalidatePath(`/livreurs/${result.delivererId}`);
+    }
+
     revalidatePath('/produits');
 
     for (const productId of result.productIds) {

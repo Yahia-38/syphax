@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  calculateLoadedLineValue,
   calculateTourCounting,
   calculateTourCountingLine,
 } from '../lib/tour-counting-calculations.js';
@@ -24,6 +25,55 @@ const createLine = ({
         unit: baseUnit,
       }
     : salePriceAtLoading,
+});
+
+test('valorise une ligne chargée uniquement avec son prix historique', () => {
+  const line = {
+    ...createLine({
+      amountInCentimes: 15_000,
+      quantityInBaseUnits: 60,
+    }),
+    currentSalePrice: {
+      amountInCentimes: 99_999_999,
+      currency: 'DZD',
+      taxIncluded: true,
+      unit: 'BOUTEILLE',
+    },
+  };
+
+  assert.deepEqual(calculateLoadedLineValue(line), {
+    error: null,
+    priceAvailable: true,
+    valueInCentimes: 900_000,
+  });
+  assert.deepEqual(calculateLoadedLineValue({
+    ...line,
+    salePriceAtLoading: null,
+  }), {
+    error: null,
+    priceAvailable: false,
+    valueInCentimes: null,
+  });
+});
+
+test('refuse une quantité chargée invalide et un produit numérique trop élevé', () => {
+  const invalidQuantity = calculateLoadedLineValue(createLine({
+    quantityInBaseUnits: Number.MAX_SAFE_INTEGER + 1,
+  }));
+  const emptyQuantity = calculateLoadedLineValue(createLine({
+    quantityInBaseUnits: 0,
+  }));
+  const overflow = calculateLoadedLineValue(createLine({
+    amountInCentimes: 2,
+    quantityInBaseUnits: Number.MAX_SAFE_INTEGER,
+  }));
+
+  assert.match(invalidQuantity.error, /quantité chargée historique/u);
+  assert.equal(invalidQuantity.valueInCentimes, null);
+  assert.match(emptyQuantity.error, /quantité chargée historique/u);
+  assert.equal(emptyQuantity.valueInCentimes, null);
+  assert.match(overflow.error, /limite numérique/u);
+  assert.equal(overflow.valueInCentimes, null);
 });
 
 test('calcule 50 bouteilles vendues et 7 500 DA dus', () => {

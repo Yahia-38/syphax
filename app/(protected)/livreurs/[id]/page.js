@@ -12,6 +12,7 @@ import {
 import {
   DELIVERER_CREDIT_LIMIT_READ_PERMISSION,
   DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
+  getDelivererCreditExposure,
   getDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
 import {
@@ -66,6 +67,9 @@ const DelivererPage = async ({ params, searchParams }) => {
   );
   const canCreateTour = permissions.includes('tours.create');
   const canReadCash = permissions.includes(CASH_READ_PERMISSION);
+  const canReadCompleteCreditExposure = canReadCreditLimit
+    && canReadCash
+    && permissions.includes('pricing.read');
   const canReadTours = permissions.includes('tours.read');
   const editing = query.modifier === '1';
 
@@ -82,20 +86,27 @@ const DelivererPage = async ({ params, searchParams }) => {
     notFound();
   }
 
-  const [cashSummary, creditLimitResult] = await Promise.all([
-    canReadCash
+  const [standaloneCashSummary, creditLimitResult] = await Promise.all([
+    canReadCash && !canReadCompleteCreditExposure
       ? getDelivererCashSummary({
           delivererId: deliverer.id,
           userId: session.userId,
         })
       : null,
-    canReadCreditLimit
-      ? getDelivererCreditLimit({
+    canReadCompleteCreditExposure
+      ? getDelivererCreditExposure({
           delivererId: deliverer.id,
           userId: session.userId,
         })
-      : null,
+      : canReadCreditLimit
+        ? getDelivererCreditLimit({
+            delivererId: deliverer.id,
+            userId: session.userId,
+          })
+        : null,
   ]);
+  const cashSummary = creditLimitResult?.cashSummary
+    ?? standaloneCashSummary;
 
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
@@ -316,6 +327,7 @@ const DelivererPage = async ({ params, searchParams }) => {
           canUpdate={canUpdateCreditLimit}
           creditLimit={creditLimitResult.creditLimit}
           delivererId={deliverer.id}
+          exposure={creditLimitResult.exposure ?? null}
         />
       )}
 

@@ -321,9 +321,22 @@ test('initialise une unique Caisse principale active sans solde fictif', async (
   assert.equal('balanceInCentimes' in cashRegister, false);
 });
 
-test('enregistre 5 000 DA puis 2 500 DA et conserve les deux versements', async () => {
+test('encaisse malgré une limite dépassée et conserve les deux versements', async () => {
   const cashRegister = await initializeMainCashRegister();
   const tour = await insertTour();
+  await database.collection('deliverers').updateOne(
+    { _id: tour.delivererId },
+    {
+      $set: {
+        creditLimit: {
+          amountInCentimes: 0,
+          updatedAt: new Date(),
+          updatedBy: cashierId,
+          version: 1,
+        },
+      },
+    },
+  );
   await database.collection('stockMovements').insertOne({
     _id: new ObjectId(),
     kind: 'TEST_STOCK',

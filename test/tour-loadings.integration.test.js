@@ -164,7 +164,7 @@ const load = async (tourId, expectedDigest) => confirmTourLoading({
   tourId: tourId.toString(),
 });
 
-test('charge plusieurs produits, conserve les autres réservations et reste idempotent', async () => {
+test('charge malgré une limite dépassée, conserve les autres réservations et reste idempotent', async () => {
   const firstProductId = await insertProduct({ physicalQuantity: 100 });
   const secondProductId = await insertProduct({ physicalQuantity: 80 });
   const tourId = await insertTour();
@@ -175,6 +175,23 @@ test('charge plusieurs produits, conserve les autres réservations et reste idem
     addReservation({ productId: secondProductId, quantity: 20, tourId }),
     addReservation({ productId: secondProductId, quantity: 10, tourId: otherTourId }),
   ]);
+  const loadedTour = await database.collection('tours').findOne({
+    _id: tourId,
+  });
+
+  await database.collection('deliverers').updateOne(
+    { _id: loadedTour.delivererId },
+    {
+      $set: {
+        creditLimit: {
+          amountInCentimes: 0,
+          updatedAt: new Date(),
+          updatedBy: loaderId,
+          version: 1,
+        },
+      },
+    },
+  );
 
   const digest = await getDigest(tourId);
   const [firstResult, secondResult] = await Promise.all([
