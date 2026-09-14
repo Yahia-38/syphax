@@ -81,6 +81,7 @@ const insertCashRegister = async ({
 };
 
 const insertTour = async ({
+  countedAt = new Date('2026-09-01T08:00:00.000Z'),
   deliverer = null,
   delivererActive = true,
   delivererCode: requestedDelivererCode,
@@ -110,6 +111,7 @@ const insertTour = async ({
     }),
     database.collection('tourCountings').insertOne({
       _id: countingId,
+      countedAt,
       delivererId,
       lines: [{ amountDueInCentimes: totalDueInCentimes }],
       totalDueInCentimes,
@@ -142,17 +144,46 @@ const submitPayment = async ({
   amount,
   cashRegisterId,
   confirmationKey = randomUUID(),
+  expectedRemainingDueInCentimes,
   note = '',
   tourId,
   userId = cashierId,
-}) => recordTourCashPayment({
-  amount,
-  confirmationKey,
-  expectedCashRegisterId: cashRegisterId.toString(),
-  note,
-  receivedBy: userId.toString(),
-  tourId: tourId.toString(),
-});
+}) => {
+  let expectedRemaining = expectedRemainingDueInCentimes;
+
+  if (!Number.isSafeInteger(expectedRemaining)) {
+    const tour = await database.collection('tours').findOne({ _id: tourId });
+    const counting = tour?.countingId
+      ? await database.collection('tourCountings').findOne({
+          _id: tour.countingId,
+          tourId,
+        })
+      : null;
+    const payments = await database.collection('cashPayments').find({
+      tourId,
+    }).toArray();
+    const paid = payments.reduce((total, payment) =>
+      payment.currency === CASH_CURRENCY
+        && payment.sourceTourCountingId?.equals?.(tour?.countingId)
+        && Number.isSafeInteger(payment.amountInCentimes)
+        ? total + payment.amountInCentimes
+        : total, 0);
+
+    expectedRemaining = Number.isSafeInteger(counting?.totalDueInCentimes)
+      ? Math.max(0, counting.totalDueInCentimes - paid)
+      : 0;
+  }
+
+  return recordTourCashPayment({
+    amount,
+    confirmationKey,
+    expectedCashRegisterId: cashRegisterId.toString(),
+    expectedRemainingDueInCentimes: String(expectedRemaining),
+    note,
+    receivedBy: userId.toString(),
+    tourId: tourId.toString(),
+  });
+};
 
 before(async () => {
   database = await getDatabase();
@@ -234,6 +265,7 @@ test('enregistre 5 000 DA puis 2 500 DA et conserve les deux versements', async 
     database.collection('stockMovements').find({}).toArray(),
     database.collection('tours').findOne({ _id: tour.tourId }),
   ]);
+  const journal = await listCashPayments({ userId: cashierId.toString() });
 
   assert.equal(first.remainingDueInCentimes, 250_000);
   assert.equal(second.remainingDueInCentimes, 0);
@@ -256,6 +288,16 @@ test('enregistre 5 000 DA puis 2 500 DA et conserve les deux versements', async 
   assert.equal(preview.remainingDueInCentimes, 0);
   assert.equal(preview.paymentCount, 2);
   assert.equal(preview.payments[0].receivedBy, 'caissier-test');
+  assert.deepEqual(
+    new Map(journal.payments.map((payment) => [
+      payment.reference,
+      payment.amountInCentimes,
+    ])),
+    new Map(preview.payments.map((payment) => [
+      payment.reference,
+      payment.amountInCentimes,
+    ])),
+  );
   assert.equal(storedTour.status, 'COUNTED');
   assert.deepEqual(countingAfter, countingBefore);
   assert.deepEqual(stockAfter, stockBefore);
@@ -312,11 +354,13 @@ test('sérialise deux versements concurrents qui dépasseraient ensemble le rest
     submitPayment({
       amount: '5000',
       cashRegisterId: cashRegister.id,
+      expectedRemainingDueInCentimes: 750_000,
       tourId: tour.tourId,
     }),
     submitPayment({
       amount: '5000',
       cashRegisterId: cashRegister.id,
+      expectedRemainingDueInCentimes: 750_000,
       tourId: tour.tourId,
     }),
   ]);
@@ -327,7 +371,8 @@ test('sérialise deux versements concurrents qui dépasseraient ensemble le rest
   }).toArray();
 
   assert.ok(accepted.payment);
-  assert.match(refused.errors.amount, /dépasser le reste dû/u);
+  assert.match(refused.errors.form, /reste de cette tournée a changé/u);
+  assert.equal(refused.stale, true);
   assert.equal(payments.length, 1);
   assert.equal(payments[0].amountInCentimes, 500_000);
 });
@@ -455,6 +500,7 @@ test('refuse une caisse du récapitulatif devenue indisponible sans réaffecter'
   });
 
   assert.match(result.errors.form, /caisse du récapitulatif/u);
+  assert.equal(result.stale, true);
   assert.equal(await database.collection('cashPayments').countDocuments({
     cashRegisterId: replacementId,
   }), 0);
@@ -726,6 +772,8 @@ test('calcule les restes par livreur sans doubler le dû et les actualise après
   );
 
   assert.equal(initial.anomalyCount, 0);
+  assert.equal(initial.cashRegister.id, cashRegister.id);
+  assert.equal(initial.cashRegisterError, null);
   assert.equal(initial.totalItems, 2);
   assert.equal(initial.totalRemainingDueInCentimes, 570_000);
   assert.equal(ahmed.deliverer.code, 'LIV-AHMED');
@@ -761,6 +809,110 @@ test('calcule les restes par livreur sans doubler le dû et les actualise après
 
   assert.equal(updatedAhmed.remainingDueInCentimes, 400_000);
   assert.equal(updated.totalRemainingDueInCentimes, 520_000);
+});
+
+test('charge toutes les tournées éligibles avec la vraie date de comptage sans écriture', async () => {
+  await initializeMainCashRegister();
+  const oldest = await insertTour({
+    countedAt: new Date('2026-08-01T09:00:00.000Z'),
+    delivererActive: false,
+    delivererCode: 'LIV-GLOBAL',
+    delivererName: 'Livreur global',
+    status: 'CLOSED',
+    totalDueInCentimes: 200_000,
+  });
+  await insertTour({
+    countedAt: new Date('2026-08-03T09:00:00.000Z'),
+    deliverer: oldest,
+    totalDueInCentimes: 400_000,
+  });
+  await insertTour({
+    countedAt: new Date('2026-08-02T09:00:00.000Z'),
+    deliverer: oldest,
+    totalDueInCentimes: 300_000,
+  });
+  await insertTour({
+    delivererCode: 'LIV-AUTRE',
+    delivererName: 'Autre livreur',
+    totalDueInCentimes: 100_000,
+  });
+  const before = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const result = await listCashRemainders({
+    pageSize: 1,
+    query: 'Livreur global',
+    userId: cashierId.toString(),
+  });
+  const after = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const [remainder] = result.remainders;
+
+  assert.equal(result.totalItems, 1);
+  assert.equal(remainder.tourCount, 3);
+  assert.equal(remainder.remainingDueInCentimes, 900_000);
+  assert.deepEqual(
+    new Set(remainder.tours.map((tour) => tour.status)),
+    new Set(['COUNTED', 'CLOSED']),
+  );
+  assert.deepEqual(
+    remainder.tours.map((tour) => tour.countedAt).sort(),
+    [
+      '2026-08-01T09:00:00.000Z',
+      '2026-08-02T09:00:00.000Z',
+      '2026-08-03T09:00:00.000Z',
+    ],
+  );
+  assert.deepEqual(remainder.blockingAnomalies, []);
+  assert.deepEqual(after, before);
+});
+
+test('bloque la prévisualisation globale si une tournée du livreur est incohérente', async () => {
+  const valid = await insertTour({
+    delivererCode: 'LIV-ANOMALIE-GLOBALE',
+    delivererName: 'Livreur avec anomalie',
+    totalDueInCentimes: 200_000,
+  });
+  const invalidCounting = await insertTour({
+    deliverer: valid,
+    totalDueInCentimes: 300_000,
+  });
+  await insertTour({
+    countedAt: null,
+    deliverer: valid,
+    totalDueInCentimes: 400_000,
+  });
+
+  await database.collection('tourCountings').updateOne(
+    { _id: invalidCounting.countingId },
+    { $set: { totalDueInCentimes: '300000' } },
+  );
+  const result = await listCashRemainders({
+    query: 'LIV-ANOMALIE-GLOBALE',
+    userId: cashierId.toString(),
+  });
+  const [remainder] = result.remainders;
+
+  assert.equal(remainder.remainingDueInCentimes, 600_000);
+  assert.deepEqual(
+    new Set(remainder.blockingAnomalies.map((anomaly) => anomaly.code)),
+    new Set(['INVALID_COUNTING', 'MISSING_COUNTING_DATE']),
+  );
+  assert.deepEqual(
+    new Set(remainder.blockingAnomalies.map(
+      (anomaly) => anomaly.tourReference,
+    )),
+    new Set([
+      invalidCounting.tourReference,
+      remainder.tours.find((tour) => tour.countedAt === null).reference,
+    ]),
+  );
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 0);
 });
 
 test('recherche et pagine les restes indépendamment des filtres du journal avec cash.read seul', async () => {

@@ -32,7 +32,7 @@ const {
 const { initializeMainCashRegister } = await import('../lib/cash-registers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { recordTourPayment } = await import(
-  '../app/(protected)/tournees/[id]/actions.js'
+  '../app/(protected)/cash-payment-actions.js'
 );
 
 let database;
@@ -112,13 +112,20 @@ const createPaymentFormData = ({
   amount = '5000',
   cashRegisterId,
   confirmationKey,
+  expectedRemainingDueInCentimes = 750_000,
+  tourId,
 }) => {
   const formData = new FormData();
 
   formData.set('amount', amount);
   formData.set('confirmationKey', confirmationKey);
   formData.set('expectedCashRegisterId', cashRegisterId);
+  formData.set(
+    'expectedRemainingDueInCentimes',
+    String(expectedRemainingDueInCentimes),
+  );
   formData.set('note', 'Versement depuis la fiche');
+  formData.set('tourId', tourId.toString());
   formData.set('receivedBy', new ObjectId().toString());
   formData.set('amountDueInCentimes', '1');
   formData.set('remainingDueInCentimes', '1');
@@ -152,19 +159,17 @@ test('l’action exige le droit d’encaisser puis la lecture financière', asyn
   const { tourId } = await insertCountedTour();
   const withoutCreate = await createUserSession('sans-encaissement', [
     CASH_READ_PERMISSION,
-    'tours.read',
   ]);
   const withoutRead = await createUserSession('sans-lecture-caisse', [
     CASH_PAYMENT_CREATE_PERMISSION,
-    'tours.read',
   ]);
   const createCall = (token) => callWithSession(token, () =>
     recordTourPayment(
-      tourId.toString(),
       { revision: 0 },
       createPaymentFormData({
         cashRegisterId: cashRegister.id,
         confirmationKey: randomUUID(),
+        tourId,
       }),
     ));
 
@@ -181,21 +186,20 @@ test('l’action exige le droit d’encaisser puis la lecture financière', asyn
   assert.equal(await database.collection('cashPayments').countDocuments({}), 0);
 });
 
-test('l’action prend auteur, dû et reste depuis le serveur', async () => {
+test('l’action enregistre un versement partiel puis exact avec l’auteur de session', async () => {
   const cashRegister = await initializeMainCashRegister();
   const { tourId } = await insertCountedTour();
   const { token, userId } = await createUserSession('caissier-action', [
     CASH_READ_PERMISSION,
     CASH_PAYMENT_CREATE_PERMISSION,
-    'tours.read',
   ]);
   const confirmationKey = randomUUID();
   const result = await callWithSession(token, () => recordTourPayment(
-    tourId.toString(),
     { revision: 0 },
     createPaymentFormData({
       cashRegisterId: cashRegister.id,
       confirmationKey,
+      tourId,
     }),
   ));
   const payment = await database.collection('cashPayments').findOne({
@@ -208,6 +212,27 @@ test('l’action prend auteur, dû et reste depuis le serveur', async () => {
   assert.equal(payment.receivedBy.toString(), userId.toString());
   assert.equal(payment.amountInCentimes, 500_000);
   assert.equal(await database.collection('cashPayments').countDocuments({}), 1);
+
+  const exact = await callWithSession(token, () => recordTourPayment(
+    result,
+    createPaymentFormData({
+      amount: '2500',
+      cashRegisterId: cashRegister.id,
+      confirmationKey: result.confirmationKey,
+      expectedRemainingDueInCentimes: 250_000,
+      tourId,
+    }),
+  ));
+  const payments = await database.collection('cashPayments').find({
+    tourId,
+  }).toArray();
+
+  assert.equal(exact.succeeded, true);
+  assert.equal(payments.length, 2);
+  assert.equal(
+    payments.reduce((total, item) => total + item.amountInCentimes, 0),
+    750_000,
+  );
 });
 
 test('l’action conserve la clé après erreur et la renouvelle après réussite', async () => {
@@ -216,17 +241,16 @@ test('l’action conserve la clé après erreur et la renouvelle après réussit
   const { token } = await createUserSession('caissier-reprise', [
     CASH_READ_PERMISSION,
     CASH_PAYMENT_CREATE_PERMISSION,
-    'tours.read',
   ]);
   const confirmationKey = randomUUID();
   const callAction = (amount, previousState) => callWithSession(token, () =>
     recordTourPayment(
-      tourId.toString(),
       previousState,
       createPaymentFormData({
         amount,
         cashRegisterId: cashRegister.id,
         confirmationKey,
+        tourId,
       }),
     ));
   const invalid = await callAction('8000', { revision: 0 });
@@ -238,4 +262,56 @@ test('l’action conserve la clé après erreur et la renouvelle après réussit
   assert.equal(valid.succeeded, true);
   assert.notEqual(valid.confirmationKey, confirmationKey);
   assert.equal(await database.collection('cashPayments').countDocuments({}), 1);
+});
+
+test('l’action exige une nouvelle confirmation lorsque le reste a changé', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const { tourId } = await insertCountedTour();
+  const { token } = await createUserSession('caissier-concurrent', [
+    CASH_READ_PERMISSION,
+    CASH_PAYMENT_CREATE_PERMISSION,
+  ]);
+  const firstKey = randomUUID();
+  const staleKey = randomUUID();
+  const callAction = ({
+    amount,
+    confirmationKey,
+    expectedRemainingDueInCentimes,
+    previousState = { revision: 0 },
+  }) => callWithSession(token, () => recordTourPayment(
+    previousState,
+    createPaymentFormData({
+      amount,
+      cashRegisterId: cashRegister.id,
+      confirmationKey,
+      expectedRemainingDueInCentimes,
+      tourId,
+    }),
+  ));
+
+  const first = await callAction({
+    amount: '1000',
+    confirmationKey: firstKey,
+    expectedRemainingDueInCentimes: 750_000,
+  });
+  const stale = await callAction({
+    amount: '2000',
+    confirmationKey: staleKey,
+    expectedRemainingDueInCentimes: 750_000,
+  });
+  const confirmedAgain = await callAction({
+    amount: '2000',
+    confirmationKey: staleKey,
+    expectedRemainingDueInCentimes: 650_000,
+    previousState: stale,
+  });
+
+  assert.equal(first.succeeded, true);
+  assert.equal(stale.succeeded, false);
+  assert.equal(stale.stale, true);
+  assert.equal(stale.confirmationKey, staleKey);
+  assert.match(stale.errors.form, /reste de cette tournée a changé/u);
+  assert.equal(confirmedAgain.succeeded, true);
+  assert.notEqual(confirmedAgain.confirmationKey, staleKey);
+  assert.equal(await database.collection('cashPayments').countDocuments({}), 2);
 });

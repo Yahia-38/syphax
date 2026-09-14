@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 import { getUserPermissions } from '../../../lib/access.js';
 import {
+  CASH_PAYMENT_FORM_PERMISSIONS,
+  buildCashRemaindersHref,
   listCashJournalFilterOptions,
   listCashPayments,
   listCashRemainders,
@@ -27,6 +31,16 @@ const CashPage = async ({ searchParams }) => {
   ]);
   const canReadDeliverers = permissions.includes('deliverers.read');
   const canReadTours = permissions.includes('tours.read');
+  const canCreatePayment = CASH_PAYMENT_FORM_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
+  const buildRemainderHref = ({ page, query }) => buildCashRemaindersHref({
+    ...journal,
+    journalPage: journal.page,
+    journalQuery: journal.query,
+    page,
+    query,
+  });
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -48,9 +62,20 @@ const CashPage = async ({ searchParams }) => {
       />
       <CashRemainders
         {...remainders}
+        canCreatePayment={canCreatePayment}
         canReadDeliverers={canReadDeliverers}
         canReadTours={canReadTours}
+        initialConfirmationKey={randomUUID()}
         journalState={journal}
+        nextHref={buildRemainderHref({
+          page: remainders.page + 1,
+          query: remainders.query,
+        })}
+        previousHref={buildRemainderHref({
+          page: remainders.page - 1,
+          query: remainders.query,
+        })}
+        resetHref={buildRemainderHref({ page: 1, query: '' })}
       />
     </main>
   );

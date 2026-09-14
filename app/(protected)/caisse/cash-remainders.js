@@ -1,9 +1,26 @@
+'use client';
+
+import { useActionState, useState } from 'react';
+
 import Link from 'next/link';
 
-import {
-  buildCashRemaindersHref,
-  formatCashAmount,
-} from '../../../lib/cash-payments.js';
+import { formatReceptionMoney } from '../../../lib/receptions.js';
+import { recordTourPayment } from '../cash-payment-actions.js';
+import CashPaymentForm from '../cash-payment-form.js';
+import DelivererCashAllocationPreview from './deliverer-cash-allocation-preview.js';
+
+const INITIAL_PAYMENT_STATE = {
+  confirmationKey: null,
+  errors: {},
+  message: null,
+  paymentReference: null,
+  replayed: false,
+  revision: 0,
+  stale: false,
+  succeeded: false,
+  tourId: null,
+  values: { amount: '', note: '' },
+};
 
 const STATUS_LABELS = Object.freeze({
   CLOSED: 'Terminée',
@@ -39,27 +56,65 @@ const PreservedJournalFields = ({ journalState }) => [
 const CashRemainders = ({
   anomalies,
   anomalyCount,
+  canCreatePayment,
   canReadDeliverers,
   canReadTours,
+  cashRegister,
+  cashRegisterError,
+  initialConfirmationKey,
   journalState,
+  nextHref,
   page,
   pageSize,
+  previousHref,
   query,
   remainders,
+  resetHref,
   totalItems,
   totalPages,
   totalRemainingDueInCentimes,
 }) => {
+  const [paymentState, paymentAction, paymentPending] = useActionState(
+    recordTourPayment,
+    INITIAL_PAYMENT_STATE,
+  );
+  const [allocationSelection, setAllocationSelection] = useState(null);
+  const [paymentSelection, setPaymentSelection] = useState(null);
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + remainders.length - 1;
-  const getHref = ({ nextPage = page, nextQuery = query } = {}) =>
-    buildCashRemaindersHref({
-      ...journalState,
-      journalPage: journalState.page,
-      journalQuery: journalState.query,
-      page: nextPage,
-      query: nextQuery,
+  const currentSelectedTour = paymentSelection
+    ? remainders.flatMap((remainder) => remainder.tours.map((tour) => ({
+        deliverer: remainder.deliverer,
+        tour,
+      }))).find(({ tour }) => tour.id === paymentSelection.tour.id)
+    : null;
+  const hasSelectionResult = paymentSelection
+    && paymentState.tourId === paymentSelection.tour.id
+    && paymentState.revision > paymentSelection.revision;
+  const dialogSelection = hasSelectionResult && paymentState.succeeded
+    ? null
+    : currentSelectedTour ?? (hasSelectionResult && paymentState.stale
+      ? null
+      : paymentSelection);
+  const dialogState = hasSelectionResult
+    ? paymentState
+    : INITIAL_PAYMENT_STATE;
+  const confirmationKey = paymentState.confirmationKey
+    ?? initialConfirmationKey;
+
+  const openPaymentDialog = (deliverer, tour) => {
+    setAllocationSelection(null);
+    setPaymentSelection({
+      deliverer,
+      revision: paymentState.revision,
+      tour,
     });
+  };
+
+  const openAllocationPreview = (remainder) => {
+    setPaymentSelection(null);
+    setAllocationSelection(remainder);
+  };
 
   return (
     <section
@@ -81,7 +136,7 @@ const CashRemainders = ({
           Total à encaisser sur les résultats
         </p>
         <p className='mt-1 text-3xl font-bold tracking-tight text-slate-900'>
-          {formatCashAmount(totalRemainingDueInCentimes)}
+          {formatReceptionMoney(totalRemainingDueInCentimes)}
         </p>
       </div>
 
@@ -115,7 +170,7 @@ const CashRemainders = ({
         {query && (
           <Link
             className='inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href={getHref({ nextPage: 1, nextQuery: '' })}
+            href={resetHref}
           >
             Réinitialiser
           </Link>
@@ -144,6 +199,24 @@ const CashRemainders = ({
         </aside>
       )}
 
+      {cashRegisterError && canCreatePayment && totalItems > 0 && (
+        <p className='border-b border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-800 sm:px-6' role='alert'>
+          Encaissement indisponible : {cashRegisterError}
+        </p>
+      )}
+
+      {paymentState.message && (
+        <p className='border-b border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 sm:px-6' role='status'>
+          {paymentState.message}
+        </p>
+      )}
+
+      {!dialogSelection && paymentState.errors.form && (
+        <p className='border-b border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-800 sm:px-6' role='alert'>
+          {paymentState.errors.form}
+        </p>
+      )}
+
       <div className='border-b border-slate-200 px-4 py-3 sm:px-6'>
         <p className='text-sm text-slate-500'>
           {totalItems > 0
@@ -154,17 +227,18 @@ const CashRemainders = ({
 
       {remainders.length > 0 ? (
         <>
-          <div className='hidden grid-cols-[minmax(0,1fr)_10rem_12rem] gap-4 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid sm:px-6'>
+          <div className='hidden grid-cols-[minmax(0,1fr)_10rem_12rem_8rem] gap-4 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid sm:px-6'>
             <span>Livreur</span>
             <span>Tournées concernées</span>
             <span>Reste total</span>
+            <span>Action</span>
           </div>
           {remainders.map((remainder) => (
             <article
               className='border-t border-slate-100 px-5 py-4 first:border-t-0 sm:px-6'
               key={remainder.deliverer.id}
             >
-              <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_12rem] sm:items-start sm:gap-4'>
+              <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_12rem_8rem] sm:items-start sm:gap-4'>
                 <div className='min-w-0 text-sm text-slate-700'>
                   {canReadDeliverers ? (
                     <Link
@@ -190,8 +264,19 @@ const CashRemainders = ({
                 </p>
                 <p className='text-sm font-semibold text-slate-900'>
                   <span className='sm:hidden'>Reste : </span>
-                  {formatCashAmount(remainder.remainingDueInCentimes)}
+                  {formatReceptionMoney(remainder.remainingDueInCentimes)}
                 </p>
+                {canCreatePayment ? (
+                  <button
+                    className='inline-flex w-full items-center justify-center rounded-lg border border-amber-700 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700'
+                    onClick={() => openAllocationPreview(remainder)}
+                    type='button'
+                  >
+                    Encaisser le livreur
+                  </button>
+                ) : (
+                  <span aria-hidden='true' />
+                )}
               </div>
 
               <details className='mt-4 rounded-xl border border-slate-200 bg-slate-50'>
@@ -201,7 +286,7 @@ const CashRemainders = ({
                 <div className='border-t border-slate-200 px-4 py-1'>
                   {remainder.tours.map((tour) => (
                     <div
-                      className='grid gap-2 border-t border-slate-200 py-4 first:border-t-0 sm:grid-cols-[minmax(0,1.2fr)_8rem_repeat(3,minmax(7rem,1fr))] sm:gap-4'
+                      className='grid gap-2 border-t border-slate-200 py-4 first:border-t-0 sm:grid-cols-[minmax(0,1.2fr)_7rem_repeat(3,minmax(7rem,1fr))_7rem] sm:items-start sm:gap-4'
                       key={tour.id}
                     >
                       <p className='break-all font-mono text-xs font-semibold text-slate-900'>
@@ -227,20 +312,32 @@ const CashRemainders = ({
                         <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
                           Montant dû
                         </span>
-                        {formatCashAmount(tour.amountDueInCentimes)}
+                        {formatReceptionMoney(tour.amountDueInCentimes)}
                       </p>
                       <p className='text-xs text-slate-700'>
                         <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
                           Encaissé
                         </span>
-                        {formatCashAmount(tour.amountPaidInCentimes)}
+                        {formatReceptionMoney(tour.amountPaidInCentimes)}
                       </p>
                       <p className='text-xs font-semibold text-slate-900'>
                         <span className='mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'>
                           Reste à payer
                         </span>
-                        {formatCashAmount(tour.remainingDueInCentimes)}
+                        {formatReceptionMoney(tour.remainingDueInCentimes)}
                       </p>
+                      {canCreatePayment && (
+                        <button
+                          className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700'
+                          onClick={() => openPaymentDialog(
+                            remainder.deliverer,
+                            tour,
+                          )}
+                          type='button'
+                        >
+                          Encaisser
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -254,7 +351,7 @@ const CashRemainders = ({
           >
             <PaginationLink
               disabled={page === 1}
-              href={getHref({ nextPage: page - 1 })}
+              href={previousHref}
             >
               Précédent
             </PaginationLink>
@@ -263,7 +360,7 @@ const CashRemainders = ({
             </p>
             <PaginationLink
               disabled={page === totalPages}
-              href={getHref({ nextPage: page + 1 })}
+              href={nextHref}
             >
               Suivant
             </PaginationLink>
@@ -282,6 +379,93 @@ const CashRemainders = ({
               : 'Toutes les tournées comptées valides sont soldées.'}
           </p>
         </div>
+      )}
+
+      {dialogSelection && (
+        <div
+          aria-labelledby='cash-payment-dialog-title'
+          aria-modal='true'
+          className='fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4'
+          role='dialog'
+        >
+          <div className='max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl'>
+            <div className='flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6'>
+              <div>
+                <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
+                  Encaissement depuis la caisse
+                </p>
+                <h2 className='mt-1 text-xl font-semibold text-slate-950' id='cash-payment-dialog-title'>
+                  Encaisser cette tournée
+                </h2>
+              </div>
+              <button
+                aria-label='Fermer la fenêtre d’encaissement'
+                className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50'
+                disabled={paymentPending}
+                onClick={() => setPaymentSelection(null)}
+                type='button'
+              >
+                Fermer
+              </button>
+            </div>
+
+            <dl className='grid gap-px bg-slate-200 sm:grid-cols-3'>
+              {[
+                [
+                  'Livreur',
+                  `${dialogSelection.deliverer.code} — ${dialogSelection.deliverer.name || 'Nom non renseigné'}`,
+                ],
+                ['Tournée', dialogSelection.tour.reference],
+                [
+                  'Reste actuel',
+                  formatReceptionMoney(
+                    dialogSelection.tour.remainingDueInCentimes,
+                  ),
+                ],
+              ].map(([label, value]) => (
+                <div className='min-w-0 bg-white px-5 py-4' key={label}>
+                  <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                    {label}
+                  </dt>
+                  <dd className='mt-1 break-words text-sm font-semibold text-slate-950'>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className='p-5 sm:p-6'>
+              {cashRegister ? (
+                <CashPaymentForm
+                  cashRegister={cashRegister}
+                  confirmationKey={confirmationKey}
+                  deliverer={dialogSelection.deliverer}
+                  formAction={paymentAction}
+                  idPrefix='cash-remainder-payment'
+                  key={`${dialogSelection.tour.id}-${confirmationKey}-${paymentSelection.revision}`}
+                  pending={paymentPending}
+                  remainingDueInCentimes={
+                    dialogSelection.tour.remainingDueInCentimes
+                  }
+                  state={dialogState}
+                  tourId={dialogSelection.tour.id}
+                  tourReference={dialogSelection.tour.reference}
+                />
+              ) : (
+                <p className='rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800' role='alert'>
+                  {cashRegisterError ?? 'Aucune caisse destinataire n’est disponible.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {allocationSelection && (
+        <DelivererCashAllocationPreview
+          onClose={() => setAllocationSelection(null)}
+          remainder={allocationSelection}
+        />
       )}
     </section>
   );

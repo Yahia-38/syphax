@@ -106,18 +106,36 @@ const insertCountedTour = async ({
   return { countingId, delivererId, tourId };
 };
 
-const recordPayment = ({
+const recordPayment = async ({
   amount,
   confirmationKey = randomUUID(),
   tourId,
-}) => recordTourCashPayment({
-  amount,
-  confirmationKey,
-  expectedCashRegisterId: cashRegister.id,
-  note: '',
-  receivedBy: cashierId.toString(),
-  tourId: tourId.toString(),
-});
+}) => {
+  const tour = await database.collection('tours').findOne({ _id: tourId });
+  const counting = await database.collection('tourCountings').findOne({
+    _id: tour?.countingId,
+    tourId,
+  });
+  const payments = await database.collection('cashPayments').find({
+    tourId,
+  }).toArray();
+  const paid = payments.reduce((total, payment) =>
+    Number.isSafeInteger(payment.amountInCentimes)
+      ? total + payment.amountInCentimes
+      : total, 0);
+
+  return recordTourCashPayment({
+    amount,
+    confirmationKey,
+    expectedCashRegisterId: cashRegister.id,
+    expectedRemainingDueInCentimes: String(
+      counting.totalDueInCentimes - paid,
+    ),
+    note: '',
+    receivedBy: cashierId.toString(),
+    tourId: tourId.toString(),
+  });
+};
 
 const readClosurePreview = (tourId, userId = closerId) =>
   getTourClosurePreview({
