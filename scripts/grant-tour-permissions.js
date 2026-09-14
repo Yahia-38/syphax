@@ -4,6 +4,7 @@ import { closeMongoConnection } from '../lib/mongodb.js';
 const permissions = [
   'tours.read',
   'tours.create',
+  'tours.load',
   'tours.products.add',
   'tours.products.release',
 ];

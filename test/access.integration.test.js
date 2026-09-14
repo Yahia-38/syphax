@@ -65,10 +65,12 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   );
   assert.ok(PERMISSION_KEYS.includes('tours.read'));
   assert.ok(PERMISSION_KEYS.includes('tours.create'));
+  assert.ok(PERMISSION_KEYS.includes('tours.load'));
   assert.ok(PERMISSION_KEYS.includes('tours.products.add'));
   assert.ok(PERMISSION_KEYS.includes('tours.products.release'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.read'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.create'), false);
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.load'), false);
   assert.equal(
     INITIAL_MANAGER_PERMISSIONS.includes('tours.products.add'),
     false,
@@ -146,6 +148,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   );
   const toursRead = await grantYahiaFullAccessPermission('tours.read');
   const toursCreate = await grantYahiaFullAccessPermission('tours.create');
+  const toursLoad = await grantYahiaFullAccessPermission('tours.load');
   const toursProductsAdd = await grantYahiaFullAccessPermission(
     'tours.products.add',
   );
@@ -161,6 +164,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.equal(second.granted, false);
   assert.equal(toursRead.granted, true);
   assert.equal(toursCreate.granted, true);
+  assert.equal(toursLoad.granted, true);
   assert.equal(toursProductsAdd.granted, true);
   assert.equal(toursProductsRelease.granted, true);
   assert.deepEqual(yahiaRole.permissions, [
@@ -168,6 +172,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
     'deliverers.status.update',
     'tours.read',
     'tours.create',
+    'tours.load',
     'tours.products.add',
     'tours.products.release',
   ]);

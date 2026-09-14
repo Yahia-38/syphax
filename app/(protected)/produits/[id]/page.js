@@ -12,6 +12,7 @@ import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
 import ProductTabs from './product-tabs.js';
 import PurchaseCostCard from './purchase-cost-card.js';
+import StockMovementHistory from './stock-movement-history.js';
 
 export const metadata = {
   title: 'Fiche produit | Syphax',
@@ -151,6 +152,8 @@ const StockSection = ({ baseUnitLabel, product }) => {
           </div>
         </dl>
       </section>
+
+      <StockMovementHistory movements={stock.movements} />
     </div>
   );
 };
@@ -292,17 +295,19 @@ const ProductPage = async ({ params, searchParams }) => {
   const canReadPricing = permissions.includes('pricing.read');
   const canReadPurchaseCosts = permissions.includes('receptions.read');
   const canReadTarification = canReadPricing || canReadPurchaseCosts;
+  const requestedSection = typeof query.section === 'string'
+    ? query.section
+    : '';
   const product = await getProductById(id, {
     includePricing: canReadPricing,
+    includeStockMovements: requestedSection === 'stock',
+    includeTourSources: permissions.includes('tours.read'),
   });
 
   if (!product) {
     notFound();
   }
 
-  const requestedSection = typeof query.section === 'string'
-    ? query.section
-    : '';
   const activeSection = SECTIONS.has(requestedSection)
     && (requestedSection !== 'conditionnements' || canReadPackaging)
     && (requestedSection !== 'tarification' || canReadTarification)

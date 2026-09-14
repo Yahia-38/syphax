@@ -10,7 +10,7 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const TourProductList = ({ canRelease, lines, tourId }) => {
+const TourProductList = ({ canRelease, lines, loaded, tourId }) => {
   const [query, setQuery] = useState('');
   const [quantityMode, setQuantityMode] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,7 +54,7 @@ const TourProductList = ({ canRelease, lines, tourId }) => {
     >
       <div className='border-b border-slate-200 p-5 sm:p-6'>
         <h2 className='text-lg font-semibold text-slate-900' id='tour-products-title'>
-          Produits réservés
+          {loaded ? 'Produits chargés' : 'Produits réservés'}
         </h2>
         <p className='mt-1 text-sm text-slate-600'>
           {lines.length} ligne{lines.length > 1 ? 's' : ''} dans la tournée.
@@ -131,11 +131,11 @@ const TourProductList = ({ canRelease, lines, tourId }) => {
                   </p>
                 </div>
                 <div className='shrink-0 sm:text-right'>
-                  <div className='rounded-xl border border-amber-200 bg-amber-50 px-4 py-3'>
-                    <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
-                      Réservé
+                  <div className={`rounded-xl border px-4 py-3 ${loaded ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${loaded ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {loaded ? 'Chargé' : 'Réservé'}
                     </p>
-                    <p className='mt-1 text-xl font-bold tabular-nums text-amber-950'>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${loaded ? 'text-emerald-950' : 'text-amber-950'}`}>
                       {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
                     </p>
                   </div>

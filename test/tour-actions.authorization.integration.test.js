@@ -29,7 +29,7 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
-const { addTourProduct, releaseTourProduct } = await import(
+const { addTourProduct, loadTour, releaseTourProduct } = await import(
   '../app/(protected)/tournees/[id]/actions.js'
 );
 
@@ -114,6 +114,14 @@ const createTourProductFormData = ({ productId }) => {
   formData.set('productId', productId);
   formData.set('quantityMode', 'DIRECT');
   formData.set('directQuantity', '10');
+
+  return formData;
+};
+
+const createTourLoadingFormData = () => {
+  const formData = new FormData();
+
+  formData.set('loadingDigest', 'a'.repeat(64));
 
   return formData;
 };
@@ -231,6 +239,39 @@ test('refuse le retrait sans la permission dédiée et sans écrire', async () =
     database.collection('tourReservations').deleteOne({ _id: reservationId }),
     database.collection('tours').deleteOne({ _id: tourId }),
   ]);
+});
+
+test('refuse la confirmation du chargement sans tours.load', async () => {
+  const { token } = await createUserSession(
+    'lecture-tournee-sans-chargement',
+    ['tours.read'],
+  );
+  const tourId = new ObjectId();
+
+  await database.collection('tours').insertOne({
+    _id: tourId,
+    reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+    status: 'PREPARATION',
+  });
+
+  await assert.rejects(
+    callWithSession(token, () => loadTour(
+      tourId.toString(),
+      { revision: 0 },
+      createTourLoadingFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.load',
+  );
+
+  const tour = await database.collection('tours').findOne({ _id: tourId });
+
+  assert.equal(tour.status, 'PREPARATION');
+  assert.equal('loadedAt' in tour, false);
+  assert.equal(await database.collection('stockMovements').countDocuments({
+    sourceTourId: tourId,
+  }), 0);
+  await database.collection('tours').deleteOne({ _id: tourId });
 });
 
 test('exige aussi les droits de lecture du catalogue et des conditionnements', async () => {

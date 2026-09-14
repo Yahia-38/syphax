@@ -6,7 +6,9 @@ import { notFound } from 'next/navigation';
 import { getUserPermissions } from '../../../../lib/access.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import { createTourLoadingDigest } from '../../../../lib/tour-loadings.js';
 import {
+  TOUR_STATUS_LOADED,
   TOUR_STATUS_PREPARATION,
   formatTourCreatedAt,
   formatTourDate,
@@ -16,6 +18,7 @@ import {
 } from '../../../../lib/tours.js';
 import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
+import TourLoadingConfirmation from './tour-loading-confirmation.js';
 
 export const metadata = {
   title: 'Fiche de tournée | Syphax',
@@ -43,6 +46,7 @@ const TourPage = async ({ params, searchParams }) => {
   const canReleaseTourProducts = permissions.includes(
     'tours.products.release',
   );
+  const canLoadTour = permissions.includes('tours.load');
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -70,7 +74,7 @@ const TourPage = async ({ params, searchParams }) => {
               {tour.reference}
             </h1>
           </div>
-          <span className='w-fit rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800'>
+          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
             {formatTourStatus(tour.status)}
           </span>
         </div>
@@ -83,6 +87,12 @@ const TourPage = async ({ params, searchParams }) => {
             ['Statut', formatTourStatus(tour.status)],
             ['Créée par', tour.createdBy ?? 'Compte indisponible'],
             ['Créée le', formatTourCreatedAt(tour.createdAt)],
+            ...(tour.status === TOUR_STATUS_LOADED
+              ? [
+                  ['Chargée par', tour.loadedBy ?? 'Compte indisponible'],
+                  ['Chargée le', formatTourCreatedAt(tour.loadedAt)],
+                ]
+              : []),
           ].map(([label, value]) => (
             <div className='min-w-0 bg-white px-5 py-4 sm:px-6' key={label}>
               <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
@@ -95,6 +105,16 @@ const TourPage = async ({ params, searchParams }) => {
           ))}
         </dl>
       </header>
+
+      {canLoadTour
+        && tour.status === TOUR_STATUS_PREPARATION
+        && tour.lines.length > 0 && (
+        <TourLoadingConfirmation
+          digest={createTourLoadingDigest(tour.lines)}
+          lines={tour.lines}
+          tourId={tour.id}
+        />
+      )}
 
       {canAddTourProducts && tour.status === TOUR_STATUS_PREPARATION && (
         <TourProductForm
@@ -110,6 +130,7 @@ const TourPage = async ({ params, searchParams }) => {
           canRelease={canReleaseTourProducts
             && tour.status === TOUR_STATUS_PREPARATION}
           lines={tour.lines}
+          loaded={tour.status === TOUR_STATUS_LOADED}
           tourId={tour.id}
         />
       ) : (

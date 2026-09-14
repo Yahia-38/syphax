@@ -8,6 +8,7 @@ import {
   addAndReserveTourProduct,
   releaseTourReservation,
 } from '../../../../lib/tour-reservations.js';
+import { confirmTourLoading } from '../../../../lib/tour-loadings.js';
 
 const readTextField = (formData, name) => {
   const value = formData.get(name);
@@ -124,6 +125,55 @@ export const releaseTourProduct = async (
     return {
       errors: {
         form: 'Le retrait et la libération sont momentanément indisponibles.',
+      },
+      message: null,
+      revision,
+    };
+  }
+};
+
+export const loadTour = async (tourId, previousState, formData) => {
+  const session = await requirePermission('tours.load');
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await confirmTourLoading({
+      expectedDigest: readTextField(formData, 'loadingDigest'),
+      loadedBy: session.userId,
+      tourId,
+    });
+
+    if (result.errors) {
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+      };
+    }
+
+    revalidatePath(`/tournees/${tourId}`);
+    revalidatePath('/produits');
+
+    for (const productId of result.productIds) {
+      revalidatePath(`/produits/${productId}`);
+    }
+
+    return {
+      errors: {},
+      message: result.replayed
+        ? 'Ce chargement avait déjà été confirmé ; aucune seconde sortie n’a été créée.'
+        : 'Le chargement complet de la tournée a été confirmé.',
+      replayed: result.replayed,
+      revision,
+    };
+  } catch (error) {
+    console.error('Échec de la confirmation du chargement :', error);
+
+    return {
+      errors: {
+        form: 'La confirmation du chargement est momentanément indisponible.',
       },
       message: null,
       revision,
