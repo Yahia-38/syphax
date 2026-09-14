@@ -1,12 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useActionState, useMemo, useState } from 'react';
 
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { calculateTourCounting } from '../../../../lib/tour-counting-calculations.js';
+import { countTour } from './actions.js';
 
 const LINES_PER_PAGE = 5;
 const EMPTY_LINES = Object.freeze([]);
+const INITIAL_STATE = {
+  errors: {},
+  message: null,
+  replayed: false,
+  revision: 0,
+};
 
 const formatQuantity = (quantity) => Number.isSafeInteger(quantity)
   ? new Intl.NumberFormat('fr-DZ', {
@@ -14,9 +21,25 @@ const formatQuantity = (quantity) => Number.isSafeInteger(quantity)
     }).format(quantity)
   : 'Non calculable';
 
-const TourCountingSheet = ({ sheet }) => {
-  const [opened, setOpened] = useState(false);
-  const [returnedQuantities, setReturnedQuantities] = useState({});
+const TourCountingSheet = ({
+  canConfirm,
+  initialConfirmationKey,
+  sheet,
+  tourId,
+}) => {
+  const countCurrentTour = countTour.bind(null, tourId);
+  const [state, formAction, pending] = useActionState(
+    countCurrentTour,
+    INITIAL_STATE,
+  );
+  const [opened, setOpened] = useState(Boolean(sheet?.recorded));
+  const [returnedQuantities, setReturnedQuantities] = useState(() =>
+    Object.fromEntries((sheet?.lines ?? EMPTY_LINES).map((line) => [
+      line.id,
+      Number.isSafeInteger(line.returnedQuantityInBaseUnits)
+        ? String(line.returnedQuantityInBaseUnits)
+        : '',
+    ])));
   const [query, setQuery] = useState('');
   const [unit, setUnit] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,6 +76,31 @@ const TourCountingSheet = ({ sheet }) => {
     firstLineIndex,
     firstLineIndex + LINES_PER_PAGE,
   );
+  const confirmationRecap = lines.map((line) => {
+    const calculation = calculationsById.get(line.id);
+
+    return [
+      `${line.productCode} — ${line.productDesignation}`,
+      `chargé ${formatQuantity(line.quantityInBaseUnits)} ${line.baseUnit}`,
+      `retourné ${formatQuantity(calculation?.returnedQuantityInBaseUnits)} ${line.baseUnit}`,
+      `vendu ${formatQuantity(calculation?.soldQuantityInBaseUnits)} ${line.baseUnit}`,
+      `${formatReceptionMoney(line.salePriceAtLoading?.amountInCentimes)} TTC / ${line.baseUnit}`,
+      `dû ${formatReceptionMoney(calculation?.amountDueInCentimes)}`,
+    ].join(' · ');
+  }).join('\n');
+  const confirmation = [
+    'Enregistrer définitivement le comptage complet de cette tournée ?',
+    '',
+    confirmationRecap,
+    '',
+    `Total dû : ${formatReceptionMoney(summary.totalDueInCentimes)}`,
+    '',
+    'Cette confirmation constate la restitution physique des retours. Le comptage ne sera plus modifiable.',
+  ].join('\n');
+  const confirmationUnavailable = sheet?.recorded
+    || !canConfirm
+    || !summary.complete
+    || !sheet?.digest;
 
   return (
     <section
@@ -62,7 +110,7 @@ const TourCountingSheet = ({ sheet }) => {
       <div className='flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
         <div>
           <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
-            Retour de tournée
+            {sheet?.recorded ? 'Retour de tournée enregistré' : 'Retour de tournée'}
           </p>
           <h2 className='mt-1 text-lg font-semibold text-slate-900' id='tour-counting-title'>
             Feuille de comptage
@@ -70,7 +118,7 @@ const TourCountingSheet = ({ sheet }) => {
           <p className='mt-2 max-w-3xl text-sm leading-6 text-slate-700'>
             Les retours correspondent aux marchandises physiquement restituées.
             Toute quantité chargée qui n’est pas retournée est considérée comme
-            vendue dans cette prévisualisation.
+            vendue {sheet?.recorded ? 'dans le comptage enregistré.' : 'dans cette prévisualisation.'}
           </p>
         </div>
         <button
@@ -79,7 +127,11 @@ const TourCountingSheet = ({ sheet }) => {
           onClick={() => setOpened((currentValue) => !currentValue)}
           type='button'
         >
-          {opened ? 'Masquer la feuille' : 'Préparer le comptage'}
+          {opened
+            ? 'Masquer la feuille'
+            : sheet?.recorded
+              ? 'Afficher le comptage'
+              : 'Préparer le comptage'}
         </button>
       </div>
 
@@ -90,12 +142,26 @@ const TourCountingSheet = ({ sheet }) => {
               {sheet.errors.form}
             </p>
           ) : (
-            <form onSubmit={(event) => event.preventDefault()}>
+            <form
+              action={formAction}
+              onSubmit={(event) => {
+                if (sheet?.recorded || !event.nativeEvent.submitter) {
+                  event.preventDefault();
+                  return;
+                }
+
+                if (
+                  !globalThis.confirm(confirmation)
+                ) {
+                  event.preventDefault();
+                }
+              }}
+            >
               <div className='border-b border-violet-200 bg-white/70 p-5 sm:p-6'>
                 <p className='text-sm leading-6 text-slate-700'>
-                  Saisissez chaque retour en unité de base. Les champs sont
-                  volontairement vides : saisissez explicitement 0 lorsqu’aucun
-                  article n’a été retourné. Rien n’est sauvegardé à cette étape.
+                  {sheet?.recorded
+                    ? 'Ce comptage fait foi. Il est conservé en lecture seule et ne peut plus être modifié dans cet incrément.'
+                    : 'Saisissez chaque retour en unité de base. Les champs sont volontairement vides : saisissez explicitement 0 lorsqu’aucun article n’a été retourné.'}
                 </p>
               </div>
 
@@ -144,6 +210,12 @@ const TourCountingSheet = ({ sheet }) => {
                 <div className='divide-y divide-violet-100 bg-white/40'>
                   {paginatedLines.map((line) => {
                     const calculation = calculationsById.get(line.id);
+                    const amountDueInCentimes = sheet?.recorded
+                      ? line.amountDueInCentimes
+                      : calculation?.amountDueInCentimes;
+                    const soldQuantityInBaseUnits = sheet?.recorded
+                      ? line.soldQuantityInBaseUnits
+                      : calculation?.soldQuantityInBaseUnits;
                     const inputId = `returned-quantity-${line.id}`;
                     const errorId = `returned-quantity-error-${line.id}`;
 
@@ -189,6 +261,7 @@ const TourCountingSheet = ({ sheet }) => {
                                   }),
                                 )}
                                 placeholder='Ex. 0'
+                                readOnly={sheet?.recorded}
                                 type='text'
                                 value={returnedQuantities[line.id] ?? ''}
                               />
@@ -204,9 +277,9 @@ const TourCountingSheet = ({ sheet }) => {
                             </p>
                             <p className='mt-1 text-lg font-bold tabular-nums text-slate-900'>
                               {Number.isSafeInteger(
-                                calculation?.soldQuantityInBaseUnits,
+                                soldQuantityInBaseUnits,
                               )
-                                ? `${formatQuantity(calculation.soldQuantityInBaseUnits)} ${line.baseUnit}`
+                                ? `${formatQuantity(soldQuantityInBaseUnits)} ${line.baseUnit}`
                                 : 'Non calculable'}
                             </p>
                           </div>
@@ -230,14 +303,14 @@ const TourCountingSheet = ({ sheet }) => {
 
                           <div className='rounded-xl border border-violet-200 bg-violet-100 px-4 py-3'>
                             <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
-                              Montant dû prévu
+                              {sheet?.recorded ? 'Montant dû' : 'Montant dû prévu'}
                             </p>
                             <p className='mt-1 text-lg font-bold tabular-nums text-violet-950'>
                               {Number.isSafeInteger(
-                                calculation?.amountDueInCentimes,
+                                amountDueInCentimes,
                               )
                                 ? formatReceptionMoney(
-                                    calculation.amountDueInCentimes,
+                                    amountDueInCentimes,
                                   )
                                 : 'Non calculable'}
                             </p>
@@ -301,12 +374,18 @@ const TourCountingSheet = ({ sheet }) => {
                 <div className='rounded-xl border border-violet-200 bg-white px-4 py-4'>
                   <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
                     {summary.complete
-                      ? 'Total prévu pour la tournée'
+                      ? sheet?.recorded
+                        ? 'Total dû enregistré pour la tournée'
+                        : 'Total prévu pour la tournée'
                       : 'Prévisualisation incomplète'}
                   </p>
                   {summary.complete ? (
                     <p className='mt-1 text-2xl font-bold tabular-nums text-violet-950'>
-                      {formatReceptionMoney(summary.totalDueInCentimes)}
+                      {formatReceptionMoney(
+                        sheet?.recorded
+                          ? sheet.totalDueInCentimes
+                          : summary.totalDueInCentimes,
+                      )}
                     </p>
                   ) : Number.isSafeInteger(summary.knownSubtotalInCentimes) ? (
                     <>
@@ -339,17 +418,57 @@ const TourCountingSheet = ({ sheet }) => {
 
                 <div className='mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                   <p className='max-w-2xl text-sm leading-6 text-slate-600'>
-                    Prévisualisation uniquement : aucun comptage, retour en
-                    stock, vente, dette ou encaissement ne sera enregistré.
+                    {sheet?.recorded
+                      ? `Comptage enregistré${sheet.countedBy ? ` par ${sheet.countedBy}` : ''}. Les retours physiques sont intégrés au stock ; aucun encaissement ou compte financier n’a été créé.`
+                      : 'La confirmation constate la restitution physique des retours et réintègre ceux-ci au stock. Le comptage ne sera plus modifiable dans cet incrément.'}
                   </p>
-                  <button
-                    className='inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg bg-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 sm:w-auto'
-                    disabled
-                    type='submit'
-                  >
-                    Enregistrement indisponible
-                  </button>
+                  {!sheet?.recorded && (
+                    <>
+                      <input
+                        name='confirmationKey'
+                        type='hidden'
+                        value={initialConfirmationKey}
+                      />
+                      <input
+                        name='countingSheetDigest'
+                        type='hidden'
+                        value={sheet?.digest ?? ''}
+                      />
+                      {lines.map((line) => (
+                        <span key={line.id}>
+                          <input name='lineId' type='hidden' value={line.id} />
+                          <input
+                            name='returnedQuantity'
+                            type='hidden'
+                            value={returnedQuantities[line.id] ?? ''}
+                          />
+                        </span>
+                      ))}
+                      <button
+                        className='inline-flex w-full items-center justify-center rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
+                        disabled={pending || confirmationUnavailable}
+                        type='submit'
+                      >
+                        {pending ? 'Enregistrement…' : 'Enregistrer le comptage'}
+                      </button>
+                    </>
+                  )}
                 </div>
+                {!sheet?.recorded && !canConfirm && (
+                  <p className='mt-4 text-sm font-medium text-amber-800'>
+                    La permission d’enregistrer le comptage est requise.
+                  </p>
+                )}
+                {state.errors.form && (
+                  <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert'>
+                    {state.errors.form}
+                  </p>
+                )}
+                {state.message && (
+                  <p className='mt-4 rounded-lg border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800' role='status'>
+                    {state.message}
+                  </p>
+                )}
               </div>
             </form>
           )}

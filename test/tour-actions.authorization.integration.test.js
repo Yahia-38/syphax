@@ -29,7 +29,7 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
-const { addTourProduct, loadTour, releaseTourProduct } = await import(
+const { addTourProduct, countTour, loadTour, releaseTourProduct } = await import(
   '../app/(protected)/tournees/[id]/actions.js'
 );
 
@@ -122,6 +122,17 @@ const createTourLoadingFormData = () => {
   const formData = new FormData();
 
   formData.set('loadingDigest', 'a'.repeat(64));
+
+  return formData;
+};
+
+const createTourCountingFormData = () => {
+  const formData = new FormData();
+
+  formData.set('confirmationKey', randomUUID());
+  formData.set('countingSheetDigest', 'a'.repeat(64));
+  formData.append('lineId', new ObjectId().toString());
+  formData.append('returnedQuantity', '0');
 
   return formData;
 };
@@ -271,6 +282,38 @@ test('refuse la confirmation du chargement sans tours.load', async () => {
   assert.equal(await database.collection('stockMovements').countDocuments({
     sourceTourId: tourId,
   }), 0);
+  await database.collection('tours').deleteOne({ _id: tourId });
+});
+
+test('refuse l’enregistrement du comptage sans la permission dédiée', async () => {
+  const { token } = await createUserSession(
+    'préparation-comptage-sans-confirmation',
+    ['pricing.read', 'tours.count.prepare', 'tours.read'],
+  );
+  const tourId = new ObjectId();
+
+  await database.collection('tours').insertOne({
+    _id: tourId,
+    reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+    status: 'LOADED',
+  });
+
+  await assert.rejects(
+    callWithSession(token, () => countTour(
+      tourId.toString(),
+      { revision: 0 },
+      createTourCountingFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.count.confirm',
+  );
+  assert.equal(await database.collection('tourCountings').countDocuments({
+    tourId,
+  }), 0);
+  assert.equal((await database.collection('tours').findOne({
+    _id: tourId,
+  })).status, 'LOADED');
+
   await database.collection('tours').deleteOne({ _id: tourId });
 });
 

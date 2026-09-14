@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache.js';
 import { requireUserPermission } from '../../../../lib/access.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
+  confirmTourCounting,
+} from '../../../../lib/tour-countings.js';
+import {
   addAndReserveTourProduct,
   releaseTourReservation,
 } from '../../../../lib/tour-reservations.js';
@@ -13,6 +16,19 @@ import { confirmTourLoading } from '../../../../lib/tour-loadings.js';
 const readTextField = (formData, name) => {
   const value = formData.get(name);
   return typeof value === 'string' ? value : '';
+};
+
+const readCountingLines = (formData) => {
+  const lineIds = formData.getAll('lineId');
+  const returnedQuantities = formData.getAll('returnedQuantity');
+  const length = Math.max(lineIds.length, returnedQuantities.length);
+
+  return Array.from({ length }, (_, index) => ({
+    lineId: typeof lineIds[index] === 'string' ? lineIds[index] : '',
+    returnedQuantity: typeof returnedQuantities[index] === 'string'
+      ? returnedQuantities[index]
+      : '',
+  }));
 };
 
 export const addTourProduct = async (
@@ -178,6 +194,61 @@ export const loadTour = async (tourId, previousState, formData) => {
     return {
       errors: {
         form: 'La confirmation du chargement est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+    };
+  }
+};
+
+export const countTour = async (tourId, previousState, formData) => {
+  const session = await requirePermission('tours.count.confirm');
+
+  await requireUserPermission(session.userId, 'tours.read');
+  await requireUserPermission(session.userId, 'pricing.read');
+
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await confirmTourCounting({
+      confirmationKey: readTextField(formData, 'confirmationKey'),
+      countedBy: session.userId,
+      expectedSheetDigest: readTextField(formData, 'countingSheetDigest'),
+      lines: readCountingLines(formData),
+      tourId,
+    });
+
+    if (result.errors) {
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+      };
+    }
+
+    revalidatePath(`/tournees/${tourId}`);
+    revalidatePath('/produits');
+
+    for (const productId of result.productIds) {
+      revalidatePath(`/produits/${productId}`);
+    }
+
+    return {
+      errors: {},
+      message: result.replayed
+        ? 'Ce comptage avait déjà été enregistré ; aucun second retour n’a été créé.'
+        : 'Le comptage a été enregistré et les retours ont réintégré le stock.',
+      replayed: result.replayed,
+      revision,
+    };
+  } catch (error) {
+    console.error('Échec de l’enregistrement du comptage :', error);
+
+    return {
+      errors: {
+        form: 'L’enregistrement du comptage est momentanément indisponible.',
       },
       message: null,
       revision,

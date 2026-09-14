@@ -23,6 +23,8 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
 
 const formatMovementKind = (kind) => kind === 'TOUR_LOADING_OUT'
   ? 'Chargement de tournée'
+  : kind === 'TOUR_RETURN_IN'
+    ? 'Retour de tournée'
   : kind === 'RECEPTION_IN'
     ? 'Réception'
     : 'Mouvement physique';

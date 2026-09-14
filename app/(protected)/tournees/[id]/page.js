@@ -7,11 +7,13 @@ import { getUserPermissions } from '../../../../lib/access.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
+  TOUR_COUNTING_CONFIRM_PERMISSIONS,
   TOUR_COUNTING_PERMISSIONS,
   getTourCountingSheet,
 } from '../../../../lib/tour-countings.js';
 import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
+  TOUR_STATUS_COUNTED,
   TOUR_STATUS_LOADED,
   TOUR_STATUS_PREPARATION,
   formatTourCreatedAt,
@@ -59,6 +61,9 @@ const TourPage = async ({ params, searchParams }) => {
   const canPrepareCounting = TOUR_COUNTING_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
+  const canConfirmCounting = TOUR_COUNTING_CONFIRM_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -68,7 +73,7 @@ const TourPage = async ({ params, searchParams }) => {
     ? await getTourLoadingPreview({ tourId: tour.id, userId: session.userId })
     : null;
   const countingSheet = canPrepareCounting
-    && tour.status === TOUR_STATUS_LOADED
+    && [TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED].includes(tour.status)
     ? await getTourCountingSheet({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
@@ -95,7 +100,7 @@ const TourPage = async ({ params, searchParams }) => {
               {tour.reference}
             </h1>
           </div>
-          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
             {formatTourStatus(tour.status)}
           </span>
         </div>
@@ -108,10 +113,16 @@ const TourPage = async ({ params, searchParams }) => {
             ['Statut', formatTourStatus(tour.status)],
             ['Créée par', tour.createdBy ?? 'Compte indisponible'],
             ['Créée le', formatTourCreatedAt(tour.createdAt)],
-            ...(tour.status === TOUR_STATUS_LOADED
+            ...([TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED].includes(tour.status)
               ? [
                   ['Chargée par', tour.loadedBy ?? 'Compte indisponible'],
                   ['Chargée le', formatTourCreatedAt(tour.loadedAt)],
+                ]
+              : []),
+            ...(tour.status === TOUR_STATUS_COUNTED
+              ? [
+                  ['Comptée par', tour.countedBy ?? 'Compte indisponible'],
+                  ['Comptée le', formatTourCreatedAt(tour.countedAt)],
                 ]
               : []),
           ].map(([label, value]) => (
@@ -145,7 +156,14 @@ const TourPage = async ({ params, searchParams }) => {
         />
       )}
 
-      {countingSheet && <TourCountingSheet sheet={countingSheet} />}
+      {countingSheet && (
+        <TourCountingSheet
+          canConfirm={canConfirmCounting}
+          initialConfirmationKey={randomUUID()}
+          sheet={countingSheet}
+          tourId={tour.id}
+        />
+      )}
 
       {tour.lines.length > 0 ? (
         <TourProductList
@@ -153,7 +171,7 @@ const TourPage = async ({ params, searchParams }) => {
           canRelease={canReleaseTourProducts
             && tour.status === TOUR_STATUS_PREPARATION}
           lines={tour.lines}
-          loaded={tour.status === TOUR_STATUS_LOADED}
+          loaded={tour.status !== TOUR_STATUS_PREPARATION}
           tourId={tour.id}
         />
       ) : (
