@@ -2,6 +2,9 @@
 
 import { useActionState, useMemo, useState } from 'react';
 
+import ConfirmationDialog, {
+  useFormConfirmation,
+} from '../../confirmation-dialog.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { calculateTourCounting } from '../../../../lib/tour-counting-calculations.js';
 import { countTour } from './actions.js';
@@ -32,6 +35,12 @@ const TourCountingSheet = ({
     countCurrentTour,
     INITIAL_STATE,
   );
+  const {
+    confirmSubmission,
+    dialogRef,
+    requestConfirmation,
+    restoreTriggerFocus,
+  } = useFormConfirmation();
   const [opened, setOpened] = useState(Boolean(sheet?.recorded));
   const [returnedQuantities, setReturnedQuantities] = useState(() =>
     Object.fromEntries((sheet?.lines ?? EMPTY_LINES).map((line) => [
@@ -76,27 +85,6 @@ const TourCountingSheet = ({
     firstLineIndex,
     firstLineIndex + LINES_PER_PAGE,
   );
-  const confirmationRecap = lines.map((line) => {
-    const calculation = calculationsById.get(line.id);
-
-    return [
-      `${line.productCode} — ${line.productDesignation}`,
-      `chargé ${formatQuantity(line.quantityInBaseUnits)} ${line.baseUnit}`,
-      `retourné ${formatQuantity(calculation?.returnedQuantityInBaseUnits)} ${line.baseUnit}`,
-      `vendu ${formatQuantity(calculation?.soldQuantityInBaseUnits)} ${line.baseUnit}`,
-      `${formatReceptionMoney(line.salePriceAtLoading?.amountInCentimes)} TTC / ${line.baseUnit}`,
-      `dû ${formatReceptionMoney(calculation?.amountDueInCentimes)}`,
-    ].join(' · ');
-  }).join('\n');
-  const confirmation = [
-    'Enregistrer définitivement le comptage complet de cette tournée ?',
-    '',
-    confirmationRecap,
-    '',
-    `Total dû : ${formatReceptionMoney(summary.totalDueInCentimes)}`,
-    '',
-    'Cette confirmation constate la restitution physique des retours. Le comptage ne sera plus modifiable.',
-  ].join('\n');
   const confirmationUnavailable = sheet?.recorded
     || !canConfirm
     || !summary.complete
@@ -150,11 +138,7 @@ const TourCountingSheet = ({
                   return;
                 }
 
-                if (
-                  !globalThis.confirm(confirmation)
-                ) {
-                  event.preventDefault();
-                }
+                requestConfirmation(event);
               }}
             >
               <div className='border-b border-violet-200 bg-white/70 p-5 sm:p-6'>
@@ -451,6 +435,35 @@ const TourCountingSheet = ({
                       >
                         {pending ? 'Enregistrement…' : 'Enregistrer le comptage'}
                       </button>
+                      <ConfirmationDialog
+                        confirmLabel='Enregistrer définitivement'
+                        dialogRef={dialogRef}
+                        onClose={restoreTriggerFocus}
+                        onConfirm={confirmSubmission}
+                        pending={pending}
+                        pendingLabel='Enregistrement…'
+                        title='Enregistrer ce comptage ?'
+                        tone='violet'
+                      >
+                        <p>
+                          Vous allez enregistrer définitivement le comptage de{' '}
+                          <strong className='text-slate-950'>
+                            {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                          </strong>.
+                        </p>
+                        <div className='rounded-xl bg-violet-50 p-4'>
+                          <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
+                            Total dû calculé
+                          </p>
+                          <p className='mt-1 text-xl font-bold text-violet-950'>
+                            {formatReceptionMoney(summary.totalDueInCentimes)}
+                          </p>
+                        </div>
+                        <p>
+                          Cette confirmation constate la restitution physique
+                          des retours. Le comptage ne sera plus modifiable.
+                        </p>
+                      </ConfirmationDialog>
                     </>
                   )}
                 </div>

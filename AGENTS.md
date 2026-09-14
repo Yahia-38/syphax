@@ -18,6 +18,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never make a table or list scrollable. Use pagination instead.
 - Every table and list must provide relevant search and filtering controls.
 
+## Syphax confirmation design
+
+- Never use browser-native confirmation prompts such as `window.confirm()`.
+  Always use an application-styled confirmation dialog.
+
 ## Testing policy
 
 - Run only tests targeted at the code being changed.

@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react';
 
 import { calculateCashPaymentPreview } from '../../lib/cash-payment-calculations.js';
 import { formatReceptionMoney } from '../../lib/receptions.js';
+import ConfirmationDialog, {
+  useFormConfirmation,
+} from './confirmation-dialog.js';
 
 const CashPaymentForm = ({
   cashRegister,
@@ -19,6 +22,12 @@ const CashPaymentForm = ({
 }) => {
   const [amount, setAmount] = useState(state.values?.amount ?? '');
   const [note, setNote] = useState(state.values?.note ?? '');
+  const {
+    confirmSubmission,
+    dialogRef,
+    requestConfirmation,
+    restoreTriggerFocus,
+  } = useFormConfirmation();
   const calculation = useMemo(() => calculateCashPaymentPreview({
     amount,
     remainingDueInCentimes,
@@ -34,18 +43,6 @@ const CashPaymentForm = ({
   const amountErrorId = `${amountId}-error`;
   const noteId = `${idPrefix}-note`;
   const noteErrorId = `${noteId}-error`;
-  const confirmation = calculation.amountInCentimes
-    ? [
-        'Confirmer l’argent effectivement reçu pour cette tournée ?',
-        '',
-        `Livreur : ${deliverer.code} — ${deliverer.name}`,
-        `Tournée : ${tourReference}`,
-        `Caisse : ${cashRegister.name} (${cashRegister.code})`,
-        `Montant reçu : ${formatReceptionMoney(calculation.amountInCentimes)}`,
-        `Reste prévu : ${formatReceptionMoney(calculation.remainingAfterPaymentInCentimes)}`,
-      ].join('\n')
-    : '';
-
   return (
     <form
       action={formAction}
@@ -53,10 +50,12 @@ const CashPaymentForm = ({
         if (
           !event.nativeEvent.submitter
           || calculation.remainingAfterPaymentInCentimes === null
-          || !globalThis.confirm(confirmation)
         ) {
           event.preventDefault();
+          return;
         }
+
+        requestConfirmation(event);
       }}
     >
       <div className='rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-sm text-amber-950'>
@@ -162,6 +161,51 @@ const CashPaymentForm = ({
           {pending ? 'Enregistrement…' : 'Confirmer le versement'}
         </button>
       </div>
+
+      <ConfirmationDialog
+        confirmLabel='Confirmer le versement'
+        dialogRef={dialogRef}
+        onClose={restoreTriggerFocus}
+        onConfirm={confirmSubmission}
+        pending={pending}
+        pendingLabel='Enregistrement…'
+        title='Confirmer l’encaissement ?'
+        tone='amber'
+      >
+        <p>
+          Confirmez l’argent effectivement reçu pour cette tournée.
+        </p>
+        <dl className='grid gap-2 rounded-xl bg-slate-50 p-4 sm:grid-cols-2'>
+          {[
+            ['Livreur', `${deliverer.code} — ${deliverer.name}`],
+            ['Tournée', tourReference],
+            ['Caisse', `${cashRegister.name} (${cashRegister.code})`],
+            [
+              'Montant reçu',
+              calculation.amountInCentimes === null
+                ? 'Non calculable'
+                : formatReceptionMoney(calculation.amountInCentimes),
+            ],
+            [
+              'Reste prévu',
+              calculation.remainingAfterPaymentInCentimes === null
+                ? 'Non calculable'
+                : formatReceptionMoney(
+                    calculation.remainingAfterPaymentInCentimes,
+                  ),
+            ],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                {label}
+              </dt>
+              <dd className='mt-0.5 break-words font-semibold text-slate-950'>
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </ConfirmationDialog>
     </form>
   );
 };

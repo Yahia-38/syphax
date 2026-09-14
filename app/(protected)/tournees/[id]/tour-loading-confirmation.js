@@ -2,6 +2,9 @@
 
 import { useActionState, useMemo, useState } from 'react';
 
+import ConfirmationDialog, {
+  useFormConfirmation,
+} from '../../confirmation-dialog.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { loadTour } from './actions.js';
 
@@ -25,6 +28,12 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
     loadCurrentTour,
     INITIAL_STATE,
   );
+  const {
+    confirmSubmission,
+    dialogRef,
+    requestConfirmation,
+    restoreTriggerFocus,
+  } = useFormConfirmation();
   const [query, setQuery] = useState('');
   const [unit, setUnit] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,21 +62,6 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
     firstLineIndex,
     firstLineIndex + LINES_PER_PAGE,
   );
-  const recap = lines.map((line) => [
-    `${line.productCode} — ${line.productDesignation}`,
-    `${formatQuantity(line.quantityInBaseUnits)} ${line.baseUnit}`,
-    `${formatReceptionMoney(line.salePriceAtLoading.amountInCentimes)} TTC / ${line.salePriceAtLoading.unit}`,
-    formatReceptionMoney(line.loadedValueInCentimes),
-  ].join(' · ')).join('\n');
-  const confirmation = [
-    'Confirmer le chargement complet de cette tournée ?',
-    '',
-    recap,
-    '',
-    `Valeur des marchandises chargées : ${formatReceptionMoney(preview?.totalValueInCentimes)}`,
-    '',
-    'Cette valeur n’est ni une vente définitive ni un encaissement. Les lignes ne pourront plus être ajoutées ou retirées après confirmation.',
-  ].join('\n');
   const unavailable = Boolean(preview?.errors?.form || !preview?.digest);
 
   return (
@@ -214,11 +208,7 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
             </div>
             <form
               action={formAction}
-              onSubmit={(event) => {
-                if (!globalThis.confirm(confirmation)) {
-                  event.preventDefault();
-                }
-              }}
+              onSubmit={requestConfirmation}
             >
               <input
                 name='loadingDigest'
@@ -232,6 +222,35 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
               >
                 {pending ? 'Confirmation…' : 'Confirmer le chargement'}
               </button>
+              <ConfirmationDialog
+                confirmLabel='Confirmer le chargement'
+                dialogRef={dialogRef}
+                onClose={restoreTriggerFocus}
+                onConfirm={confirmSubmission}
+                pending={pending}
+                title='Confirmer ce chargement ?'
+                tone='blue'
+              >
+                <p>
+                  Vous allez confirmer le chargement complet de{' '}
+                  <strong className='text-slate-950'>
+                    {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                  </strong>.
+                </p>
+                <div className='rounded-xl bg-blue-50 p-4'>
+                  <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
+                    Valeur des marchandises chargées
+                  </p>
+                  <p className='mt-1 text-xl font-bold text-blue-950'>
+                    {formatReceptionMoney(preview?.totalValueInCentimes)}
+                  </p>
+                </div>
+                <p>
+                  Cette valeur n’est ni une vente définitive ni un encaissement.
+                  Les lignes ne pourront plus être ajoutées ou retirées après
+                  confirmation.
+                </p>
+              </ConfirmationDialog>
             </form>
           </div>
         </>

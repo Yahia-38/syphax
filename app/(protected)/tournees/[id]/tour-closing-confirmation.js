@@ -2,6 +2,9 @@
 
 import { useActionState } from 'react';
 
+import ConfirmationDialog, {
+  useFormConfirmation,
+} from '../../confirmation-dialog.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { closeTour } from './actions.js';
 
@@ -20,6 +23,12 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
     closeCurrentTour,
     INITIAL_STATE,
   );
+  const {
+    confirmSubmission,
+    dialogRef,
+    requestConfirmation,
+    restoreTriggerFocus,
+  } = useFormConfirmation();
 
   if (preview.errors?.form) {
     return (
@@ -34,18 +43,6 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
   const remainingMessage = preview.remainingDueInCentimes > 0
     ? `Cette tournée sera terminée avec un reste à payer de ${formatReceptionMoney(preview.remainingDueInCentimes)}. Ce montant pourra être encaissé ultérieurement.`
     : 'Cette tournée est soldée. Aucun versement supplémentaire n’est nécessaire.';
-  const confirmation = [
-    'Terminer cette tournée comptée ?',
-    '',
-    `Tournée : ${preview.tourReference}`,
-    `Livreur : ${preview.deliverer.code} — ${preview.deliverer.name}`,
-    `Montant dû : ${formatReceptionMoney(preview.amountDueInCentimes)}`,
-    `Total encaissé : ${formatReceptionMoney(preview.amountPaidInCentimes)}`,
-    `Reste à payer : ${formatReceptionMoney(preview.remainingDueInCentimes)}`,
-    '',
-    remainingMessage,
-  ].join('\n');
-
   return (
     <section
       aria-labelledby='tour-closing-title'
@@ -84,11 +81,7 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
       <form
         action={formAction}
         className='border-t border-slate-200 bg-white p-5 sm:p-6'
-        onSubmit={(event) => {
-          if (!event.nativeEvent.submitter || !globalThis.confirm(confirmation)) {
-            event.preventDefault();
-          }
-        }}
+        onSubmit={requestConfirmation}
       >
         <p className={`rounded-xl border px-4 py-3 text-sm leading-6 ${preview.remainingDueInCentimes > 0 ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
           {remainingMessage}
@@ -111,6 +104,39 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
             {pending ? 'Clôture…' : 'Terminer la tournée'}
           </button>
         </div>
+
+        <ConfirmationDialog
+          confirmLabel='Terminer la tournée'
+          dialogRef={dialogRef}
+          onClose={restoreTriggerFocus}
+          onConfirm={confirmSubmission}
+          pending={pending}
+          pendingLabel='Clôture…'
+          title='Terminer cette tournée ?'
+          tone='slate'
+        >
+          <p>
+            Tournée <strong className='text-slate-950'>{preview.tourReference}</strong>
+            {' '}de {preview.deliverer.code} — {preview.deliverer.name}.
+          </p>
+          <dl className='grid gap-2 rounded-xl bg-slate-50 p-4 sm:grid-cols-3'>
+            {[
+              ['Montant dû', preview.amountDueInCentimes],
+              ['Total encaissé', preview.amountPaidInCentimes],
+              ['Reste à payer', preview.remainingDueInCentimes],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+                  {label}
+                </dt>
+                <dd className='mt-0.5 font-semibold text-slate-950'>
+                  {formatReceptionMoney(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p>{remainingMessage}</p>
+        </ConfirmationDialog>
       </form>
     </section>
   );
