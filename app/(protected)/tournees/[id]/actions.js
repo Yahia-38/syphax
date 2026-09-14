@@ -10,6 +10,7 @@ import {
   recordTourCashPayment,
 } from '../../../../lib/cash-payments.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import { closeCountedTour } from '../../../../lib/tour-closures.js';
 import {
   confirmTourCounting,
 } from '../../../../lib/tour-countings.js';
@@ -326,6 +327,65 @@ export const recordTourPayment = async (tourId, previousState, formData) => {
       revision,
       succeeded: false,
       values,
+    };
+  }
+};
+
+export const closeTour = async (tourId, previousState, formData) => {
+  const session = await requirePermission('tours.close');
+
+  await requireUserPermission(session.userId, 'tours.read');
+  await requireUserPermission(session.userId, CASH_READ_PERMISSION);
+
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await closeCountedTour({
+      closedBy: session.userId,
+      expectedDigest: readTextField(formData, 'closureDigest'),
+      tourId,
+    });
+
+    if (result.errors) {
+      if (result.stale) {
+        revalidatePath(`/tournees/${tourId}`);
+      }
+
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+        stale: Boolean(result.stale),
+        succeeded: false,
+      };
+    }
+
+    revalidatePath(`/tournees/${tourId}`);
+    revalidatePath(`/livreurs/${result.closure.delivererId}`);
+
+    return {
+      errors: {},
+      message: result.replayed
+        ? 'Cette tournée avait déjà été terminée.'
+        : 'La tournée a été terminée.',
+      replayed: result.replayed,
+      revision,
+      stale: false,
+      succeeded: true,
+    };
+  } catch (error) {
+    console.error('Échec de la clôture de la tournée :', error);
+
+    return {
+      errors: {
+        form: 'La clôture de la tournée est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+      stale: false,
+      succeeded: false,
     };
   }
 };

@@ -7,6 +7,7 @@ const permissions = [
   'tours.load',
   'tours.count.prepare',
   'tours.count.confirm',
+  'tours.close',
   'tours.products.add',
   'tours.products.release',
 ];

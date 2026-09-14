@@ -12,12 +12,17 @@ import {
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
+  TOUR_CLOSE_PERMISSIONS,
+  getTourClosurePreview,
+} from '../../../../lib/tour-closures.js';
+import {
   TOUR_COUNTING_CONFIRM_PERMISSIONS,
   TOUR_COUNTING_PERMISSIONS,
   getTourCountingSheet,
 } from '../../../../lib/tour-countings.js';
 import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
+  TOUR_STATUS_CLOSED,
   TOUR_STATUS_COUNTED,
   TOUR_STATUS_LOADED,
   TOUR_STATUS_PREPARATION,
@@ -30,6 +35,7 @@ import {
 import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
 import TourCountingSheet from './tour-counting-sheet.js';
+import TourClosingConfirmation from './tour-closing-confirmation.js';
 import TourLoadingConfirmation from './tour-loading-confirmation.js';
 import TourPaymentPreview from './tour-payment-preview.js';
 
@@ -74,6 +80,9 @@ const TourPage = async ({ params, searchParams }) => {
   const canCreateCashPayment = CASH_PAYMENT_FORM_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
+  const canCloseTour = TOUR_CLOSE_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -83,11 +92,16 @@ const TourPage = async ({ params, searchParams }) => {
     ? await getTourLoadingPreview({ tourId: tour.id, userId: session.userId })
     : null;
   const countingSheet = canPrepareCounting
-    && [TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED].includes(tour.status)
+    && [TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED]
+      .includes(tour.status)
     ? await getTourCountingSheet({ tourId: tour.id, userId: session.userId })
     : null;
-  const paymentPreview = canReadCash && tour.status === TOUR_STATUS_COUNTED
+  const paymentPreview = canReadCash
+    && [TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status)
     ? await getTourPaymentPreview({ tourId: tour.id, userId: session.userId })
+    : null;
+  const closurePreview = canCloseTour && tour.status === TOUR_STATUS_COUNTED
+    ? await getTourClosurePreview({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
@@ -113,7 +127,7 @@ const TourPage = async ({ params, searchParams }) => {
               {tour.reference}
             </h1>
           </div>
-          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_CLOSED ? 'bg-slate-200 text-slate-800' : tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
             {formatTourStatus(tour.status)}
           </span>
         </div>
@@ -126,16 +140,23 @@ const TourPage = async ({ params, searchParams }) => {
             ['Statut', formatTourStatus(tour.status)],
             ['Créée par', tour.createdBy ?? 'Compte indisponible'],
             ['Créée le', formatTourCreatedAt(tour.createdAt)],
-            ...([TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED].includes(tour.status)
+            ...([TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED]
+              .includes(tour.status)
               ? [
                   ['Chargée par', tour.loadedBy ?? 'Compte indisponible'],
                   ['Chargée le', formatTourCreatedAt(tour.loadedAt)],
                 ]
               : []),
-            ...(tour.status === TOUR_STATUS_COUNTED
+            ...([TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status)
               ? [
                   ['Comptée par', tour.countedBy ?? 'Compte indisponible'],
                   ['Comptée le', formatTourCreatedAt(tour.countedAt)],
+                ]
+              : []),
+            ...(tour.status === TOUR_STATUS_CLOSED
+              ? [
+                  ['Terminée par', tour.closedBy ?? 'Compte indisponible'],
+                  ['Terminée le', formatTourCreatedAt(tour.closedAt)],
                 ]
               : []),
           ].map(([label, value]) => (
@@ -183,6 +204,13 @@ const TourPage = async ({ params, searchParams }) => {
           canCreatePayment={canCreateCashPayment}
           initialConfirmationKey={randomUUID()}
           preview={paymentPreview}
+          tourId={tour.id}
+        />
+      )}
+
+      {closurePreview && (
+        <TourClosingConfirmation
+          preview={closurePreview}
           tourId={tour.id}
         />
       )}

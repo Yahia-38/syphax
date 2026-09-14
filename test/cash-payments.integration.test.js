@@ -453,6 +453,28 @@ test('autorise le versement après désactivation du livreur', async () => {
   assert.equal(result.remainingDueInCentimes, 250_000);
 });
 
+test('autorise le versement d’une tournée terminée sans la rouvrir', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour({ status: 'CLOSED' });
+  const result = await submitPayment({
+    amount: '5000',
+    cashRegisterId: cashRegister.id,
+    tourId: tour.tourId,
+  });
+  const preview = await getTourPaymentPreview({
+    tourId: tour.tourId.toString(),
+    userId: cashierId.toString(),
+  });
+  const storedTour = await database.collection('tours').findOne({
+    _id: tour.tourId,
+  });
+
+  assert.equal(result.remainingDueInCentimes, 250_000);
+  assert.equal(preview.amountPaidInCentimes, 500_000);
+  assert.equal(preview.remainingDueInCentimes, 250_000);
+  assert.equal(storedTour.status, 'CLOSED');
+});
+
 test('annule les verrous et le versement si son insertion échoue', async () => {
   const cashRegister = await initializeMainCashRegister();
   const tour = await insertTour();
