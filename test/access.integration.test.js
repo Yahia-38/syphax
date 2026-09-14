@@ -74,6 +74,7 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   assert.ok(PERMISSION_KEYS.includes('tours.read'));
   assert.ok(PERMISSION_KEYS.includes('tours.create'));
   assert.ok(PERMISSION_KEYS.includes('tours.load'));
+  assert.ok(PERMISSION_KEYS.includes('tours.cancel'));
   assert.ok(PERMISSION_KEYS.includes('tours.count.prepare'));
   assert.ok(PERMISSION_KEYS.includes('tours.count.confirm'));
   assert.ok(PERMISSION_KEYS.includes('tours.products.add'));
@@ -81,6 +82,7 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.read'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.create'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.load'), false);
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('tours.cancel'), false);
   assert.equal(
     INITIAL_MANAGER_PERMISSIONS.includes('tours.count.prepare'),
     false,
@@ -167,6 +169,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   const toursRead = await grantYahiaFullAccessPermission('tours.read');
   const toursCreate = await grantYahiaFullAccessPermission('tours.create');
   const toursLoad = await grantYahiaFullAccessPermission('tours.load');
+  const toursCancel = await grantYahiaFullAccessPermission('tours.cancel');
   const toursCountPrepare = await grantYahiaFullAccessPermission(
     'tours.count.prepare',
   );
@@ -193,6 +196,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.equal(toursRead.granted, true);
   assert.equal(toursCreate.granted, true);
   assert.equal(toursLoad.granted, true);
+  assert.equal(toursCancel.granted, true);
   assert.equal(toursCountPrepare.granted, true);
   assert.equal(toursCountConfirm.granted, true);
   assert.equal(toursProductsAdd.granted, true);
@@ -205,6 +209,7 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
     'tours.read',
     'tours.create',
     'tours.load',
+    'tours.cancel',
     'tours.count.prepare',
     'tours.count.confirm',
     'tours.products.add',

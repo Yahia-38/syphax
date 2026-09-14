@@ -34,6 +34,7 @@ const formatPriceSourceDate = (value) => value
 const TourProductList = ({
   canReadPricing,
   canRelease,
+  cancelled,
   lines,
   loaded,
   tourId,
@@ -89,7 +90,11 @@ const TourProductList = ({
     >
       <div className='border-b border-slate-200 p-5 sm:p-6'>
         <h2 className='text-lg font-semibold text-slate-900' id='tour-products-title'>
-          {loaded ? 'Produits chargés' : 'Produits réservés'}
+          {cancelled
+            ? 'Lignes historiques de la tournée'
+            : loaded
+              ? 'Produits chargés'
+              : 'Produits réservés'}
         </h2>
         <p className='mt-1 text-sm text-slate-600'>
           {lines.length} ligne{lines.length > 1 ? 's' : ''} dans la tournée.
@@ -184,11 +189,11 @@ const TourProductList = ({
                   </p>
                 </div>
                 <div className='shrink-0 sm:text-right'>
-                  <div className={`rounded-xl border px-4 py-3 ${loaded ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                    <p className={`text-xs font-semibold uppercase tracking-wide ${loaded ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {loaded ? 'Chargé' : 'Réservé'}
+                  <div className={`rounded-xl border px-4 py-3 ${cancelled ? 'border-red-200 bg-red-50' : loaded ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${cancelled ? 'text-red-700' : loaded ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {cancelled ? 'Historique' : loaded ? 'Chargé' : 'Réservé'}
                     </p>
-                    <p className={`mt-1 text-xl font-bold tabular-nums ${loaded ? 'text-emerald-950' : 'text-amber-950'}`}>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${cancelled ? 'text-red-950' : loaded ? 'text-emerald-950' : 'text-amber-950'}`}>
                       {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
                     </p>
                   </div>

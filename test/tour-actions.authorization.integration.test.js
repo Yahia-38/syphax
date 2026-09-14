@@ -29,9 +29,13 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
-const { addTourProduct, countTour, loadTour, releaseTourProduct } = await import(
-  '../app/(protected)/tournees/[id]/actions.js'
-);
+const {
+  addTourProduct,
+  cancelCurrentTour,
+  countTour,
+  loadTour,
+  releaseTourProduct,
+} = await import('../app/(protected)/tournees/[id]/actions.js');
 
 let database;
 
@@ -133,6 +137,15 @@ const createTourCountingFormData = () => {
   formData.set('countingSheetDigest', 'a'.repeat(64));
   formData.append('lineId', new ObjectId().toString());
   formData.append('returnedQuantity', '0');
+
+  return formData;
+};
+
+const createTourCancellationFormData = () => {
+  const formData = new FormData();
+
+  formData.set('cancellationDigest', 'a'.repeat(64));
+  formData.set('cancellationReason', 'Annulation interdite');
 
   return formData;
 };
@@ -283,6 +296,67 @@ test('refuse la confirmation du chargement sans tours.load', async () => {
     sourceTourId: tourId,
   }), 0);
   await database.collection('tours').deleteOne({ _id: tourId });
+});
+
+test('refuse l’annulation sans tours.cancel et ne libère rien', async () => {
+  const { token } = await createUserSession(
+    'lecture-tournee-sans-annulation',
+    ['tours.read'],
+  );
+  const productId = new ObjectId();
+  const reservationId = new ObjectId();
+  const tourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('products').insertOne({
+      _id: productId,
+      baseUnit: 'PIECE',
+      code: 'PRD-SANS-ANNULATION',
+      designation: 'Produit protégé de l’annulation',
+    }),
+    database.collection('tours').insertOne({
+      _id: tourId,
+      reference: `TRN-${tourId.toHexString().toLocaleUpperCase('en')}`,
+      status: 'PREPARATION',
+    }),
+    database.collection('tourReservations').insertOne({
+      _id: reservationId,
+      baseUnit: 'PIECE',
+      productCode: 'PRD-SANS-ANNULATION',
+      productDesignation: 'Produit protégé de l’annulation',
+      productId,
+      quantityInBaseUnits: 10,
+      status: 'ACTIVE',
+      tourId,
+    }),
+  ]);
+
+  await assert.rejects(
+    callWithSession(token, () => cancelCurrentTour(
+      tourId.toString(),
+      { revision: 0 },
+      createTourCancellationFormData(),
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'tours.cancel',
+  );
+
+  const [tour, reservation, product] = await Promise.all([
+    database.collection('tours').findOne({ _id: tourId }),
+    database.collection('tourReservations').findOne({ _id: reservationId }),
+    database.collection('products').findOne({ _id: productId }),
+  ]);
+
+  assert.equal(tour.status, 'PREPARATION');
+  assert.equal(reservation.status, 'ACTIVE');
+  assert.equal('releasedAt' in reservation, false);
+  assert.equal('stockReferenceVersion' in product, false);
+
+  await Promise.all([
+    database.collection('products').deleteOne({ _id: productId }),
+    database.collection('tourReservations').deleteOne({ _id: reservationId }),
+    database.collection('tours').deleteOne({ _id: tourId }),
+  ]);
 });
 
 test('refuse l’enregistrement du comptage sans la permission dédiée', async () => {

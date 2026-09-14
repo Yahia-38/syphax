@@ -9,6 +9,10 @@ import {
   CASH_READ_PERMISSION,
   getTourPaymentPreview,
 } from '../../../../lib/cash-payments.js';
+import {
+  TOUR_CANCEL_PERMISSION,
+  getTourCancellationPreview,
+} from '../../../../lib/tour-cancellations.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
@@ -22,6 +26,7 @@ import {
 } from '../../../../lib/tour-countings.js';
 import { getTourLoadingPreview } from '../../../../lib/tour-loadings.js';
 import {
+  TOUR_STATUS_CANCELLED,
   TOUR_STATUS_CLOSED,
   TOUR_STATUS_COUNTED,
   TOUR_STATUS_LOADED,
@@ -36,6 +41,7 @@ import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
 import TourCountingSheet from './tour-counting-sheet.js';
 import TourClosingConfirmation from './tour-closing-confirmation.js';
+import TourCancellationConfirmation from './tour-cancellation-confirmation.js';
 import TourLoadingConfirmation from './tour-loading-confirmation.js';
 import TourPaymentPreview from './tour-payment-preview.js';
 
@@ -70,6 +76,7 @@ const TourPage = async ({ params, searchParams }) => {
     'tours.products.release',
   );
   const canLoadTour = permissions.includes('tours.load') && canReadPricing;
+  const canCancelTour = permissions.includes(TOUR_CANCEL_PERMISSION);
   const canPrepareCounting = TOUR_COUNTING_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
@@ -90,6 +97,13 @@ const TourPage = async ({ params, searchParams }) => {
     && tour.status === TOUR_STATUS_PREPARATION
     && tour.lines.length > 0
     ? await getTourLoadingPreview({ tourId: tour.id, userId: session.userId })
+    : null;
+  const cancellationPreview = canCancelTour
+    && tour.status === TOUR_STATUS_PREPARATION
+    ? await getTourCancellationPreview({
+        tourId: tour.id,
+        userId: session.userId,
+      })
     : null;
   const countingSheet = canPrepareCounting
     && [TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED]
@@ -127,7 +141,7 @@ const TourPage = async ({ params, searchParams }) => {
               {tour.reference}
             </h1>
           </div>
-          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_CLOSED ? 'bg-slate-200 text-slate-800' : tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_CANCELLED ? 'bg-red-100 text-red-800' : tour.status === TOUR_STATUS_CLOSED ? 'bg-slate-200 text-slate-800' : tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
             {formatTourStatus(tour.status)}
           </span>
         </div>
@@ -159,6 +173,13 @@ const TourPage = async ({ params, searchParams }) => {
                   ['Terminée le', formatTourCreatedAt(tour.closedAt)],
                 ]
               : []),
+            ...(tour.status === TOUR_STATUS_CANCELLED
+              ? [
+                  ['Annulée par', tour.cancelledBy ?? 'Compte indisponible'],
+                  ['Annulée le', formatTourCreatedAt(tour.cancelledAt)],
+                  ['Motif d’annulation', tour.cancellationReason],
+                ]
+              : []),
           ].map(([label, value]) => (
             <div className='min-w-0 bg-white px-5 py-4 sm:px-6' key={label}>
               <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
@@ -171,6 +192,13 @@ const TourPage = async ({ params, searchParams }) => {
           ))}
         </dl>
       </header>
+
+      {cancellationPreview && (
+        <TourCancellationConfirmation
+          preview={cancellationPreview}
+          tourId={tour.id}
+        />
+      )}
 
       {canLoadTour
         && tour.status === TOUR_STATUS_PREPARATION
@@ -220,8 +248,13 @@ const TourPage = async ({ params, searchParams }) => {
           canReadPricing={canReadPricing}
           canRelease={canReleaseTourProducts
             && tour.status === TOUR_STATUS_PREPARATION}
+          cancelled={tour.status === TOUR_STATUS_CANCELLED}
           lines={tour.lines}
-          loaded={tour.status !== TOUR_STATUS_PREPARATION}
+          loaded={[
+            TOUR_STATUS_LOADED,
+            TOUR_STATUS_COUNTED,
+            TOUR_STATUS_CLOSED,
+          ].includes(tour.status)}
           tourId={tour.id}
         />
       ) : (

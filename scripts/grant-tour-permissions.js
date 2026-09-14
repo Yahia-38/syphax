@@ -5,6 +5,7 @@ const permissions = [
   'tours.read',
   'tours.create',
   'tours.load',
+  'tours.cancel',
   'tours.count.prepare',
   'tours.count.confirm',
   'tours.close',

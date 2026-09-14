@@ -6,6 +6,10 @@ import { requireUserPermission } from '../../../../lib/access.js';
 import {
   CASH_READ_PERMISSION,
 } from '../../../../lib/cash-payments.js';
+import {
+  TOUR_CANCEL_PERMISSION,
+  cancelTour,
+} from '../../../../lib/tour-cancellations.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import { closeCountedTour } from '../../../../lib/tour-closures.js';
 import {
@@ -201,6 +205,70 @@ export const loadTour = async (tourId, previousState, formData) => {
       },
       message: null,
       revision,
+    };
+  }
+};
+
+export const cancelCurrentTour = async (tourId, previousState, formData) => {
+  const session = await requirePermission(TOUR_CANCEL_PERMISSION);
+
+  await requireUserPermission(session.userId, 'tours.read');
+
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await cancelTour({
+      cancelledBy: session.userId,
+      expectedDigest: readTextField(formData, 'cancellationDigest'),
+      reason: readTextField(formData, 'cancellationReason'),
+      tourId,
+    });
+
+    if (result.errors) {
+      if (result.stale) {
+        revalidatePath(`/tournees/${tourId}`);
+      }
+
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+        stale: Boolean(result.stale),
+        succeeded: false,
+      };
+    }
+
+    revalidatePath(`/tournees/${tourId}`);
+    revalidatePath(`/livreurs/${result.cancellation.delivererId}`);
+    revalidatePath('/produits');
+
+    for (const productId of result.cancellation.productIds) {
+      revalidatePath(`/produits/${productId}`);
+    }
+
+    return {
+      errors: {},
+      message: result.replayed
+        ? 'Cette tournée avait déjà été annulée.'
+        : 'La tournée a été annulée et ses réservations ont été libérées.',
+      replayed: result.replayed,
+      revision,
+      stale: false,
+      succeeded: true,
+    };
+  } catch (error) {
+    console.error('Échec de l’annulation de la tournée :', error);
+
+    return {
+      errors: {
+        form: 'L’annulation de la tournée est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+      stale: false,
+      succeeded: false,
     };
   }
 };

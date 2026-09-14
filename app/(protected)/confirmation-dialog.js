@@ -63,6 +63,7 @@ export const useFormConfirmation = () => {
 
 const ConfirmationDialog = ({
   children,
+  confirmDisabled = false,
   confirmLabel,
   dialogRef,
   onClose,
@@ -108,7 +109,7 @@ const ConfirmationDialog = ({
           </button>
           <button
             className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${styles.confirm}`}
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             onClick={onConfirm}
             type='submit'
           >

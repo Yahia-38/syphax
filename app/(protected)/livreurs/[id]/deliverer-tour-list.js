@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import {
+  TOUR_STATUS_CANCELLED,
   buildDelivererToursHref,
   formatTourDate,
   formatTourStatus,
@@ -136,7 +137,7 @@ const DelivererTourList = ({
                   <span className='text-sm text-slate-600'>
                     {formatTourDate(tour.plannedDate)}
                   </span>
-                  <span className='w-fit rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800'>
+                  <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${tour.status === TOUR_STATUS_CANCELLED ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                     {formatTourStatus(tour.status)}
                   </span>
                 </Link>
