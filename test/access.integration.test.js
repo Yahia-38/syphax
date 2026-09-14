@@ -49,8 +49,16 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   assert.deepEqual(
     INITIAL_MANAGER_PERMISSIONS,
     PERMISSION_KEYS.filter((permission) =>
-      !permission.startsWith('deliverers.')
+      !permission.startsWith('cash.')
+      && !permission.startsWith('deliverers.')
       && !permission.startsWith('tours.')),
+  );
+  assert.ok(PERMISSION_KEYS.includes('cash.read'));
+  assert.ok(PERMISSION_KEYS.includes('cash.payments.create'));
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('cash.read'), false);
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('cash.payments.create'),
+    false,
   );
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
@@ -171,6 +179,10 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   const toursProductsRelease = await grantYahiaFullAccessPermission(
     'tours.products.release',
   );
+  const cashRead = await grantYahiaFullAccessPermission('cash.read');
+  const cashPaymentsCreate = await grantYahiaFullAccessPermission(
+    'cash.payments.create',
+  );
   const [yahiaRole, otherRole] = await Promise.all([
     database.collection('roles').findOne({ _id: yahiaRoleId }),
     database.collection('roles').findOne({ _id: otherRoleId }),
@@ -185,6 +197,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.equal(toursCountConfirm.granted, true);
   assert.equal(toursProductsAdd.granted, true);
   assert.equal(toursProductsRelease.granted, true);
+  assert.equal(cashRead.granted, true);
+  assert.equal(cashPaymentsCreate.granted, true);
   assert.deepEqual(yahiaRole.permissions, [
     'deliverers.read',
     'deliverers.status.update',
@@ -195,6 +209,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
     'tours.count.confirm',
     'tours.products.add',
     'tours.products.release',
+    'cash.read',
+    'cash.payments.create',
   ]);
   assert.deepEqual(otherRole.permissions, ['deliverers.read']);
 });

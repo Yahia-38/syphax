@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
+import {
+  CASH_PAYMENT_FORM_PERMISSIONS,
+  CASH_READ_PERMISSION,
+  getTourPaymentPreview,
+} from '../../../../lib/cash-payments.js';
 import { listProducts } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
@@ -26,6 +31,7 @@ import TourProductForm from './tour-product-form.js';
 import TourProductList from './tour-product-list.js';
 import TourCountingSheet from './tour-counting-sheet.js';
 import TourLoadingConfirmation from './tour-loading-confirmation.js';
+import TourPaymentPreview from './tour-payment-preview.js';
 
 export const metadata = {
   title: 'Fiche de tournée | Syphax',
@@ -64,6 +70,10 @@ const TourPage = async ({ params, searchParams }) => {
   const canConfirmCounting = TOUR_COUNTING_CONFIRM_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
+  const canReadCash = permissions.includes(CASH_READ_PERMISSION);
+  const canCreateCashPayment = CASH_PAYMENT_FORM_PERMISSIONS.every(
+    (permission) => permissions.includes(permission),
+  );
   const products = canAddTourProducts
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
@@ -75,6 +85,9 @@ const TourPage = async ({ params, searchParams }) => {
   const countingSheet = canPrepareCounting
     && [TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED].includes(tour.status)
     ? await getTourCountingSheet({ tourId: tour.id, userId: session.userId })
+    : null;
+  const paymentPreview = canReadCash && tour.status === TOUR_STATUS_COUNTED
+    ? await getTourPaymentPreview({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
@@ -162,6 +175,13 @@ const TourPage = async ({ params, searchParams }) => {
           initialConfirmationKey={randomUUID()}
           sheet={countingSheet}
           tourId={tour.id}
+        />
+      )}
+
+      {paymentPreview && (
+        <TourPaymentPreview
+          canCreatePayment={canCreateCashPayment}
+          preview={paymentPreview}
         />
       )}
 
