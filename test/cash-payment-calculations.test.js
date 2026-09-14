@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { ObjectId } from 'mongodb';
+
 import {
   calculateCashPaymentPreview,
   calculateDelivererCashAllocationPreview,
 } from '../lib/cash-payment-calculations.js';
+import {
+  calculateStoredPaymentTotal,
+  normalizeStoredPaymentAllocations,
+} from '../lib/cash-payments.js';
 
 test('prévisualise un versement partiel et un versement exact en centimes', () => {
   assert.deepEqual(calculateCashPaymentPreview({
@@ -165,4 +171,110 @@ test('refuse saisie invalide, dépassement, anomalie et date de comptage absente
   assert.equal(missingDate.blocked, true);
   assert.deepEqual(missingDate.allocations, []);
   assert.match(missingDate.error, /date du comptage/u);
+});
+
+test('normalise exclusivement le format historique ou les affectations explicites', () => {
+  const firstTourId = new ObjectId();
+  const firstCountingId = new ObjectId();
+  const secondTourId = new ObjectId();
+  const secondCountingId = new ObjectId();
+  const legacy = normalizeStoredPaymentAllocations({
+    amountInCentimes: 200_000,
+    currency: 'DZD',
+    sourceTourCountingId: firstCountingId,
+    tourId: firstTourId,
+    tourReference: 'TRN-A',
+  });
+  const explicit = normalizeStoredPaymentAllocations({
+    allocations: [
+      {
+        allocatedAmountInCentimes: 200_000,
+        sourceTourCountingId: firstCountingId,
+        tourId: firstTourId,
+        tourReference: 'TRN-A',
+      },
+      {
+        allocatedAmountInCentimes: 300_000,
+        sourceTourCountingId: secondCountingId,
+        tourId: secondTourId,
+        tourReference: 'TRN-B',
+      },
+    ],
+    amountInCentimes: 500_000,
+    currency: 'DZD',
+    sourceTourCountingId: new ObjectId(),
+    tourId: new ObjectId(),
+  });
+
+  assert.equal(legacy.usesExplicitAllocations, false);
+  assert.equal(legacy.allocations[0].allocatedAmountInCentimes, 200_000);
+  assert.equal(explicit.usesExplicitAllocations, true);
+  assert.deepEqual(
+    explicit.allocations.map(({ allocatedAmountInCentimes }) =>
+      allocatedAmountInCentimes),
+    [200_000, 300_000],
+  );
+  assert.equal(
+    calculateStoredPaymentTotal(
+      [
+        {
+          amountInCentimes: 200_000,
+          currency: 'DZD',
+          sourceTourCountingId: firstCountingId,
+          tourId: firstTourId,
+        },
+        {
+          allocations: explicit.allocations,
+          amountInCentimes: 500_000,
+          currency: 'DZD',
+        },
+      ],
+      firstCountingId,
+      firstTourId,
+    ),
+    400_000,
+  );
+});
+
+test('refuse toute liste explicite vide, nulle, incohérente ou dupliquée sans repli historique', () => {
+  const tourId = new ObjectId();
+  const countingId = new ObjectId();
+  const basePayment = {
+    amountInCentimes: 500_000,
+    currency: 'DZD',
+    sourceTourCountingId: countingId,
+    tourId,
+  };
+  const allocation = {
+    allocatedAmountInCentimes: 200_000,
+    sourceTourCountingId: countingId,
+    tourId,
+  };
+  const invalidPayments = [
+    { ...basePayment, allocations: [] },
+    { ...basePayment, allocations: null },
+    { ...basePayment, allocations: [allocation] },
+    {
+      ...basePayment,
+      allocations: [allocation, { ...allocation, allocatedAmountInCentimes: 300_000 }],
+    },
+    {
+      ...basePayment,
+      allocations: [{ ...allocation, allocatedAmountInCentimes: 0 }],
+    },
+    {
+      ...basePayment,
+      allocations: [{
+        ...allocation,
+        allocatedAmountInCentimes: Number.MAX_SAFE_INTEGER,
+      }, {
+        ...allocation,
+        tourId: new ObjectId(),
+      }],
+    },
+  ];
+
+  for (const payment of invalidPayments) {
+    assert.equal(normalizeStoredPaymentAllocations(payment), null);
+  }
 });

@@ -253,6 +253,95 @@ test('termine avec un paiement partiel et conserve le reste actuel', async () =>
   assert.equal((await database.collection('cashPayments').countDocuments({})), 1);
 });
 
+test('clôture avec uniquement le montant affecté par un versement multi-tournées', async () => {
+  const first = await insertCountedTour({ totalDueInCentimes: 750_000 });
+  const firstTour = await database.collection('tours').findOne({
+    _id: first.tourId,
+  });
+  const secondCountingId = new ObjectId();
+  const secondTourId = new ObjectId();
+
+  await Promise.all([
+    database.collection('tours').insertOne({
+      _id: secondTourId,
+      countingId: secondCountingId,
+      delivererCode: firstTour.delivererCode,
+      delivererId: first.delivererId,
+      delivererName: firstTour.delivererName,
+      reference: `TRN-${secondTourId.toString().toUpperCase()}`,
+      status: TOUR_STATUS_COUNTED,
+    }),
+    database.collection('tourCountings').insertOne({
+      _id: secondCountingId,
+      countedAt: new Date(),
+      countedBy: closerId,
+      lines: [],
+      totalDueInCentimes: 300_000,
+      tourId: secondTourId,
+    }),
+  ]);
+  const paymentId = new ObjectId();
+
+  await database.collection('cashPayments').insertOne({
+    _id: paymentId,
+    allocations: [
+      {
+        allocatedAmountInCentimes: 500_000,
+        sourceTourCountingId: first.countingId,
+        tourId: first.tourId,
+        tourReference: firstTour.reference,
+      },
+      {
+        allocatedAmountInCentimes: 100_000,
+        sourceTourCountingId: secondCountingId,
+        tourId: secondTourId,
+        tourReference: `TRN-${secondTourId.toString().toUpperCase()}`,
+      },
+    ],
+    amountInCentimes: 600_000,
+    cashRegisterCode: cashRegister.code,
+    cashRegisterId: new ObjectId(cashRegister.id),
+    cashRegisterName: cashRegister.name,
+    confirmationKey: randomUUID(),
+    currency: 'DZD',
+    delivererCode: firstTour.delivererCode,
+    delivererId: first.delivererId,
+    delivererName: firstTour.delivererName,
+    mode: 'CASH',
+    receivedAt: new Date(),
+    receivedBy: cashierId,
+    reference: `VRS-${paymentId.toString().toUpperCase()}`,
+  });
+
+  const preview = await readClosurePreview(first.tourId);
+  const result = await closeFromPreview(first.tourId, preview);
+
+  assert.equal(preview.amountPaidInCentimes, 500_000);
+  assert.equal(preview.remainingDueInCentimes, 250_000);
+  assert.equal(result.closure.amountPaidInCentimes, 500_000);
+  assert.equal(result.closure.remainingDueInCentimes, 250_000);
+});
+
+test('refuse la clôture si un champ allocations invalide masque des champs historiques', async () => {
+  const tour = await insertCountedTour({ totalDueInCentimes: 100_000 });
+
+  await database.collection('cashPayments').insertOne({
+    _id: new ObjectId(),
+    allocations: null,
+    amountInCentimes: 100_000,
+    confirmationKey: randomUUID(),
+    currency: 'DZD',
+    delivererId: tour.delivererId,
+    reference: `VRS-${new ObjectId().toString().toUpperCase()}`,
+    sourceTourCountingId: tour.countingId,
+    tourId: tour.tourId,
+  });
+
+  const preview = await readClosurePreview(tour.tourId);
+
+  assert.match(preview.errors.form, /versements enregistrés/u);
+});
+
 test('termine sans versement, y compris lorsque le montant dû est nul', async () => {
   for (const totalDueInCentimes of [750_000, 0]) {
     const tour = await insertCountedTour({ totalDueInCentimes });

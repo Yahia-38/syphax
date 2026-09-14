@@ -210,7 +210,7 @@ const CashJournal = ({
                     ['Date et heure', 'w-[16%]'],
                     ['Référence du versement', 'w-[20%]'],
                     ['Livreur', 'w-[18%]'],
-                    ['Référence de tournée', 'w-[18%]'],
+                    ['Affectations', 'w-[18%]'],
                     ['Montant en DA', 'w-[14%]'],
                     ['Auteur de l’encaissement', 'w-[14%]'],
                   ].map(([label, width]) => (
@@ -258,15 +258,40 @@ const CashJournal = ({
                       )}
                       <span className='mt-1 block'>{payment.deliverer.name}</span>
                     </td>
-                    <td className='break-all px-2 py-3 font-mono text-xs text-slate-700 sm:px-4'>
-                      {canReadTours && payment.tour.id ? (
-                        <Link
-                          className='font-semibold text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                          href={`/tournees/${payment.tour.id}`}
-                        >
-                          {payment.tour.reference}
-                        </Link>
-                      ) : payment.tour.reference}
+                    <td className='break-words px-2 py-3 text-xs text-slate-700 sm:px-4'>
+                      {payment.allocations ? (
+                        <details>
+                          <summary className='cursor-pointer font-semibold text-blue-800'>
+                            {payment.allocations.length} affectation{payment.allocations.length > 1 ? 's' : ''}
+                          </summary>
+                          <div className='mt-2 space-y-2'>
+                            {payment.allocations.map((allocation) => (
+                              <div
+                                className='rounded-lg bg-slate-50 p-2'
+                                key={allocation.id}
+                              >
+                                <p className='break-all font-mono'>
+                                  {canReadTours && allocation.id ? (
+                                    <Link
+                                      className='font-semibold text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                                      href={`/tournees/${allocation.id}`}
+                                    >
+                                      {allocation.reference}
+                                    </Link>
+                                  ) : allocation.reference}
+                                </p>
+                                <p className='mt-1 font-semibold text-slate-900'>
+                                  {formatCashAmount(allocation.amountInCentimes)}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : (
+                        <span className='font-medium text-red-700'>
+                          Affectations incohérentes
+                        </span>
+                      )}
                     </td>
                     <td className='break-words px-2 py-3 text-xs font-semibold text-slate-900 sm:px-4'>
                       {formatCashAmount(payment.amountInCentimes)}
