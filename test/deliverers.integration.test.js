@@ -16,6 +16,7 @@ const {
   createDeliverer,
   getDelivererById,
   listDeliverers,
+  updateDeliverer,
 } = await import('../lib/deliverers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 
@@ -117,7 +118,129 @@ test('retourne la fiche du livreur et le nom de son créateur', async () => {
       phone: '',
       createdAt: createdAt.toISOString(),
       createdBy: 'lecteur-livreurs',
+      updatedAt: null,
+      updatedBy: null,
     },
+  );
+});
+
+test('modifie les informations sans altérer les métadonnées de création', async () => {
+  const delivererId = new ObjectId();
+  const updaterId = new ObjectId();
+  const createdAt = new Date('2026-09-13T07:30:00.000Z');
+
+  await Promise.all([
+    database.collection('users').insertOne({
+      _id: updaterId,
+      username: 'modificateur-livreurs',
+    }),
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      code: 'LIV-INCHANGE',
+      name: 'Nom initial',
+      phone: '0550 00 00 00',
+      createdAt,
+      createdBy: readerId,
+    }),
+  ]);
+
+  const startedAt = new Date();
+  const result = await updateDeliverer({
+    delivererId: delivererId.toString(),
+    code: ' liv-inchange ',
+    name: ' Nom actualisé ',
+    phone: ' 0770 00 00 00 ',
+    updatedBy: updaterId.toString(),
+  });
+  const storedDeliverer = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.deepEqual(result.deliverer, {
+    id: delivererId.toString(),
+    code: 'LIV-INCHANGE',
+    name: 'Nom actualisé',
+    phone: '0770 00 00 00',
+  });
+  assert.equal(storedDeliverer._id.toString(), delivererId.toString());
+  assert.equal(storedDeliverer.createdAt.getTime(), createdAt.getTime());
+  assert.ok(storedDeliverer.createdBy.equals(readerId));
+  assert.ok(storedDeliverer.updatedAt >= startedAt);
+  assert.ok(storedDeliverer.updatedBy.equals(updaterId));
+
+  const detail = await getDelivererById(delivererId.toString(), {
+    userId: readerId.toString(),
+  });
+
+  assert.equal(detail.updatedAt, storedDeliverer.updatedAt.toISOString());
+  assert.equal(detail.updatedBy, 'modificateur-livreurs');
+});
+
+test('refuse un code déjà utilisé sans modifier le livreur', async () => {
+  const updaterId = new ObjectId();
+  const firstId = new ObjectId();
+  const secondId = new ObjectId();
+
+  await database.collection('deliverers').insertMany([
+    {
+      _id: firstId,
+      code: 'LIV-UNIQUE-A',
+      name: 'Livreur A',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: readerId,
+    },
+    {
+      _id: secondId,
+      code: 'LIV-UNIQUE-B',
+      name: 'Livreur B',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: readerId,
+    },
+  ]);
+
+  const result = await updateDeliverer({
+    delivererId: secondId.toString(),
+    code: ' liv-unique-a ',
+    name: 'Livreur remplacé',
+    phone: '0555',
+    updatedBy: updaterId.toString(),
+  });
+  const unchanged = await database.collection('deliverers').findOne({
+    _id: secondId,
+  });
+
+  assert.equal(result.errors.code, 'Un livreur avec ce code existe déjà.');
+  assert.equal(unchanged.code, 'LIV-UNIQUE-B');
+  assert.equal(unchanged.name, 'Livreur B');
+  assert.equal(unchanged.updatedAt, undefined);
+  assert.equal(unchanged.updatedBy, undefined);
+});
+
+test('n’écrit rien pour une modification invalide ou un livreur absent', async () => {
+  const updaterId = new ObjectId().toString();
+  const countBefore = await database.collection('deliverers').countDocuments();
+  const invalid = await updateDeliverer({
+    delivererId: new ObjectId().toString(),
+    code: 'CODE INTERDIT',
+    name: '   ',
+    phone: '0'.repeat(31),
+    updatedBy: updaterId,
+  });
+  const missing = await updateDeliverer({
+    delivererId: new ObjectId().toString(),
+    code: 'LIV-ABSENT',
+    name: 'Livreur absent',
+    phone: '',
+    updatedBy: updaterId,
+  });
+
+  assert.deepEqual(Object.keys(invalid.errors).sort(), ['code', 'name', 'phone']);
+  assert.deepEqual(missing, { notFound: true });
+  assert.equal(
+    await database.collection('deliverers').countDocuments(),
+    countBefore,
   );
 });
 

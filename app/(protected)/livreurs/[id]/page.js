@@ -1,23 +1,45 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { getUserPermissions } from '../../../../lib/access.js';
 import {
   formatDelivererCreatedAt,
   getDelivererById,
+  requireDelivererEditPermission,
   validateDelivererListHref,
 } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
+import DelivererEditForm from './deliverer-edit-form.js';
 
 export const metadata = {
   title: 'Fiche livreur | Syphax',
 };
 
+const buildDelivererHref = ({ delivererId, editing = false, returnHref }) => {
+  const parameters = new URLSearchParams({ retour: returnHref });
+
+  if (editing) {
+    parameters.set('modifier', '1');
+  }
+
+  return `/livreurs/${delivererId}?${parameters.toString()}`;
+};
+
 const DelivererPage = async ({ params, searchParams }) => {
   const session = await requirePermission('deliverers.read');
-  const [{ id }, query = {}] = await Promise.all([
+  const [{ id }, query = {}, permissions] = await Promise.all([
     params,
     searchParams,
+    getUserPermissions(session.userId),
   ]);
+  const canUpdateDeliverer = permissions.includes('deliverers.update');
+  const editing = query.modifier === '1';
+
+  await requireDelivererEditPermission({
+    editing,
+    userId: session.userId,
+  });
+
   const deliverer = await getDelivererById(id, {
     userId: session.userId,
   });
@@ -27,6 +49,15 @@ const DelivererPage = async ({ params, searchParams }) => {
   }
 
   const returnHref = validateDelivererListHref(query.retour);
+  const viewHref = buildDelivererHref({
+    delivererId: deliverer.id,
+    returnHref,
+  });
+  const editHref = buildDelivererHref({
+    delivererId: deliverer.id,
+    editing: true,
+    returnHref,
+  });
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -40,15 +71,17 @@ const DelivererPage = async ({ params, searchParams }) => {
 
       <header className='mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm'>
         <div className='border-b border-slate-200 p-5 sm:p-6'>
-          <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-            Fiche livreur
-          </p>
-          <h1 className='mt-2 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl'>
-            {deliverer.name}
-          </h1>
-          <p className='mt-2 font-mono text-sm font-semibold text-slate-600'>
-            {deliverer.code}
-          </p>
+          <div>
+            <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
+              Fiche livreur
+            </p>
+            <h1 className='mt-2 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl'>
+              {deliverer.name}
+            </h1>
+            <p className='mt-2 font-mono text-sm font-semibold text-slate-600'>
+              {deliverer.code}
+            </p>
+          </div>
         </div>
 
         <div className='grid gap-px bg-slate-200 lg:grid-cols-[2fr_1fr]'>
@@ -56,34 +89,65 @@ const DelivererPage = async ({ params, searchParams }) => {
             aria-labelledby='deliverer-identification-title'
             className='bg-white'
           >
-            <div className='border-b border-slate-100 px-5 py-4 sm:px-6'>
+            <div className='flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6'>
               <h2
                 className='text-lg font-semibold text-slate-900'
                 id='deliverer-identification-title'
               >
-                Identification
+                {editing ? 'Modifier l’identification' : 'Identification'}
               </h2>
+              {canUpdateDeliverer && !editing && (
+                <Link
+                  aria-label='Modifier les informations du livreur'
+                  className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                  href={editHref}
+                  title='Modifier les informations du livreur'
+                >
+                  <svg
+                    aria-hidden='true'
+                    fill='none'
+                    height='18'
+                    stroke='currentColor'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth='2'
+                    viewBox='0 0 24 24'
+                    width='18'
+                  >
+                    <path d='M12 20h9' />
+                    <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' />
+                  </svg>
+                </Link>
+              )}
             </div>
-            <dl className='px-5 sm:px-6'>
-              <div className='flex items-baseline justify-between gap-6 border-b border-slate-100 py-4'>
-                <dt className='text-sm font-medium text-slate-500'>Code</dt>
-                <dd className='break-all text-right font-mono text-sm font-semibold text-slate-900'>
-                  {deliverer.code}
-                </dd>
-              </div>
-              <div className='flex items-baseline justify-between gap-6 border-b border-slate-100 py-4'>
-                <dt className='text-sm font-medium text-slate-500'>Nom</dt>
-                <dd className='break-words text-right text-sm font-semibold text-slate-900'>
-                  {deliverer.name}
-                </dd>
-              </div>
-              <div className='flex items-baseline justify-between gap-6 py-4'>
-                <dt className='text-sm font-medium text-slate-500'>Téléphone</dt>
-                <dd className='break-words text-right text-sm font-semibold text-slate-900'>
-                  {deliverer.phone || 'Non renseigné'}
-                </dd>
-              </div>
-            </dl>
+            {editing ? (
+              <DelivererEditForm
+                deliverer={deliverer}
+                returnHref={returnHref}
+                viewHref={viewHref}
+              />
+            ) : (
+              <dl className='px-5 sm:px-6'>
+                <div className='flex items-baseline justify-between gap-6 border-b border-slate-100 py-4'>
+                  <dt className='text-sm font-medium text-slate-500'>Code</dt>
+                  <dd className='break-all text-right font-mono text-sm font-semibold text-slate-900'>
+                    {deliverer.code}
+                  </dd>
+                </div>
+                <div className='flex items-baseline justify-between gap-6 border-b border-slate-100 py-4'>
+                  <dt className='text-sm font-medium text-slate-500'>Nom</dt>
+                  <dd className='break-words text-right text-sm font-semibold text-slate-900'>
+                    {deliverer.name}
+                  </dd>
+                </div>
+                <div className='flex items-baseline justify-between gap-6 py-4'>
+                  <dt className='text-sm font-medium text-slate-500'>Téléphone</dt>
+                  <dd className='break-words text-right text-sm font-semibold text-slate-900'>
+                    {deliverer.phone || 'Non renseigné'}
+                  </dd>
+                </div>
+              </dl>
+            )}
           </section>
 
           <aside
@@ -111,6 +175,22 @@ const DelivererPage = async ({ params, searchParams }) => {
                   {deliverer.createdBy ?? 'Compte indisponible'}
                 </dd>
               </div>
+              {deliverer.updatedAt && (
+                <>
+                  <div>
+                    <dt className='text-sm font-medium text-slate-500'>Modifié le</dt>
+                    <dd className='mt-1 text-sm text-slate-900'>
+                      {formatDelivererCreatedAt(deliverer.updatedAt)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className='text-sm font-medium text-slate-500'>Modifié par</dt>
+                    <dd className='mt-1 text-sm text-slate-900'>
+                      {deliverer.updatedBy ?? 'Compte indisponible'}
+                    </dd>
+                  </div>
+                </>
+              )}
             </dl>
           </aside>
         </div>

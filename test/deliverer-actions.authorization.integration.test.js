@@ -26,10 +26,17 @@ const { RequestCookies } = await import(
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
-const { getDelivererById, listDeliverers } = await import('../lib/deliverers.js');
+const {
+  getDelivererById,
+  listDeliverers,
+  requireDelivererEditPermission,
+} = await import('../lib/deliverers.js');
 const { requirePermission } = await import('../lib/sessions.js');
 const { createDeliverer } = await import(
   '../app/(protected)/livreurs/nouveau/actions.js'
+);
+const { updateDeliverer } = await import(
+  '../app/(protected)/livreurs/[id]/actions.js'
 );
 
 let database;
@@ -211,5 +218,233 @@ test('conserve les valeurs soumises lorsque le code existe déjà', async () => 
       code: 'LIV-DOUBLON',
     }),
     1,
+  );
+});
+
+test('autorise la modification et détermine sa traçabilité depuis la session', async () => {
+  const { token, userId } = await createUserSession(
+    'modification-livreur-autorisee',
+    ['deliverers.read', 'deliverers.update'],
+  );
+  const delivererId = new ObjectId();
+  const creatorId = new ObjectId();
+  const createdAt = new Date('2026-09-13T09:00:00.000Z');
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    code: 'LIV-ACTION',
+    name: 'Nom avant action',
+    phone: '',
+    createdAt,
+    createdBy: creatorId,
+  });
+
+  const formData = new FormData();
+  formData.set('code', ' liv-action ');
+  formData.set('name', ' Nom après action ');
+  formData.set('phone', ' 0550 12 34 56 ');
+  formData.set('updatedBy', new ObjectId().toString());
+  formData.set('updatedAt', '2000-01-01T00:00:00.000Z');
+  const startedAt = new Date();
+
+  await assert.rejects(
+    callWithSession(token, () =>
+      updateDeliverer(
+        delivererId.toString(),
+        '/livreurs?q=action&page=2',
+        { revision: 0 },
+        formData,
+      )),
+    (error) => typeof error?.digest === 'string'
+      && error.digest.startsWith('NEXT_REDIRECT;'),
+  );
+
+  const updated = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.equal(updated.code, 'LIV-ACTION');
+  assert.equal(updated.name, 'Nom après action');
+  assert.equal(updated.phone, '0550 12 34 56');
+  assert.equal(updated.createdAt.getTime(), createdAt.getTime());
+  assert.ok(updated.createdBy.equals(creatorId));
+  assert.ok(updated.updatedAt >= startedAt);
+  assert.ok(updated.updatedBy.equals(userId));
+});
+
+test('conserve les valeurs de modification invalides ou en doublon', async () => {
+  const { token, userId } = await createUserSession(
+    'erreurs-modification-livreur',
+    ['deliverers.update'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertMany([
+    {
+      _id: delivererId,
+      code: 'LIV-A-MODIFIER',
+      name: 'Livreur à modifier',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: userId,
+    },
+    {
+      code: 'LIV-DEJA-UTILISE',
+      name: 'Livreur existant',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: userId,
+    },
+  ]);
+
+  const invalidFormData = new FormData();
+  invalidFormData.set('code', ' CODE INTERDIT ');
+  invalidFormData.set('name', '   ');
+  invalidFormData.set('phone', ` ${'0'.repeat(31)} `);
+  const invalidResult = await callWithSession(token, () =>
+    updateDeliverer(
+      delivererId.toString(),
+      '/livreurs',
+      { revision: 0 },
+      invalidFormData,
+    ));
+
+  assert.deepEqual(Object.keys(invalidResult.errors).sort(), [
+    'code',
+    'name',
+    'phone',
+  ]);
+  assert.deepEqual(invalidResult.values, {
+    code: ' CODE INTERDIT ',
+    name: '   ',
+    phone: ` ${'0'.repeat(31)} `,
+  });
+
+  const duplicateFormData = new FormData();
+  duplicateFormData.set('code', ' liv-deja-utilise ');
+  duplicateFormData.set('name', ' Nouvelle valeur ');
+  duplicateFormData.set('phone', ' 0770 ');
+  const duplicateResult = await callWithSession(token, () =>
+    updateDeliverer(
+      delivererId.toString(),
+      '/livreurs',
+      invalidResult,
+      duplicateFormData,
+    ));
+
+  assert.equal(
+    duplicateResult.errors.code,
+    'Un livreur avec ce code existe déjà.',
+  );
+  assert.deepEqual(duplicateResult.values, {
+    code: ' liv-deja-utilise ',
+    name: ' Nouvelle valeur ',
+    phone: ' 0770 ',
+  });
+
+  const unchanged = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+  assert.equal(unchanged.code, 'LIV-A-MODIFIER');
+  assert.equal(unchanged.name, 'Livreur à modifier');
+  assert.equal(unchanged.updatedAt, undefined);
+  assert.equal(unchanged.updatedBy, undefined);
+});
+
+test('signale un livreur introuvable sans écrire', async () => {
+  const { token } = await createUserSession(
+    'modification-livreur-absent',
+    ['deliverers.update'],
+  );
+  const missingId = new ObjectId().toString();
+  const formData = new FormData();
+  formData.set('code', 'LIV-ABSENT');
+  formData.set('name', 'Livreur absent');
+  const countBefore = await database.collection('deliverers').countDocuments();
+
+  const result = await callWithSession(token, () =>
+    updateDeliverer(
+      missingId,
+      '/livreurs',
+      { revision: 0 },
+      formData,
+    ));
+
+  assert.equal(result.errors.form, 'Ce livreur n’existe plus.');
+  assert.deepEqual(result.values, {
+    code: 'LIV-ABSENT',
+    name: 'Livreur absent',
+    phone: '',
+  });
+  assert.equal(
+    await database.collection('deliverers').countDocuments(),
+    countBefore,
+  );
+});
+
+test('refuse la modification sans deliverers.update et n’écrit rien', async () => {
+  const { token, userId } = await createUserSession(
+    'sans-modification-livreur',
+    ['deliverers.read'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    code: 'LIV-PROTEGE',
+    name: 'Livreur protégé',
+    phone: '',
+    createdAt: new Date(),
+    createdBy: userId,
+  });
+
+  const formData = new FormData();
+  formData.set('code', 'LIV-INTERDIT');
+  formData.set('name', 'Modification interdite');
+
+  await assert.rejects(
+    callWithSession(token, () =>
+      updateDeliverer(
+        delivererId.toString(),
+        '/livreurs',
+        { revision: 0 },
+        formData,
+      )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'deliverers.update',
+  );
+
+  const unchanged = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+  assert.equal(unchanged.code, 'LIV-PROTEGE');
+  assert.equal(unchanged.name, 'Livreur protégé');
+  assert.equal(unchanged.updatedAt, undefined);
+  assert.equal(unchanged.updatedBy, undefined);
+});
+
+test('protège aussi l’ouverture directe du formulaire de modification', async () => {
+  const { userId } = await createUserSession(
+    'lecture-seule-fiche-livreur',
+    ['deliverers.read'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    code: 'LIV-FORMULAIRE-PROTEGE',
+    name: 'Formulaire protégé',
+    phone: '',
+    createdAt: new Date(),
+    createdBy: userId,
+  });
+
+  await assert.rejects(
+    requireDelivererEditPermission({
+      editing: true,
+      userId: userId.toString(),
+    }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'deliverers.update',
   );
 });

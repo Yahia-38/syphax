@@ -51,8 +51,10 @@ test('le catalogue conserve la création des livreurs hors du rôle Manager part
   );
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
+  assert.ok(PERMISSION_KEYS.includes('deliverers.update'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.read'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.create'), false);
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.update'), false);
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('pricing.update'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.manage'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.assign'));
