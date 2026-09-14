@@ -18,10 +18,13 @@ const {
   CASH_PAYMENT_MODE,
   CASH_READ_PERMISSION,
   buildCashJournalHref,
+  buildCashRemaindersHref,
   getTourPaymentPreview,
   listCashJournalFilterOptions,
   listCashPayments,
+  listCashRemainders,
   readCashJournalState,
+  readCashRemaindersState,
   recordTourCashPayment,
 } = await import('../lib/cash-payments.js');
 const {
@@ -78,24 +81,24 @@ const insertCashRegister = async ({
 };
 
 const insertTour = async ({
+  deliverer = null,
   delivererActive = true,
+  delivererCode: requestedDelivererCode,
+  delivererName: requestedDelivererName,
   status = 'COUNTED',
   totalDueInCentimes = 750_000,
 } = {}) => {
   const countingId = new ObjectId();
-  const delivererId = new ObjectId();
+  const delivererId = deliverer?.delivererId ?? new ObjectId();
   const tourId = new ObjectId();
-  const delivererCode = `LIV-${delivererId.toString().slice(-6)}`;
-  const delivererName = 'Livreur caisse';
+  const delivererCode = deliverer?.delivererCode
+    ?? requestedDelivererCode
+    ?? `LIV-${delivererId.toString().slice(-6)}`;
+  const delivererName = deliverer?.delivererName
+    ?? requestedDelivererName
+    ?? 'Livreur caisse';
   const tourReference = `TRN-${tourId.toString().toUpperCase()}`;
-
-  await Promise.all([
-    database.collection('deliverers').insertOne({
-      _id: delivererId,
-      active: delivererActive,
-      code: delivererCode,
-      name: delivererName,
-    }),
+  const insertions = [
     database.collection('tours').insertOne({
       _id: tourId,
       countingId,
@@ -112,7 +115,18 @@ const insertTour = async ({
       totalDueInCentimes,
       tourId,
     }),
-  ]);
+  ];
+
+  if (!deliverer) {
+    insertions.push(database.collection('deliverers').insertOne({
+      _id: delivererId,
+      active: delivererActive,
+      code: delivererCode,
+      name: delivererName,
+    }));
+  }
+
+  await Promise.all(insertions);
 
   return {
     countingId,
@@ -643,6 +657,237 @@ test('recherche une référence, conserve les filtres et refuse la lecture sans 
     listCashJournalFilterOptions({ userId: withoutCashRead.toString() }),
     (error) => error instanceof PermissionDeniedError
       && error.permission === CASH_READ_PERMISSION,
+  );
+});
+
+test('calcule les restes par livreur sans doubler le dû et les actualise après versement', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const firstAhmedTour = await insertTour({
+    delivererActive: false,
+    delivererCode: 'LIV-AHMED',
+    delivererName: 'Ahmed',
+    totalDueInCentimes: 750_000,
+  });
+  const secondAhmedTour = await insertTour({
+    deliverer: firstAhmedTour,
+    status: 'CLOSED',
+    totalDueInCentimes: 300_000,
+  });
+  const unpaidTour = await insertTour({
+    delivererCode: 'LIV-IMPAYE',
+    delivererName: 'Livreur sans versement',
+    totalDueInCentimes: 120_000,
+  });
+  const settledTour = await insertTour({ totalDueInCentimes: 100_000 });
+  await insertTour({ totalDueInCentimes: 0 });
+  await insertTour({ status: 'PREPARATION', totalDueInCentimes: 900_000 });
+  await insertTour({ status: 'LOADED', totalDueInCentimes: 800_000 });
+
+  await submitPayment({
+    amount: '3000',
+    cashRegisterId: cashRegister.id,
+    tourId: firstAhmedTour.tourId,
+  });
+  await submitPayment({
+    amount: '2000',
+    cashRegisterId: cashRegister.id,
+    tourId: firstAhmedTour.tourId,
+  });
+  await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    tourId: secondAhmedTour.tourId,
+  });
+  await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    tourId: settledTour.tourId,
+  });
+  const before = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const initial = await listCashRemainders({
+    userId: cashierId.toString(),
+  });
+  const afterRead = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tourCountings: await database.collection('tourCountings').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const ahmed = initial.remainders.find(
+    ({ deliverer }) => deliverer.id === firstAhmedTour.delivererId.toString(),
+  );
+  const unpaid = initial.remainders.find(
+    ({ deliverer }) => deliverer.id === unpaidTour.delivererId.toString(),
+  );
+
+  assert.equal(initial.anomalyCount, 0);
+  assert.equal(initial.totalItems, 2);
+  assert.equal(initial.totalRemainingDueInCentimes, 570_000);
+  assert.equal(ahmed.deliverer.code, 'LIV-AHMED');
+  assert.equal(ahmed.tourCount, 2);
+  assert.equal(ahmed.remainingDueInCentimes, 450_000);
+  assert.deepEqual(
+    ahmed.tours.map((tour) => ({
+      due: tour.amountDueInCentimes,
+      paid: tour.amountPaidInCentimes,
+      remaining: tour.remainingDueInCentimes,
+      status: tour.status,
+    })).sort((first, second) => first.due - second.due),
+    [
+      { due: 300_000, paid: 100_000, remaining: 200_000, status: 'CLOSED' },
+      { due: 750_000, paid: 500_000, remaining: 250_000, status: 'COUNTED' },
+    ],
+  );
+  assert.equal(unpaid.remainingDueInCentimes, 120_000);
+  assert.equal(unpaid.tours[0].amountPaidInCentimes, 0);
+  assert.deepEqual(afterRead, before);
+
+  await submitPayment({
+    amount: '500',
+    cashRegisterId: cashRegister.id,
+    tourId: firstAhmedTour.tourId,
+  });
+  const updated = await listCashRemainders({
+    userId: cashierId.toString(),
+  });
+  const updatedAhmed = updated.remainders.find(
+    ({ deliverer }) => deliverer.id === firstAhmedTour.delivererId.toString(),
+  );
+
+  assert.equal(updatedAhmed.remainingDueInCentimes, 400_000);
+  assert.equal(updated.totalRemainingDueInCentimes, 520_000);
+});
+
+test('recherche et pagine les restes indépendamment des filtres du journal avec cash.read seul', async () => {
+  const atlas = await insertTour({
+    delivererCode: 'LIV-ATLAS',
+    delivererName: 'Atlas Alger',
+    totalDueInCentimes: 100_000,
+  });
+  await insertTour({
+    delivererCode: 'LIV-BETA',
+    delivererName: 'Beta Oran',
+    totalDueInCentimes: 200_000,
+  });
+  await insertTour({
+    delivererCode: 'LIV-GAMMA',
+    delivererName: 'Gamma Sétif',
+    totalDueInCentimes: 300_000,
+  });
+  const cashReadOnly = await createUser([CASH_READ_PERMISSION]);
+  const withoutCashRead = await createUser(['tours.read', 'deliverers.read']);
+  const state = readCashRemaindersState({
+    au: '2026-09-30',
+    du: '2026-09-01',
+    livreur: new ObjectId().toString(),
+    page: '9',
+    q: 'VRS-INEXISTANT',
+    restePage: '2',
+    resteRecherche: 'Atlas',
+  });
+  const firstPage = await listCashRemainders({
+    pageSize: 1,
+    userId: cashReadOnly.toString(),
+  });
+  const secondPage = await listCashRemainders({
+    page: 2,
+    pageSize: 1,
+    userId: cashReadOnly.toString(),
+  });
+  const search = await listCashRemainders({
+    query: 'atlas alger',
+    userId: cashReadOnly.toString(),
+  });
+  const href = buildCashRemaindersHref({
+    dateFrom: '2026-09-01',
+    dateTo: '2026-09-30',
+    delivererId: atlas.delivererId.toString(),
+    journalPage: 3,
+    journalQuery: 'VRS-TEST',
+    page: 2,
+    query: 'Atlas',
+  });
+
+  assert.deepEqual(state, { page: 2, query: 'Atlas' });
+  assert.equal(firstPage.totalItems, 3);
+  assert.equal(firstPage.totalPages, 3);
+  assert.equal(firstPage.totalRemainingDueInCentimes, 600_000);
+  assert.equal(firstPage.remainders.length, 1);
+  assert.equal(secondPage.remainders.length, 1);
+  assert.notEqual(
+    firstPage.remainders[0].deliverer.id,
+    secondPage.remainders[0].deliverer.id,
+  );
+  assert.equal(search.totalItems, 1);
+  assert.equal(search.totalRemainingDueInCentimes, 100_000);
+  assert.equal(search.remainders[0].deliverer.id, atlas.delivererId.toString());
+  assert.match(href, /q=VRS-TEST/u);
+  assert.match(href, /livreur=/u);
+  assert.match(href, /du=2026-09-01/u);
+  assert.match(href, /au=2026-09-30/u);
+  assert.match(href, /page=3/u);
+  assert.match(href, /resteRecherche=Atlas/u);
+  assert.match(href, /restePage=2/u);
+  await assert.rejects(
+    listCashRemainders({ userId: withoutCashRead.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === CASH_READ_PERMISSION,
+  );
+});
+
+test('signale les comptages et versements incohérents sans fabriquer de reste', async () => {
+  const missingCounting = await insertTour({ totalDueInCentimes: 100_000 });
+  const invalidCounting = await insertTour({ totalDueInCentimes: 200_000 });
+  const invalidPayment = await insertTour({ totalDueInCentimes: 300_000 });
+  const overpaid = await insertTour({ totalDueInCentimes: 400_000 });
+
+  await Promise.all([
+    database.collection('tourCountings').deleteOne({
+      _id: missingCounting.countingId,
+    }),
+    database.collection('tourCountings').updateOne(
+      { _id: invalidCounting.countingId },
+      { $set: { totalDueInCentimes: '200000' } },
+    ),
+    database.collection('cashPayments').insertOne({
+      _id: new ObjectId(),
+      amountInCentimes: 100_000,
+      confirmationKey: randomUUID(),
+      currency: 'EUR',
+      reference: `VRS-${new ObjectId().toString().toUpperCase()}`,
+      sourceTourCountingId: invalidPayment.countingId,
+      tourId: invalidPayment.tourId,
+    }),
+    database.collection('cashPayments').insertOne({
+      _id: new ObjectId(),
+      amountInCentimes: 450_000,
+      confirmationKey: randomUUID(),
+      currency: CASH_CURRENCY,
+      reference: `VRS-${new ObjectId().toString().toUpperCase()}`,
+      sourceTourCountingId: overpaid.countingId,
+      tourId: overpaid.tourId,
+    }),
+  ]);
+  const result = await listCashRemainders({
+    userId: cashierId.toString(),
+  });
+
+  assert.equal(result.totalItems, 0);
+  assert.equal(result.totalRemainingDueInCentimes, 0);
+  assert.equal(result.anomalyCount, 4);
+  assert.deepEqual(
+    new Set(result.anomalies.map(({ code }) => code)),
+    new Set([
+      'INVALID_COUNTING',
+      'INVALID_PAYMENTS',
+      'MISSING_COUNTING',
+      'OVERPAID',
+    ]),
   );
 });
 

@@ -34,6 +34,7 @@ const CashJournal = ({
   pageSize,
   payments,
   query,
+  remainderState,
   totalAmountInCentimes,
   totalItems,
   totalPages,
@@ -47,6 +48,12 @@ const CashJournal = ({
     delivererId,
     page: nextPage,
     query,
+    remainderPage: remainderState.page,
+    remainderQuery: remainderState.query,
+  });
+  const resetHref = buildCashJournalHref({
+    remainderPage: remainderState.page,
+    remainderQuery: remainderState.query,
   });
 
   return (
@@ -97,6 +104,20 @@ const CashJournal = ({
           method='get'
           role='search'
         >
+          {remainderState.query && (
+            <input
+              name='resteRecherche'
+              type='hidden'
+              value={remainderState.query}
+            />
+          )}
+          {remainderState.page > 1 && (
+            <input
+              name='restePage'
+              type='hidden'
+              value={remainderState.page}
+            />
+          )}
           <div>
             <label className='sr-only' htmlFor='cash-search'>
               Rechercher un encaissement
@@ -164,7 +185,7 @@ const CashJournal = ({
           {filtersActive && (
             <Link
               className='inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/caisse'
+              href={resetHref}
             >
               Réinitialiser
             </Link>

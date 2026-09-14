@@ -237,6 +237,7 @@ export const countTour = async (tourId, previousState, formData) => {
 
     revalidatePath(`/tournees/${tourId}`);
     revalidatePath('/produits');
+    revalidatePath('/caisse');
 
     for (const productId of result.productIds) {
       revalidatePath(`/produits/${productId}`);
@@ -302,6 +303,7 @@ export const recordTourPayment = async (tourId, previousState, formData) => {
     }
 
     revalidatePath(`/tournees/${tourId}`);
+    revalidatePath('/caisse');
 
     return {
       confirmationKey: randomUUID(),
@@ -364,6 +366,7 @@ export const closeTour = async (tourId, previousState, formData) => {
 
     revalidatePath(`/tournees/${tourId}`);
     revalidatePath(`/livreurs/${result.closure.delivererId}`);
+    revalidatePath('/caisse');
 
     return {
       errors: {},
