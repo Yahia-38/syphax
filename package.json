@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test": "node --env-file-if-exists=.env.local --test",
     "access:initialize": "node --env-file=.env.local scripts/initialize-access.js",
+    "access:grant-deliverer-status": "node --env-file=.env.local scripts/grant-deliverer-status-permission.js",
     "stock:backfill": "node --env-file-if-exists=.env.local scripts/backfill-reception-stock.js",
     "user:create": "node --env-file=.env.local scripts/create-user.js"
   },

@@ -17,6 +17,7 @@ const {
   PermissionDeniedError,
   deleteRole,
   deleteUser,
+  grantYahiaFullAccessPermission,
   initializeManagerAccess,
   requireUserPermission,
   setUserActive,
@@ -52,9 +53,14 @@ test('le catalogue conserve la création des livreurs hors du rôle Manager part
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.update'));
+  assert.ok(PERMISSION_KEYS.includes('deliverers.status.update'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.read'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.create'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.update'), false);
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('deliverers.status.update'),
+    false,
+  );
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('pricing.update'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.manage'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.assign'));
@@ -86,6 +92,54 @@ test('initialise le Manager et son attribution de manière rejouable', async () 
   assert.deepEqual(role.permissions, [...INITIAL_MANAGER_PERMISSIONS]);
   assert.deepEqual(user.roleIds, [role._id]);
   assert.equal(await userHasPermission(userId.toString(), 'pricing.update'), true);
+});
+
+test('attribue la permission de statut uniquement au rôle dédié de yahia', async () => {
+  const yahiaRoleId = new ObjectId();
+  const otherRoleId = new ObjectId();
+  const yahiaId = new ObjectId();
+
+  await Promise.all([
+    database.collection('roles').insertMany([
+      {
+        _id: yahiaRoleId,
+        key: 'yahia-full-access',
+        name: 'Accès complet — yahia',
+        permissions: ['deliverers.read'],
+      },
+      {
+        _id: otherRoleId,
+        key: 'autre-role',
+        name: 'Autre rôle',
+        permissions: ['deliverers.read'],
+      },
+    ]),
+    database.collection('users').insertOne({
+      _id: yahiaId,
+      username: 'yahia',
+      active: true,
+      roleIds: [yahiaRoleId],
+    }),
+  ]);
+
+  const first = await grantYahiaFullAccessPermission(
+    'deliverers.status.update',
+  );
+  const second = await grantYahiaFullAccessPermission(
+    'deliverers.status.update',
+  );
+  const [yahiaRole, otherRole] = await Promise.all([
+    database.collection('roles').findOne({ _id: yahiaRoleId }),
+    database.collection('roles').findOne({ _id: otherRoleId }),
+  ]);
+
+  assert.equal(first.granted, true);
+  assert.equal(second.granted, false);
+  assert.deepEqual(yahiaRole.permissions, [
+    'deliverers.read',
+    'deliverers.status.update',
+  ]);
+  assert.deepEqual(otherRole.permissions, ['deliverers.read']);
 });
 
 test('refuse côté serveur un utilisateur sans pricing.update', async () => {

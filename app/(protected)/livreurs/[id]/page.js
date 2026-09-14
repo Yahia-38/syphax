@@ -10,6 +10,7 @@ import {
 } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import DelivererEditForm from './deliverer-edit-form.js';
+import DelivererStatusButton from './deliverer-status-button.js';
 
 export const metadata = {
   title: 'Fiche livreur | Syphax',
@@ -33,6 +34,9 @@ const DelivererPage = async ({ params, searchParams }) => {
     getUserPermissions(session.userId),
   ]);
   const canUpdateDeliverer = permissions.includes('deliverers.update');
+  const canUpdateDelivererStatus = permissions.includes(
+    'deliverers.status.update',
+  );
   const editing = query.modifier === '1';
 
   await requireDelivererEditPermission({
@@ -58,6 +62,7 @@ const DelivererPage = async ({ params, searchParams }) => {
     editing: true,
     returnHref,
   });
+  const latestStatusChange = deliverer.statusHistory.at(-1);
 
   return (
     <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
@@ -70,8 +75,8 @@ const DelivererPage = async ({ params, searchParams }) => {
       </Link>
 
       <header className='mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm'>
-        <div className='border-b border-slate-200 p-5 sm:p-6'>
-          <div>
+        <div className='flex flex-col gap-5 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
+          <div className='min-w-0'>
             <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
               Fiche livreur
             </p>
@@ -81,6 +86,26 @@ const DelivererPage = async ({ params, searchParams }) => {
             <p className='mt-2 font-mono text-sm font-semibold text-slate-600'>
               {deliverer.code}
             </p>
+          </div>
+          <div className='flex flex-wrap items-center gap-3'>
+            <span
+              className={deliverer.active
+                ? 'inline-flex rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800'
+                : 'inline-flex rounded-full bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700'}
+            >
+              {deliverer.active ? 'Actif' : 'Désactivé'}
+            </span>
+            {canUpdateDelivererStatus && (
+              <DelivererStatusButton
+                deliverer={{
+                  active: deliverer.active,
+                  code: deliverer.code,
+                  id: deliverer.id,
+                  name: deliverer.name,
+                }}
+                returnHref={returnHref}
+              />
+            )}
           </div>
         </div>
 
@@ -187,6 +212,26 @@ const DelivererPage = async ({ params, searchParams }) => {
                     <dt className='text-sm font-medium text-slate-500'>Modifié par</dt>
                     <dd className='mt-1 text-sm text-slate-900'>
                       {deliverer.updatedBy ?? 'Compte indisponible'}
+                    </dd>
+                  </div>
+                </>
+              )}
+              {latestStatusChange && (
+                <>
+                  <div>
+                    <dt className='text-sm font-medium text-slate-500'>
+                      Statut modifié le
+                    </dt>
+                    <dd className='mt-1 text-sm text-slate-900'>
+                      {formatDelivererCreatedAt(latestStatusChange.changedAt)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className='text-sm font-medium text-slate-500'>
+                      Statut modifié par
+                    </dt>
+                    <dd className='mt-1 text-sm text-slate-900'>
+                      {latestStatusChange.changedBy ?? 'Compte indisponible'}
                     </dd>
                   </div>
                 </>

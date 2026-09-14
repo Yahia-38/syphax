@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache.js';
 import { redirect } from 'next/navigation.js';
 
 import {
+  deactivateDeliverer as saveDelivererDeactivation,
+  reactivateDeliverer as saveDelivererReactivation,
   updateDeliverer as saveDeliverer,
   validateDelivererListHref,
 } from '../../../../lib/deliverers.js';
@@ -21,6 +23,66 @@ const buildDelivererHref = (delivererId, returnHref) => {
 
   return `/livreurs/${delivererId}?${parameters.toString()}`;
 };
+
+const updateDelivererStatus = async ({
+  delivererId,
+  previousState,
+  returnHref,
+  saveStatus,
+}) => {
+  const session = await requirePermission('deliverers.status.update');
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+  let result;
+
+  try {
+    result = await saveStatus({
+      changedBy: session.userId,
+      delivererId,
+    });
+  } catch (error) {
+    console.error('Échec du changement de statut du livreur :', error);
+
+    return {
+      error: 'Le changement de statut du livreur est momentanément indisponible.',
+      revision,
+    };
+  }
+
+  if (result.notFound) {
+    return {
+      error: 'Ce livreur n’existe plus.',
+      revision,
+    };
+  }
+
+  revalidatePath('/livreurs');
+  revalidatePath(`/livreurs/${delivererId}`);
+  redirect(buildDelivererHref(delivererId, returnHref));
+};
+
+export const deactivateDeliverer = async (
+  delivererId,
+  returnHref,
+  previousState,
+) => updateDelivererStatus({
+  delivererId,
+  previousState,
+  returnHref,
+  saveStatus: saveDelivererDeactivation,
+});
+
+export const reactivateDeliverer = async (
+  delivererId,
+  returnHref,
+  previousState,
+) => updateDelivererStatus({
+  delivererId,
+  previousState,
+  returnHref,
+  saveStatus: saveDelivererReactivation,
+});
 
 export const updateDeliverer = async (
   delivererId,

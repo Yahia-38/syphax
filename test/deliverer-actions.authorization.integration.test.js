@@ -35,7 +35,11 @@ const { requirePermission } = await import('../lib/sessions.js');
 const { createDeliverer } = await import(
   '../app/(protected)/livreurs/nouveau/actions.js'
 );
-const { updateDeliverer } = await import(
+const {
+  deactivateDeliverer,
+  reactivateDeliverer,
+  updateDeliverer,
+} = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
 
@@ -447,4 +451,93 @@ test('protège aussi l’ouverture directe du formulaire de modification', async
     (error) => error instanceof PermissionDeniedError
       && error.permission === 'deliverers.update',
   );
+});
+
+test('désactive et réactive avec la traçabilité de session sans doubler les demandes', async () => {
+  const { token, userId } = await createUserSession(
+    'statut-livreur-autorise',
+    ['deliverers.status.update'],
+  );
+  const delivererId = new ObjectId();
+  const creatorId = new ObjectId();
+  const createdAt = new Date('2026-09-12T10:00:00.000Z');
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    code: 'LIV-STATUT-ACTION',
+    name: 'Livreur avec statut',
+    phone: '0550 20 20 20',
+    createdAt,
+    createdBy: creatorId,
+  });
+
+  const callStatusAction = (action) => assert.rejects(
+    callWithSession(token, () => action(
+      delivererId.toString(),
+      '/livreurs?q=statut&statut=all&page=2',
+      { revision: 0 },
+    )),
+    (error) => typeof error?.digest === 'string'
+      && error.digest.startsWith('NEXT_REDIRECT;'),
+  );
+
+  const startedAt = new Date();
+
+  await callStatusAction(deactivateDeliverer);
+  await callStatusAction(deactivateDeliverer);
+  await callStatusAction(reactivateDeliverer);
+  await callStatusAction(reactivateDeliverer);
+
+  const deliverer = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.equal(deliverer.active, true);
+  assert.equal(deliverer.code, 'LIV-STATUT-ACTION');
+  assert.equal(deliverer.name, 'Livreur avec statut');
+  assert.equal(deliverer.phone, '0550 20 20 20');
+  assert.equal(deliverer.createdAt.getTime(), createdAt.getTime());
+  assert.ok(deliverer.createdBy.equals(creatorId));
+  assert.equal(deliverer.statusHistory.length, 2);
+  assert.deepEqual(
+    deliverer.statusHistory.map(({ active }) => active),
+    [false, true],
+  );
+  assert.ok(deliverer.statusHistory.every(({ changedAt, changedBy }) =>
+    changedAt >= startedAt && changedBy.equals(userId)));
+});
+
+test('refuse un changement de statut sans permission et n’écrit rien', async () => {
+  const { token, userId } = await createUserSession(
+    'statut-livreur-interdit',
+    ['deliverers.read', 'deliverers.update'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    active: true,
+    code: 'LIV-STATUT-PROTEGE',
+    name: 'Statut protégé',
+    phone: '',
+    createdAt: new Date(),
+    createdBy: userId,
+  });
+
+  await assert.rejects(
+    callWithSession(token, () => deactivateDeliverer(
+      delivererId.toString(),
+      '/livreurs',
+      { revision: 0 },
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'deliverers.status.update',
+  );
+
+  const unchanged = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.equal(unchanged.active, true);
+  assert.equal(unchanged.statusHistory, undefined);
 });

@@ -23,13 +23,15 @@ const DelivererList = ({
   page,
   pageSize,
   query,
+  status,
   totalItems,
   totalPages,
 }) => {
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + deliverers.length - 1;
   const searching = Boolean(query);
-  const returnHref = buildDelivererListHref({ page, query });
+  const filtering = status !== 'active';
+  const returnHref = buildDelivererListHref({ page, query, status });
   const getDelivererHref = (delivererId) => {
     const parameters = new URLSearchParams({ retour: returnHref });
 
@@ -65,13 +67,28 @@ const DelivererList = ({
             type='search'
           />
         </div>
+        <div>
+          <label className='sr-only' htmlFor='deliverer-status-filter'>
+            Filtrer par statut
+          </label>
+          <select
+            className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:w-44'
+            defaultValue={status}
+            id='deliverer-status-filter'
+            name='statut'
+          >
+            <option value='active'>Actifs</option>
+            <option value='disabled'>Désactivés</option>
+            <option value='all'>Tous</option>
+          </select>
+        </div>
         <button
           className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
           type='submit'
         >
           Rechercher
         </button>
-        {searching && (
+        {(searching || filtering) && (
           <Link
             className='inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
             href='/livreurs'
@@ -96,22 +113,28 @@ const DelivererList = ({
             <thead>
               <tr>
                 <th
-                  className='w-[30%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[24%] sm:px-6'
+                  className='w-[24%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[20%] sm:px-6'
                   scope='col'
                 >
                   Code
                 </th>
                 <th
-                  className='w-[38%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
+                  className='w-[32%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
                   scope='col'
                 >
                   Nom
                 </th>
                 <th
-                  className='w-[32%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[38%] sm:px-6'
+                  className='w-[28%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[32%] sm:px-6'
                   scope='col'
                 >
                   Téléphone
+                </th>
+                <th
+                  className='w-[16%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
+                  scope='col'
+                >
+                  Statut
                 </th>
               </tr>
             </thead>
@@ -132,6 +155,15 @@ const DelivererList = ({
                   <td className='break-words px-4 py-3 text-sm text-slate-600 sm:px-6'>
                     {deliverer.phone || 'Non renseigné'}
                   </td>
+                  <td className='px-4 py-3 sm:px-6'>
+                    <span
+                      className={deliverer.active
+                        ? 'inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800'
+                        : 'inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700'}
+                    >
+                      {deliverer.active ? 'Actif' : 'Désactivé'}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -143,7 +175,11 @@ const DelivererList = ({
           >
             <PaginationLink
               disabled={page === 1}
-              href={buildDelivererListHref({ page: page - 1, query })}
+              href={buildDelivererListHref({
+                page: page - 1,
+                query,
+                status,
+              })}
             >
               Précédent
             </PaginationLink>
@@ -152,7 +188,11 @@ const DelivererList = ({
             </p>
             <PaginationLink
               disabled={page === totalPages}
-              href={buildDelivererListHref({ page: page + 1, query })}
+              href={buildDelivererListHref({
+                page: page + 1,
+                query,
+                status,
+              })}
             >
               Suivant
             </PaginationLink>
@@ -161,19 +201,23 @@ const DelivererList = ({
       ) : (
         <div className='px-6 py-14 text-center'>
           <h3 className='font-semibold text-slate-900'>
-            {searching ? 'Aucun résultat' : 'Aucun livreur enregistré'}
+            {searching || filtering
+              ? 'Aucun résultat'
+              : 'Aucun livreur actif'}
           </h3>
           <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
             {searching
-              ? `Aucun code ou nom ne correspond à « ${query} ».`
-              : 'Les livreurs créés apparaîtront ici.'}
+              ? `Aucun code ou nom ne correspond à « ${query} » avec ce statut.`
+              : filtering
+                ? 'Aucun livreur ne correspond à ce statut.'
+                : 'Les livreurs actifs apparaîtront ici.'}
           </p>
-          {searching && (
+          {(searching || filtering) && (
             <Link
               className='mt-5 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
               href='/livreurs'
             >
-              Voir tous les livreurs
+              Voir les livreurs actifs
             </Link>
           )}
         </div>

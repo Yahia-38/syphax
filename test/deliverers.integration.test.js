@@ -13,10 +13,15 @@ testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
 const {
+  buildDelivererListHref,
   createDeliverer,
+  deactivateDeliverer,
   getDelivererById,
   listDeliverers,
+  reactivateDeliverer,
+  readDelivererListState,
   updateDeliverer,
+  validateDelivererListHref,
 } = await import('../lib/deliverers.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 
@@ -73,6 +78,7 @@ test('enregistre les données métier et les métadonnées serveur', async () =>
 
   assert.deepEqual(result.deliverer, {
     id: result.deliverer.id,
+    active: true,
     code: 'LIV-001',
     name: 'Amine Benali',
     phone: '+213 550 00 00 00',
@@ -84,6 +90,7 @@ test('enregistre les données métier et les métadonnées serveur', async () =>
 
   assert.deepEqual(Object.keys(deliverer).sort(), [
     '_id',
+    'active',
     'code',
     'createdAt',
     'createdBy',
@@ -92,6 +99,7 @@ test('enregistre les données métier et les métadonnées serveur', async () =>
   ]);
   assert.ok(deliverer.createdAt instanceof Date);
   assert.ok(deliverer.createdBy.equals(authorId));
+  assert.equal(deliverer.active, true);
 });
 
 test('retourne la fiche du livreur et le nom de son créateur', async () => {
@@ -113,6 +121,7 @@ test('retourne la fiche du livreur et le nom de son créateur', async () => {
     }),
     {
       id: delivererId.toString(),
+      active: true,
       code: 'FICHE-001',
       name: 'Livreur de consultation',
       phone: '',
@@ -120,7 +129,163 @@ test('retourne la fiche du livreur et le nom de son créateur', async () => {
       createdBy: 'lecteur-livreurs',
       updatedAt: null,
       updatedBy: null,
+      statusHistory: [],
     },
+  );
+});
+
+test('désactive et réactive explicitement un ancien livreur avec un historique idempotent', async () => {
+  const delivererId = new ObjectId();
+  const updaterId = new ObjectId();
+  const createdAt = new Date('2026-09-10T08:00:00.000Z');
+
+  await Promise.all([
+    database.collection('users').insertOne({
+      _id: updaterId,
+      username: 'responsable-statut-livreurs',
+    }),
+    database.collection('deliverers').insertOne({
+      _id: delivererId,
+      code: 'STATUT-ANCIEN',
+      name: 'Livreur sans statut historique',
+      phone: '0550 10 10 10',
+      createdAt,
+      createdBy: readerId,
+    }),
+  ]);
+
+  const startedAt = new Date();
+  const firstDeactivation = await deactivateDeliverer({
+    changedBy: updaterId.toString(),
+    delivererId: delivererId.toString(),
+  });
+  const repeatedDeactivation = await deactivateDeliverer({
+    changedBy: updaterId.toString(),
+    delivererId: delivererId.toString(),
+  });
+  const firstReactivation = await reactivateDeliverer({
+    changedBy: updaterId.toString(),
+    delivererId: delivererId.toString(),
+  });
+  const repeatedReactivation = await reactivateDeliverer({
+    changedBy: updaterId.toString(),
+    delivererId: delivererId.toString(),
+  });
+  const storedDeliverer = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.deepEqual(firstDeactivation, { active: false, changed: true });
+  assert.deepEqual(repeatedDeactivation, { active: false, changed: false });
+  assert.deepEqual(firstReactivation, { active: true, changed: true });
+  assert.deepEqual(repeatedReactivation, { active: true, changed: false });
+  assert.equal(storedDeliverer.active, true);
+  assert.equal(storedDeliverer.code, 'STATUT-ANCIEN');
+  assert.equal(storedDeliverer.name, 'Livreur sans statut historique');
+  assert.equal(storedDeliverer.phone, '0550 10 10 10');
+  assert.equal(storedDeliverer.createdAt.getTime(), createdAt.getTime());
+  assert.ok(storedDeliverer.createdBy.equals(readerId));
+  assert.equal(storedDeliverer.statusHistory.length, 2);
+  assert.deepEqual(
+    storedDeliverer.statusHistory.map(({ active }) => active),
+    [false, true],
+  );
+  assert.ok(storedDeliverer.statusHistory[0].changedAt >= startedAt);
+  assert.ok(storedDeliverer.statusHistory[1].changedAt >= startedAt);
+  assert.ok(storedDeliverer.statusHistory.every(({ changedBy }) =>
+    changedBy.equals(updaterId)));
+
+  const detail = await getDelivererById(delivererId.toString(), {
+    userId: readerId.toString(),
+  });
+
+  assert.equal(detail.active, true);
+  assert.deepEqual(
+    detail.statusHistory.map(({ active, changedBy }) => ({ active, changedBy })),
+    [
+      { active: false, changedBy: 'responsable-statut-livreurs' },
+      { active: true, changedBy: 'responsable-statut-livreurs' },
+    ],
+  );
+});
+
+test('filtre les actifs, les désactivés et tous en traitant le statut absent comme actif', async () => {
+  await database.collection('deliverers').insertMany([
+    {
+      code: 'FILTRE-STATUT-ANCIEN',
+      name: 'Ancien actif',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: readerId,
+    },
+    {
+      active: true,
+      code: 'FILTRE-STATUT-ACTIF',
+      name: 'Actif explicite',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: readerId,
+    },
+    {
+      active: false,
+      code: 'FILTRE-STATUT-DESACTIVE',
+      name: 'Désactivé',
+      phone: '',
+      createdAt: new Date(),
+      createdBy: readerId,
+    },
+  ]);
+
+  const active = await listDeliverers({
+    query: 'FILTRE-STATUT-',
+    userId: readerId.toString(),
+  });
+  const disabled = await listDeliverers({
+    query: 'FILTRE-STATUT-',
+    status: 'disabled',
+    userId: readerId.toString(),
+  });
+  const all = await listDeliverers({
+    query: 'FILTRE-STATUT-',
+    status: 'all',
+    userId: readerId.toString(),
+  });
+
+  assert.deepEqual(active.deliverers.map(({ code }) => code), [
+    'FILTRE-STATUT-ACTIF',
+    'FILTRE-STATUT-ANCIEN',
+  ]);
+  assert.ok(active.deliverers.every(({ active: isActive }) => isActive));
+  assert.deepEqual(disabled.deliverers.map(({ code }) => code), [
+    'FILTRE-STATUT-DESACTIVE',
+  ]);
+  assert.equal(disabled.deliverers[0].active, false);
+  assert.equal(all.totalItems, 3);
+});
+
+test('préserve recherche, statut et pagination dans les URL de liste validées', () => {
+  const state = readDelivererListState({
+    page: '3',
+    q: '  Atlas  ',
+    statut: 'disabled',
+  });
+
+  assert.deepEqual(state, {
+    page: 3,
+    query: 'Atlas',
+    status: 'disabled',
+  });
+  assert.equal(
+    buildDelivererListHref(state),
+    '/livreurs?q=Atlas&statut=disabled&page=3',
+  );
+  assert.equal(
+    validateDelivererListHref('/livreurs?q=Atlas&statut=disabled&page=3'),
+    '/livreurs?q=Atlas&statut=disabled&page=3',
+  );
+  assert.equal(
+    validateDelivererListHref('/livreurs?statut=inconnu&page=2'),
+    '/livreurs?page=2',
   );
 });
 
