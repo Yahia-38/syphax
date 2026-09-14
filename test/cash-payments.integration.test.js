@@ -17,7 +17,11 @@ const {
   CASH_PAYMENT_CREATE_PERMISSION,
   CASH_PAYMENT_MODE,
   CASH_READ_PERMISSION,
+  buildCashJournalHref,
   getTourPaymentPreview,
+  listCashJournalFilterOptions,
+  listCashPayments,
+  readCashJournalState,
   recordTourCashPayment,
 } = await import('../lib/cash-payments.js');
 const {
@@ -112,7 +116,9 @@ const insertTour = async ({
 
   return {
     countingId,
+    delivererCode,
     delivererId,
+    delivererName,
     tourId,
     tourReference,
   };
@@ -473,6 +479,171 @@ test('autorise le versement d’une tournée terminée sans la rouvrir', async (
   assert.equal(preview.amountPaidInCentimes, 500_000);
   assert.equal(preview.remainingDueInCentimes, 250_000);
   assert.equal(storedTour.status, 'CLOSED');
+});
+
+test('lit une seule fois les versements comptés et terminés sans dépendre des statuts actifs', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const countedTour = await insertTour();
+  const closedTour = await insertTour({ status: 'CLOSED' });
+
+  await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    note: 'Versement compté',
+    tourId: countedTour.tourId,
+  });
+  await submitPayment({
+    amount: '2500',
+    cashRegisterId: cashRegister.id,
+    tourId: closedTour.tourId,
+  });
+  await Promise.all([
+    database.collection('cashRegisters').updateOne(
+      { _id: new ObjectId(cashRegister.id) },
+      { $set: { active: false } },
+    ),
+    database.collection('deliverers').updateMany(
+      { _id: { $in: [countedTour.delivererId, closedTour.delivererId] } },
+      { $set: { active: false } },
+    ),
+  ]);
+  const before = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    cashRegisters: await database.collection('cashRegisters').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+  const [journal, options] = await Promise.all([
+    listCashPayments({ userId: cashierId.toString() }),
+    listCashJournalFilterOptions({ userId: cashierId.toString() }),
+  ]);
+  const after = {
+    cashPayments: await database.collection('cashPayments').countDocuments({}),
+    cashRegisters: await database.collection('cashRegisters').countDocuments({}),
+    deliverers: await database.collection('deliverers').countDocuments({}),
+    tours: await database.collection('tours').countDocuments({}),
+  };
+
+  assert.equal(journal.totalItems, 2);
+  assert.equal(journal.totalAmountInCentimes, 350_000);
+  assert.deepEqual(
+    new Set(journal.payments.map(({ tour }) => tour.id)),
+    new Set([countedTour.tourId.toString(), closedTour.tourId.toString()]),
+  );
+  assert.equal(journal.payments.find(
+    ({ tour }) => tour.id === countedTour.tourId.toString(),
+  ).note, 'Versement compté');
+  assert.equal(options.deliverers.length, 2);
+  assert.equal(journal.cashRegisters[0].id, cashRegister.id);
+  assert.deepEqual(after, before);
+  assert.equal(await database.collection('cashMovements').countDocuments({}), 0);
+});
+
+test('filtre le journal, applique les journées d’Alger et totalise toute la sélection', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const firstTour = await insertTour({ totalDueInCentimes: 1_000_000 });
+  const secondTour = await insertTour({ totalDueInCentimes: 1_000_000 });
+  const receivedAtValues = [
+    new Date('2026-09-13T22:59:59.999Z'),
+    new Date('2026-09-14T12:00:00.000Z'),
+    new Date('2026-09-14T12:00:00.000Z'),
+    new Date('2026-09-14T23:00:00.000Z'),
+  ];
+  const references = [];
+
+  for (const [index, receivedAt] of receivedAtValues.entries()) {
+    const tour = index === 2 ? secondTour : firstTour;
+    const result = await submitPayment({
+      amount: String((index + 1) * 100),
+      cashRegisterId: cashRegister.id,
+      tourId: tour.tourId,
+    });
+    references.push(result.payment.reference);
+
+    await database.collection('cashPayments').updateOne(
+      { reference: result.payment.reference },
+      { $set: { receivedAt } },
+    );
+  }
+
+  const dateResult = await listCashPayments({
+    dateFrom: '2026-09-14',
+    dateTo: '2026-09-14',
+    pageSize: 1,
+    userId: cashierId.toString(),
+  });
+  const delivererResult = await listCashPayments({
+    delivererId: secondTour.delivererId.toString(),
+    userId: cashierId.toString(),
+  });
+  const secondPage = await listCashPayments({
+    dateFrom: '2026-09-14',
+    dateTo: '2026-09-14',
+    page: 2,
+    pageSize: 1,
+    userId: cashierId.toString(),
+  });
+  const searchResult = await listCashPayments({
+    query: secondTour.delivererCode.toLocaleLowerCase('fr'),
+    userId: cashierId.toString(),
+  });
+  const namedSearchResult = await listCashPayments({
+    query: 'Livreur caisse',
+    userId: cashierId.toString(),
+  });
+
+  assert.equal(dateResult.totalItems, 2);
+  assert.equal(dateResult.totalPages, 2);
+  assert.equal(dateResult.payments.length, 1);
+  assert.equal(dateResult.payments[0].reference, references[2]);
+  assert.equal(dateResult.totalAmountInCentimes, 50_000);
+  assert.equal(secondPage.payments[0].reference, references[1]);
+  assert.equal(secondPage.totalAmountInCentimes, 50_000);
+  assert.equal(delivererResult.totalItems, 1);
+  assert.equal(delivererResult.totalAmountInCentimes, 30_000);
+  assert.equal(searchResult.totalItems, 1);
+  assert.equal(namedSearchResult.totalItems, 4);
+});
+
+test('recherche une référence, conserve les filtres et refuse la lecture sans cash.read', async () => {
+  const cashRegister = await initializeMainCashRegister();
+  const tour = await insertTour();
+  const payment = await submitPayment({
+    amount: '1000',
+    cashRegisterId: cashRegister.id,
+    tourId: tour.tourId,
+  });
+  const withoutCashRead = await createUser(['tours.read', 'deliverers.read']);
+  const state = readCashJournalState({
+    au: '2026-09-30',
+    du: '2026-09-01',
+    livreur: tour.delivererId.toString(),
+    page: '2',
+    q: payment.payment.reference,
+  });
+  const href = buildCashJournalHref(state);
+  const result = await listCashPayments({
+    query: payment.payment.reference,
+    userId: cashierId.toString(),
+  });
+
+  assert.equal(result.totalItems, 1);
+  assert.match(href, /^\/caisse\?/u);
+  assert.match(href, /q=VRS-/u);
+  assert.match(href, /livreur=/u);
+  assert.match(href, /du=2026-09-01/u);
+  assert.match(href, /au=2026-09-30/u);
+  assert.match(href, /page=2/u);
+  await assert.rejects(
+    listCashPayments({ userId: withoutCashRead.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === CASH_READ_PERMISSION,
+  );
+  await assert.rejects(
+    listCashJournalFilterOptions({ userId: withoutCashRead.toString() }),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === CASH_READ_PERMISSION,
+  );
 });
 
 test('annule les verrous et le versement si son insertion échoue', async () => {
