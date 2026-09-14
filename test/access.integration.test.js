@@ -63,10 +63,20 @@ test('le catalogue conserve les accès livreurs et tournées hors du rôle Manag
   assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.update'));
+  assert.ok(PERMISSION_KEYS.includes('deliverers.credit-limit.read'));
+  assert.ok(PERMISSION_KEYS.includes('deliverers.credit-limit.update'));
   assert.ok(PERMISSION_KEYS.includes('deliverers.status.update'));
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.read'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.create'), false);
   assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.update'), false);
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('deliverers.credit-limit.read'),
+    false,
+  );
+  assert.equal(
+    INITIAL_MANAGER_PERMISSIONS.includes('deliverers.credit-limit.update'),
+    false,
+  );
   assert.equal(
     INITIAL_MANAGER_PERMISSIONS.includes('deliverers.status.update'),
     false,
@@ -166,6 +176,12 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   const second = await grantYahiaFullAccessPermission(
     'deliverers.status.update',
   );
+  const creditLimitRead = await grantYahiaFullAccessPermission(
+    'deliverers.credit-limit.read',
+  );
+  const creditLimitUpdate = await grantYahiaFullAccessPermission(
+    'deliverers.credit-limit.update',
+  );
   const toursRead = await grantYahiaFullAccessPermission('tours.read');
   const toursCreate = await grantYahiaFullAccessPermission('tours.create');
   const toursLoad = await grantYahiaFullAccessPermission('tours.load');
@@ -193,6 +209,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
 
   assert.equal(first.granted, true);
   assert.equal(second.granted, false);
+  assert.equal(creditLimitRead.granted, true);
+  assert.equal(creditLimitUpdate.granted, true);
   assert.equal(toursRead.granted, true);
   assert.equal(toursCreate.granted, true);
   assert.equal(toursLoad.granted, true);
@@ -206,6 +224,8 @@ test('attribue les nouvelles permissions uniquement au rôle dédié de yahia', 
   assert.deepEqual(yahiaRole.permissions, [
     'deliverers.read',
     'deliverers.status.update',
+    'deliverers.credit-limit.read',
+    'deliverers.credit-limit.update',
     'tours.read',
     'tours.create',
     'tours.load',

@@ -10,6 +10,11 @@ import {
   getDelivererCashSummary,
 } from '../../../../lib/cash-payments.js';
 import {
+  DELIVERER_CREDIT_LIMIT_READ_PERMISSION,
+  DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
+  getDelivererCreditLimit,
+} from '../../../../lib/deliverer-credit-limits.js';
+import {
   formatDelivererCreatedAt,
   getDelivererById,
   requireDelivererEditPermission,
@@ -23,6 +28,7 @@ import {
   readDelivererTourListState,
 } from '../../../../lib/tours.js';
 import DelivererEditForm from './deliverer-edit-form.js';
+import DelivererCreditLimitForm from './deliverer-credit-limit-form.js';
 import DelivererStatusButton from './deliverer-status-button.js';
 import DelivererTourList from './deliverer-tour-list.js';
 import TourCreateButton from './tour-create-button.js';
@@ -52,6 +58,12 @@ const DelivererPage = async ({ params, searchParams }) => {
   const canUpdateDelivererStatus = permissions.includes(
     'deliverers.status.update',
   );
+  const canReadCreditLimit = permissions.includes(
+    DELIVERER_CREDIT_LIMIT_READ_PERMISSION,
+  );
+  const canUpdateCreditLimit = permissions.includes(
+    DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
+  );
   const canCreateTour = permissions.includes('tours.create');
   const canReadCash = permissions.includes(CASH_READ_PERMISSION);
   const canReadTours = permissions.includes('tours.read');
@@ -70,12 +82,20 @@ const DelivererPage = async ({ params, searchParams }) => {
     notFound();
   }
 
-  const cashSummary = canReadCash
-    ? await getDelivererCashSummary({
-        delivererId: deliverer.id,
-        userId: session.userId,
-      })
-    : null;
+  const [cashSummary, creditLimitResult] = await Promise.all([
+    canReadCash
+      ? getDelivererCashSummary({
+          delivererId: deliverer.id,
+          userId: session.userId,
+        })
+      : null,
+    canReadCreditLimit
+      ? getDelivererCreditLimit({
+          delivererId: deliverer.id,
+          userId: session.userId,
+        })
+      : null,
+  ]);
 
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
@@ -290,6 +310,14 @@ const DelivererPage = async ({ params, searchParams }) => {
           </aside>
         </div>
       </header>
+
+      {creditLimitResult?.creditLimit && (
+        <DelivererCreditLimitForm
+          canUpdate={canUpdateCreditLimit}
+          creditLimit={creditLimitResult.creditLimit}
+          delivererId={deliverer.id}
+        />
+      )}
 
       {cashSummary && (
         <section

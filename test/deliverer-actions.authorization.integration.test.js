@@ -39,6 +39,7 @@ const {
   deactivateDeliverer,
   reactivateDeliverer,
   updateDeliverer,
+  updateDelivererCreditLimit,
 } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
@@ -425,6 +426,83 @@ test('refuse la modification sans deliverers.update et n’écrit rien', async (
   assert.equal(unchanged.name, 'Livreur protégé');
   assert.equal(unchanged.updatedAt, undefined);
   assert.equal(unchanged.updatedBy, undefined);
+});
+
+test('autorise la Server Action de limite et détermine son auteur côté serveur', async () => {
+  const { token, userId } = await createUserSession(
+    'limite-credit-autorisee',
+    ['deliverers.credit-limit.update'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    active: true,
+    code: 'LIV-LIMITE-ACTION',
+    name: 'Livreur avec limite',
+  });
+
+  const formData = new FormData();
+
+  formData.set('creditLimitAmount', '12500,75');
+  formData.set('creditLimitExpectedVersion', '0');
+  formData.set('updatedBy', new ObjectId().toString());
+  formData.set('updatedAt', '2000-01-01T00:00:00.000Z');
+  const startedAt = new Date();
+  const result = await callWithSession(token, () =>
+    updateDelivererCreditLimit(
+      delivererId.toString(),
+      { revision: 0 },
+      formData,
+    ));
+  const stored = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.equal(result.succeeded, true);
+  assert.equal(result.message, 'La limite de crédit a été mise à jour.');
+  assert.equal(stored.creditLimit.amountInCentimes, 1_250_075);
+  assert.ok(stored.creditLimit.updatedBy.equals(userId));
+  assert.ok(stored.creditLimit.updatedAt >= startedAt);
+  assert.ok(stored.creditLimitHistory[0].changedBy.equals(userId));
+});
+
+test('refuse la Server Action de limite avec les droits livreur ou caisse génériques', async () => {
+  const { token } = await createUserSession(
+    'limite-credit-interdite',
+    ['cash.payments.create', 'deliverers.read', 'deliverers.update'],
+  );
+  const delivererId = new ObjectId();
+
+  await database.collection('deliverers').insertOne({
+    _id: delivererId,
+    active: true,
+    code: 'LIV-LIMITE-INTERDITE',
+    name: 'Livreur sans droit limite',
+  });
+
+  const formData = new FormData();
+
+  formData.set('creditLimitAmount', '5000');
+  formData.set('creditLimitExpectedVersion', '0');
+
+  await assert.rejects(
+    callWithSession(token, () => updateDelivererCreditLimit(
+      delivererId.toString(),
+      { revision: 0 },
+      formData,
+    )),
+    (error) => error instanceof PermissionDeniedError
+      && error.permission === 'deliverers.credit-limit.update',
+  );
+
+  const unchanged = await database.collection('deliverers').findOne({
+    _id: delivererId,
+  });
+
+  assert.equal('creditLimit' in unchanged, false);
+  assert.equal('creditLimitHistory' in unchanged, false);
+  assert.ok(unchanged._id.equals(delivererId));
 });
 
 test('protège aussi l’ouverture directe du formulaire de modification', async () => {

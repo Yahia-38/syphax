@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache.js';
 import { redirect } from 'next/navigation.js';
 
 import {
+  DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
+  updateDelivererCreditLimit as saveDelivererCreditLimit,
+} from '../../../../lib/deliverer-credit-limits.js';
+import {
   deactivateDeliverer as saveDelivererDeactivation,
   reactivateDeliverer as saveDelivererReactivation,
   updateDeliverer as saveDeliverer,
@@ -188,4 +192,88 @@ export const updateDeliverer = async (
   revalidatePath('/livreurs');
   revalidatePath(`/livreurs/${delivererId}`);
   redirect(buildDelivererHref(delivererId, returnHref));
+};
+
+export const updateDelivererCreditLimit = async (
+  delivererId,
+  previousState,
+  formData,
+) => {
+  const session = await requirePermission(
+    DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
+  );
+  const values = {
+    amount: readTextField(formData, 'creditLimitAmount'),
+  };
+  const rawExpectedVersion = readTextField(
+    formData,
+    'creditLimitExpectedVersion',
+  );
+  const expectedVersion = /^\d+$/u.test(rawExpectedVersion)
+    ? Number(rawExpectedVersion)
+    : null;
+  const revision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision + 1
+    : 1;
+
+  try {
+    const result = await saveDelivererCreditLimit({
+      ...values,
+      delivererId,
+      expectedVersion,
+      updatedBy: session.userId,
+    });
+
+    if (result.errors) {
+      if (result.stale) {
+        revalidatePath(`/livreurs/${delivererId}`);
+      }
+
+      return {
+        errors: result.errors,
+        message: null,
+        revision,
+        stale: Boolean(result.stale),
+        succeeded: false,
+        values,
+      };
+    }
+
+    if (result.notFound) {
+      return {
+        errors: { form: 'Ce livreur n’existe plus.' },
+        message: null,
+        revision,
+        stale: false,
+        succeeded: false,
+        values,
+      };
+    }
+
+    revalidatePath(`/livreurs/${delivererId}`);
+
+    return {
+      errors: {},
+      message: result.changed
+        ? 'La limite de crédit a été mise à jour.'
+        : 'La limite de crédit est déjà identique.',
+      revision,
+      stale: false,
+      succeeded: true,
+      values,
+    };
+  } catch (error) {
+    console.error('Échec de la modification de la limite de crédit :', error);
+
+    return {
+      errors: {
+        form: 'La modification de la limite de crédit est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+      stale: false,
+      succeeded: false,
+      values,
+    };
+  }
 };
