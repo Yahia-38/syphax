@@ -9,6 +9,7 @@ const ProtectedLayout = async ({ children }) => {
   return (
     <div className='min-h-screen bg-slate-50'>
       <Navbar
+        canReadDeliverers={permissions.includes('deliverers.read')}
         canReadProducts={permissions.includes('products.read')}
         canReadReceptions={
           permissions.includes('receptions.read')

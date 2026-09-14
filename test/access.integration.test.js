@@ -44,8 +44,15 @@ after(async () => {
   await closeMongoConnection();
 });
 
-test('le catalogue contient toutes les permissions actuelles du Manager', () => {
-  assert.deepEqual(INITIAL_MANAGER_PERMISSIONS, PERMISSION_KEYS);
+test('le catalogue conserve la création des livreurs hors du rôle Manager partagé', () => {
+  assert.deepEqual(
+    INITIAL_MANAGER_PERMISSIONS,
+    PERMISSION_KEYS.filter((permission) => !permission.startsWith('deliverers.')),
+  );
+  assert.ok(PERMISSION_KEYS.includes('deliverers.read'));
+  assert.ok(PERMISSION_KEYS.includes('deliverers.create'));
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.read'), false);
+  assert.equal(INITIAL_MANAGER_PERMISSIONS.includes('deliverers.create'), false);
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('pricing.update'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.manage'));
   assert.ok(INITIAL_MANAGER_PERMISSIONS.includes('access.roles.assign'));
