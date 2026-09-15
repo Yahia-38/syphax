@@ -5,11 +5,11 @@ import { startTransition, useActionState, useCallback, useEffect, useId, useLayo
 import { useEditingSession } from './editing-session.js';
 import styles from './editable-card.module.css';
 
-export const EditingButtons = ({ pending, onCancel }) => (
+export const EditingButtons = ({ pending, onCancel, submitLabel = 'Enregistrer', pendingLabel = 'Enregistrement…', note = 'Modifications non enregistrées' }) => (
   <div className={styles.actions}>
-    <small>{pending ? 'Enregistrement en cours' : 'Modifications non enregistrées'}</small>
+    <small>{pending ? pendingLabel : note}</small>
     <button disabled={pending} onClick={onCancel} type='button'>Annuler</button>
-    <button disabled={pending} type='submit'>{pending ? 'Enregistrement…' : 'Enregistrer'}</button>
+    <button disabled={pending} type='submit'>{pending ? pendingLabel : submitLabel}</button>
   </div>
 );
 
@@ -37,12 +37,15 @@ export const useInlineSave = ({ action, initialState, onSuccess, onPending, fail
     lockedRef.current = false;
     onPending(false);
     if (state.message) {
-      onSuccess(state.message);
+      onSuccess(state.message, state);
       return;
     }
-    const target = formRef.current?.querySelector('[aria-invalid="true"]')
-      ?? formRef.current?.querySelector('[role="alert"]');
-    target?.focus();
+    requestAnimationFrame(() => {
+      const invalid = formRef.current?.querySelector('[aria-invalid="true"]');
+      const target = invalid?.querySelector('input, select, textarea') ?? invalid
+        ?? formRef.current?.querySelector('[role="alert"]');
+      target?.focus();
+    });
   }, [state, pending, initialState.revision, onPending, onSuccess]);
 
   return { state, pending, formRef, save };

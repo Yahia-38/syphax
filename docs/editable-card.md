@@ -35,6 +35,17 @@ verrouille immédiatement les soumissions concurrentes, attend la fin de la tran
 de la revalidation côté serveur. Aucune règle métier ou monétaire n’appartient
 à la carte.
 
+Le hook transmet aussi le résultat complet à `onSuccess(message, result)` pour
+un récapitulatif de création fondé sur les données serveur. `EditingButtons`
+accepte `submitLabel`, `pendingLabel` et `note` ; ses valeurs par défaut restent
+celles de l’édition. Capturer `FormData` avant d’appeler `save`, puis désactiver
+les champs avec le `pending` renvoyé par le hook.
+
+`EditingSessionProvider creation` emploie les libellés « Continuer la saisie »
+et « Quitter sans créer ». Dans ce mode, il protège également les liens internes
+de la navigation générale, sans changer son apparence. Le formulaire inscrit
+son brouillon et son état en cours via `register`.
+
 La session compare les valeurs nommées du formulaire à leur état à l’ouverture.
 Un retour à cet état ne déclenche aucune confirmation. `EditingLink` utilise
 `Link.onNavigate` pour les liens internes de la zone ; `session.request(callback)`

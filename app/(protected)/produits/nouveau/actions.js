@@ -1,6 +1,8 @@
 'use server';
 
-import { createProduct as saveProduct } from '../../../../lib/products.js';
+import { revalidatePath } from 'next/cache.js';
+
+import { createProduct as saveProduct, validateProduct, validateProductPackaging } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 
 const readTextField = (formData, name) => {
@@ -17,20 +19,34 @@ export const createProduct = async (previousState, formData) => {
     label: readTextField(formData, 'label'),
     quantity: readTextField(formData, 'quantity'),
   };
+  const packagingFlag = readTextField(formData, 'withPackaging');
+  values.withPackaging = packagingFlag === 'true'
+    || (packagingFlag !== 'false' && Boolean(values.label.trim() || values.quantity.trim()));
+  if (!values.withPackaging) {
+    values.label = '';
+    values.quantity = '';
+  }
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
     : 0;
   const revision = previousRevision + 1;
 
+  const validation = validateProduct(values);
+  const packagingValidation = values.withPackaging ? validateProductPackaging(values) : null;
+  if (validation.errors || packagingValidation?.errors) {
+    return { errors: { ...validation.errors, ...packagingValidation?.errors }, message: null, revision, values };
+  }
+
+  let result;
   try {
-    const result = await saveProduct({
+    result = await saveProduct({
       code: values.code,
       designation: values.designation,
       baseUnit: values.baseUnit,
-      packaging: {
+      packaging: values.withPackaging ? {
         label: values.label,
         quantity: values.quantity,
-      },
+      } : undefined,
       createdBy: session.userId,
     });
 
@@ -43,18 +59,6 @@ export const createProduct = async (previousState, formData) => {
       };
     }
 
-    return {
-      errors: {},
-      message: `Le produit ${result.product.code} a été créé avec succès.`,
-      revision,
-      values: {
-        code: '',
-        designation: '',
-        baseUnit: '',
-        label: '',
-        quantity: '',
-      },
-    };
   } catch (error) {
     console.error('Échec de la création du produit :', error);
 
@@ -67,4 +71,14 @@ export const createProduct = async (previousState, formData) => {
       values,
     };
   }
+
+  revalidatePath('/produits');
+  revalidatePath(`/produits/${result.product.id}`);
+  return {
+    errors: {},
+    message: 'Produit créé',
+    product: result.product,
+    revision,
+    values,
+  };
 };

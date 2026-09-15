@@ -8,7 +8,7 @@ import ConfirmationDialog from '../confirmation-dialog.js';
 
 const EditingContext = createContext(null);
 
-export const EditingSessionProvider = ({ children }) => {
+export const EditingSessionProvider = ({ children, creation = false }) => {
   const sessionRef = useRef(null);
   const dialogRef = useRef(null);
   const destinationRef = useRef(null);
@@ -38,6 +38,23 @@ export const EditingSessionProvider = ({ children }) => {
       if (sessionRef.current === session) sessionRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!creation) return;
+    // Include the existing application navbar, outside this provider's subtree.
+    const onClick = (event) => {
+      const link = event.target.closest?.('a[href]');
+      if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target === '_blank' || link.hasAttribute('download')) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+      if (!sessionRef.current?.dirty && !sessionRef.current?.pending) return;
+      event.preventDefault();
+      event.stopPropagation();
+      request(() => router.push(`${destination.pathname}${destination.search}${destination.hash}`));
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [creation, request, router]);
 
   useEffect(() => {
     const previous = historyRef.current;
@@ -82,8 +99,8 @@ export const EditingSessionProvider = ({ children }) => {
     <EditingContext.Provider value={{ register, request, router }}>
       {children}
       <ConfirmationDialog
-        cancelLabel='Continuer la modification'
-        confirmLabel='Quitter sans enregistrer'
+        cancelLabel={creation ? 'Continuer la saisie' : 'Continuer la modification'}
+        confirmLabel={creation ? 'Quitter sans créer' : 'Quitter sans enregistrer'}
         confirmType='button'
         dialogRef={dialogRef}
         onClose={() => {
@@ -98,9 +115,9 @@ export const EditingSessionProvider = ({ children }) => {
           dialogRef.current?.close();
           proceed?.();
         }}
-        title='Quitter la modification ?'
+        title={creation ? 'Abandonner la création ?' : 'Quitter la modification ?'}
       >
-        <p>Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.</p>
+        <p>{creation ? 'Les informations saisies ne sont pas enregistrées. Aucun produit ne sera créé.' : 'Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.'}</p>
       </ConfirmationDialog>
     </EditingContext.Provider>
   );

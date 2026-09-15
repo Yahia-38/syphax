@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import test, { after, before } from 'node:test';
 
-import { ObjectId } from 'mongodb';
+import { Collection, ObjectId } from 'mongodb';
 
 globalThis.AsyncLocalStorage ??= AsyncLocalStorage;
 
@@ -433,4 +433,101 @@ test('refuse les actions de conditionnement sans packaging.read', async () => {
   const productId = new ObjectId().toString();
   await assert.rejects(callWithSession(token, () => addProductPackaging(productId, { revision: 0 }, formData)), isPermissionDenied('packaging.read'));
   await assert.rejects(callWithSession(token, () => removePackagingAction(productId, new ObjectId().toString(), { revision: 0 })), isPermissionDenied('packaging.read'));
+});
+
+const creationData = (overrides = {}) => {
+  const data = new FormData();
+  for (const [name, value] of Object.entries({ designation: 'Boisson citron 1 L', code: 'CREATION-TEST', baseUnit: 'BOUTEILLE', withPackaging: 'false', ...overrides })) {
+    data.set(name, value);
+  }
+  return data;
+};
+
+test('création refondue : création seule, résultat validé et aucun stock ni prix', async () => {
+  const { token, userId } = await createUserSession('creation-seule', ['products.create']);
+  const result = await callWithSession(token, () => createProduct({ revision: 0 }, creationData({ code: '  création-seule  ', designation: '  Boisson citron 1 L  ' })));
+  assert.equal(result.message, 'Produit créé');
+  assert.equal(result.product.code, 'CRÉATION-SEULE');
+  assert.equal(result.product.designation, 'Boisson citron 1 L');
+  assert.equal(result.product.packaging, null);
+  const product = await database.collection('products').findOne({ _id: new ObjectId(result.product.id) });
+  assert.ok(product.createdBy.equals(userId));
+  assert.equal(product.salePrice, undefined);
+  assert.equal(product.packagings, undefined);
+  assert.equal(await database.collection('stockMovements').countDocuments({ productId: product._id }), 0);
+  await assert.rejects(callWithSession(token, () => requirePermission('products.read')), isPermissionDenied('products.read'));
+});
+
+test('création refondue : conditionnement intégré sous products.create, récapitulatif fidèle', async () => {
+  const { token, userId } = await createUserSession('creation-conditionnement-initial', ['products.create']);
+  const result = await callWithSession(token, () => createProduct({ revision: 0 }, creationData({ code: 'CREATION-PACK', withPackaging: 'true', label: '  Pack de 6  ', quantity: '6' })));
+  assert.deepEqual(result.product.packaging, { label: 'Pack de 6', quantity: 6 });
+  const product = await database.collection('products').findOne({ _id: new ObjectId(result.product.id) });
+  assert.equal(product.packagings.length, 1);
+  assert.equal(product.packagings[0].quantity, 6);
+  assert.ok(product.packagings[0].createdBy.equals(userId));
+  assert.equal(await database.collection('stockMovements').countDocuments({ productId: product._id }), 0);
+});
+
+test('création refondue : option active vide ou partielle et quantités invalides sans écriture', async () => {
+  const { token } = await createUserSession('creation-pack-invalide', ['products.create']);
+  for (const [label, quantity, expected] of [
+    ['', '', ['label', 'quantity']], ['', '6', ['label']], ['Pack', '', ['quantity']],
+    ['Pack', '2.5', ['quantity']], ['Pack', '1', ['quantity']], ['Pack', '1000001', ['quantity']],
+    ['x'.repeat(101), '6', ['label']],
+  ]) {
+    const result = await callWithSession(token, () => createProduct({ revision: 2 }, creationData({ code: 'CREATION-INVALIDE', withPackaging: 'true', label, quantity })));
+    assert.deepEqual(Object.keys(result.errors).sort(), expected);
+    assert.equal(result.revision, 3);
+    assert.equal(result.values.withPackaging, true);
+    assert.equal(result.values.label, label);
+    assert.equal(result.values.quantity, quantity);
+    assert.equal(result.product, undefined);
+  }
+  assert.equal(await database.collection('products').countDocuments({ code: 'CREATION-INVALIDE' }), 0);
+});
+
+test('création refondue : option désactivée exclut les valeurs obsolètes et préserve les erreurs d’identification', async () => {
+  const { token } = await createUserSession('creation-pack-desactive', ['products.create']);
+  const invalid = await callWithSession(token, () => createProduct({ revision: 0 }, creationData({ code: '', withPackaging: 'false', label: 'Ancien pack', quantity: '1.5' })));
+  assert.deepEqual(Object.keys(invalid.errors), ['code']);
+  assert.equal(invalid.values.label, '');
+  assert.equal(invalid.values.quantity, '');
+  const result = await callWithSession(token, () => createProduct(invalid, creationData({ code: 'CREATION-SANS-PACK', withPackaging: 'false', label: 'Ancien pack', quantity: '1.5' })));
+  assert.equal(result.product.packaging, null);
+});
+
+test('création refondue : espaces intérieurs et doublon conservent tous les champs', async () => {
+  const { token } = await createUserSession('creation-doublon', ['products.create']);
+  const data = creationData({ code: 'CREATION-DOUBLON', withPackaging: 'true', label: 'Pack', quantity: '12' });
+  const first = await callWithSession(token, () => createProduct({ revision: 0 }, data));
+  assert.ok(first.product.id);
+  const duplicate = await callWithSession(token, () => createProduct(first, data));
+  assert.equal(duplicate.errors.code, 'Un produit avec ce code existe déjà.');
+  assert.equal(duplicate.values.designation, 'Boisson citron 1 L');
+  assert.equal(duplicate.values.baseUnit, 'BOUTEILLE');
+  assert.equal(duplicate.values.label, 'Pack');
+  assert.equal(duplicate.values.quantity, '12');
+  assert.equal(duplicate.values.withPackaging, true);
+  const spaced = await callWithSession(token, () => createProduct({ revision: 0 }, creationData({ code: 'CODE ESPACE' })));
+  assert.equal(spaced.errors.code, 'Le code ne doit contenir aucun espace intérieur.');
+  assert.equal(await database.collection('products').countDocuments({ code: 'CREATION-DOUBLON' }), 1);
+});
+
+test('création refondue : échec de persistance et réessai sans perte des champs', async (context) => {
+  const { token } = await createUserSession('creation-reessai', ['products.create']);
+  const products = database.collection('products');
+  const insert = context.mock.method(Collection.prototype, 'insertOne', async () => { throw new Error('Échec de test isolé'); });
+  context.mock.method(console, 'error', () => {});
+  const data = creationData({ code: 'CREATION-REESSAI', withPackaging: 'true', label: 'Pack', quantity: '6' });
+  const failed = await callWithSession(token, () => createProduct({ revision: 0 }, data));
+  assert.equal(failed.errors.form, 'La création du produit est momentanément indisponible.');
+  assert.equal(failed.values.withPackaging, true);
+  assert.equal(failed.values.label, 'Pack');
+  assert.equal(failed.values.designation, 'Boisson citron 1 L');
+  assert.equal(failed.product, undefined);
+  insert.mock.restore();
+  const retried = await callWithSession(token, () => createProduct(failed, data));
+  assert.ok(retried.product.id);
+  assert.equal(await products.countDocuments({ code: 'CREATION-REESSAI' }), 1);
 });
