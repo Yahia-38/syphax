@@ -9,10 +9,16 @@ import {
   useState,
 } from 'react';
 
+import { useEditingSession } from '../../components/editing-session.js';
+import EditableCard, { EditingButtons, useInlineSave } from '../../components/editable-card.js';
+
 import {
   addProductPackaging,
   removePackagingAction,
 } from './packaging-actions.js';
+
+import styles from './product-detail.module.css';
+import ProductIcon from './product-icon.js';
 
 const INITIAL_STATE = {
   errors: {},
@@ -29,6 +35,7 @@ const REMOVE_INITIAL_STATE = {
 const PACKAGINGS_PER_PAGE = 5;
 
 const PackagingRemovalButton = ({ packaging, product }) => {
+  const editingSession = useEditingSession();
   const dialogRef = useRef(null);
   const triggerRef = useRef(null);
   const titleId = useId();
@@ -51,17 +58,21 @@ const PackagingRemovalButton = ({ packaging, product }) => {
   return (
     <>
       <button
-        className='text-sm font-medium text-red-700 transition hover:text-red-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700'
-        onClick={() => dialogRef.current?.showModal()}
+        className={styles.deleteButton}
+        onClick={() => {
+          const open = () => dialogRef.current?.showModal();
+          if (editingSession) editingSession.request(open); else open();
+        }}
         ref={triggerRef}
         type='button'
       >
-        Retirer
+        <ProductIcon name='trash' />Retirer
       </button>
 
       <dialog
         aria-labelledby={titleId}
         className='m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-left shadow-xl backdrop:bg-slate-950/40'
+        onCancel={(event) => { if (pending) event.preventDefault(); }}
         onClose={() => triggerRef.current?.focus()}
         ref={dialogRef}
       >
@@ -113,6 +124,40 @@ const PackagingRemovalButton = ({ packaging, product }) => {
   );
 };
 
+
+const PackagingEditor = ({ productId, quantityUnitLabel, onCancel, onSuccess, onPending }) => {
+  const [values, setValues] = useState({ label: '', quantity: '' });
+  const { state, pending, formRef, save } = useInlineSave({
+    action: addProductPackaging.bind(null, productId), initialState: INITIAL_STATE,
+    onSuccess, onPending, failureMessage: 'L’ajout du conditionnement est momentanément indisponible.',
+  });
+  const quantity = /^\d+$/u.test(values.quantity) ? Number(values.quantity) : null;
+  const preview = values.label.trim() && Number.isSafeInteger(quantity) && quantity >= 2 && quantity <= 1000000
+    ? `1 ${values.label.trim()} = ${quantity} ${quantityUnitLabel}` : 'Saisissez un libellé et une quantité entière entre 2 et 1 000 000.';
+  return (
+    <form className={styles.editForm} ref={formRef} onSubmit={(event) => { event.preventDefault(); save(new FormData(event.currentTarget)); }}>
+      {state.errors.form && <p className='mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800' role='alert' tabIndex={-1}>{state.errors.form}</p>}
+      <fieldset className={styles.packFormGrid} disabled={pending}>
+        <div><label className='block text-sm font-medium text-slate-700' htmlFor='packaging-label'>Libellé</label>
+          <input aria-invalid={Boolean(state.errors.label)} aria-describedby={state.errors.label ? 'packaging-label-error' : undefined} autoComplete='off'
+            className='mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:outline-blue-600 aria-invalid:border-red-500'
+            id='packaging-label' maxLength={100} name='label' required value={values.label} onChange={(event) => setValues((previous) => ({ ...previous, label: event.target.value }))} />
+          {state.errors.label && <p className='mt-2 text-sm text-red-700' id='packaging-label-error'>{state.errors.label}</p>}
+        </div>
+        <div><label className='block text-sm font-medium text-slate-700' htmlFor='packaging-quantity'>Quantité en unités de base</label>
+          <input aria-invalid={Boolean(state.errors.quantity)} aria-describedby={state.errors.quantity ? 'packaging-quantity-error packaging-preview' : 'packaging-preview'}
+            className='mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:outline-blue-600 aria-invalid:border-red-500'
+            id='packaging-quantity' inputMode='numeric' min={2} max={1000000} step={1} type='number' name='quantity' required value={values.quantity}
+            onChange={(event) => setValues((previous) => ({ ...previous, quantity: event.target.value }))} />
+          {state.errors.quantity && <p className='mt-2 text-sm text-red-700' id='packaging-quantity-error'>{state.errors.quantity}</p>}
+        </div>
+      </fieldset>
+      <p aria-live='polite' className={styles.conversionPreview} id='packaging-preview'>{preview}</p>
+      <EditingButtons pending={pending} onCancel={onCancel} />
+    </form>
+  );
+};
+
 const PackagingForm = ({
   baseUnitLabel,
   canCreatePackaging,
@@ -120,31 +165,10 @@ const PackagingForm = ({
   packagings,
   product,
 }) => {
-  const labelInputRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [labelValue, setLabelValue] = useState('');
-  const [quantityValue, setQuantityValue] = useState('');
   const [packagingQuery, setPackagingQuery] = useState('');
   const [quantityFilter, setQuantityFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const addPackagingWithProductId = addProductPackaging.bind(null, product.id);
-  const runPackagingAdd = async (previousState, formData) => {
-    const nextState = await addPackagingWithProductId(previousState, formData);
-
-    setLabelValue(nextState.values.label);
-    setQuantityValue(nextState.values.quantity);
-    setIsOpen(!nextState.message);
-
-    return nextState;
-  };
   const quantityUnitLabel = `${baseUnitLabel.toLocaleLowerCase('fr')}s`;
-  const [state, formAction, pending] = useActionState(
-    runPackagingAdd,
-    INITIAL_STATE,
-  );
-  const preview = labelValue.trim() && quantityValue.trim()
-    ? `1 ${labelValue.trim()} = ${quantityValue.trim()} ${quantityUnitLabel}`
-    : 'La conversion s’affichera ici.';
   const quantityOptions = useMemo(
     () => Array.from(new Set(packagings.map(({ quantity }) => quantity)))
       .sort((firstQuantity, secondQuantity) => firstQuantity - secondQuantity),
@@ -186,334 +210,35 @@ const PackagingForm = ({
     setCurrentPage(1);
   };
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    labelInputRef.current?.focus();
-  }, [isOpen, state.revision]);
-
   return (
-    <section
-      aria-labelledby='packaging-title'
-      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <div className='flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-6 py-5'>
-        <div>
-          <h2
-            className='text-lg font-semibold text-slate-900'
-            id='packaging-title'
-          >
-            Conditionnements supplémentaires
-          </h2>
-          <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Unités utilisées pour acheter, recevoir et compter ce produit.
-          </p>
+    <>
+      {canCreatePackaging && <EditableCard title='Ajouter une conversion' titleIcon={<ProductIcon name='box' />} description='Définissez un libellé et sa quantité en unités de base.'
+        canEdit creation editLabel='Ajouter' editingLabel='Ajout en cours' formComponent={PackagingEditor} formProps={{ productId: product.id, quantityUnitLabel }} onSaved={resetFilters} />}
+      <section className={`${styles.card} ${styles.packList}`} aria-labelledby='packagings-title'>
+        <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='box' /><h2 id='packagings-title'>Conditionnements définis</h2></div><span className={styles.pill}>{packagings.length} conversions</span></div>
+        <div className={styles.filters} role='search'>
+          <div className={styles.search}><ProductIcon name='search' /><label className='sr-only' htmlFor='packaging-search'>Rechercher un conditionnement</label>
+            <input id='packaging-search' maxLength={100} placeholder='Rechercher par libellé' type='search' value={packagingQuery} onChange={(event) => { setPackagingQuery(event.target.value); setCurrentPage(1); }} /></div>
+          <label className='sr-only' htmlFor='packaging-quantity-filter'>Filtrer par quantité de conversion</label>
+          <select id='packaging-quantity-filter' value={quantityFilter} onChange={(event) => { setQuantityFilter(event.target.value); setCurrentPage(1); }}>
+            <option value='ALL'>Toutes les conversions</option>{quantityOptions.map((quantity) => <option key={quantity} value={quantity}>{quantity} {quantityUnitLabel}</option>)}
+          </select>
+          {filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Réinitialiser</button>}
         </div>
-        {canCreatePackaging && !isOpen && (
-          <button
-            aria-label='Ajouter un conditionnement'
-            className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={() => setIsOpen(true)}
-            title='Ajouter un conditionnement'
-            type='button'
-          >
-            <svg
-              aria-hidden='true'
-              fill='none'
-              height='18'
-              stroke='currentColor'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              strokeWidth='2'
-              viewBox='0 0 24 24'
-              width='18'
-            >
-              <path d='M12 5v14' />
-              <path d='M5 12h14' />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {canCreatePackaging && isOpen && (
-        <form
-          action={formAction}
-          className={`px-6 py-4 ${packagings.length > 0 ? 'border-b border-slate-100' : ''}`}
-        >
-          {state.errors.form && (
-            <p
-              className='mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-              role='alert'
-            >
-              {state.errors.form}
-            </p>
-          )}
-
-          <div className='flex flex-wrap items-start justify-between gap-4'>
-            <div className='min-w-[220px] flex-1'>
-              <label className='sr-only' htmlFor='packaging-label'>
-                Libellé du conditionnement
-              </label>
-              <input
-                aria-describedby={
-                  state.errors.label
-                    ? 'packaging-label-error packaging-preview'
-                    : 'packaging-preview'
-                }
-                aria-invalid={Boolean(state.errors.label)}
-                autoComplete='off'
-                className='w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-[15px] font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                id='packaging-label'
-                maxLength={100}
-                name='label'
-                onChange={(event) => setLabelValue(event.target.value)}
-                placeholder='Ex. Pack de 6'
-                ref={labelInputRef}
-                required
-                value={labelValue}
-              />
-              <p
-                aria-live='polite'
-                className='mt-1.5 text-[13px] text-slate-500'
-                id='packaging-preview'
-              >
-                {preview}
-              </p>
-              {state.errors.label && (
-                <p
-                  className='mt-1.5 text-sm text-red-700'
-                  id='packaging-label-error'
-                >
-                  {state.errors.label}
-                </p>
-              )}
-            </div>
-
-            <div className='flex flex-wrap items-start gap-3'>
-              <div>
-                <label className='sr-only' htmlFor='packaging-quantity'>
-                  Quantité en {quantityUnitLabel}
-                </label>
-                <div className='flex rounded-lg shadow-sm'>
-                  <input
-                    aria-describedby={
-                      state.errors.quantity
-                        ? 'packaging-quantity-error packaging-preview'
-                        : 'packaging-preview'
-                    }
-                    aria-invalid={Boolean(state.errors.quantity)}
-                    className='w-24 rounded-l-lg border border-r-0 border-slate-300 bg-white px-3 py-2 text-right text-sm font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                    id='packaging-quantity'
-                    inputMode='numeric'
-                    max={1000000}
-                    min={2}
-                    name='quantity'
-                    onChange={(event) => setQuantityValue(event.target.value)}
-                    placeholder='6'
-                    required
-                    step={1}
-                    type='number'
-                    value={quantityValue}
-                  />
-                  <span className='inline-flex items-center rounded-r-lg border border-slate-300 bg-slate-50 px-3 text-[13px] font-semibold text-slate-700'>
-                    {quantityUnitLabel}
-                  </span>
-                </div>
-                {state.errors.quantity && (
-                  <p
-                    className='mt-1.5 text-sm text-red-700'
-                    id='packaging-quantity-error'
-                  >
-                    {state.errors.quantity}
-                  </p>
-                )}
-              </div>
-
-              <button
-                className='rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                type='submit'
-              >
-                {pending ? 'Enregistrement…' : 'Enregistrer'}
-              </button>
-              <button
-                className='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                onClick={() => setIsOpen(false)}
-                type='button'
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
-
-      {packagings.length > 0 ? (
-        <>
-          <div className='flex flex-wrap items-end gap-3 border-b border-slate-100 p-4'>
-            <div className='min-w-[220px] flex-1'>
-              <label
-                className='sr-only'
-                htmlFor='packaging-search'
-              >
-                Rechercher un conditionnement
-              </label>
-              <input
-                className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-                id='packaging-search'
-                maxLength={100}
-                onChange={(event) => {
-                  setPackagingQuery(event.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder='Rechercher par libellé'
-                type='search'
-                value={packagingQuery}
-              />
-            </div>
-            <div>
-              <label
-                className='sr-only'
-                htmlFor='packaging-quantity-filter'
-              >
-                Filtrer par quantité de conversion
-              </label>
-              <select
-                className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-                id='packaging-quantity-filter'
-                onChange={(event) => {
-                  setQuantityFilter(event.target.value);
-                  setCurrentPage(1);
-                }}
-                value={quantityFilter}
-              >
-                <option value='ALL'>Toutes les conversions</option>
-                {quantityOptions.map((quantity) => (
-                  <option key={quantity} value={quantity}>
-                    {quantity} {quantityUnitLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {filtersActive && (
-              <button
-                className='rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                onClick={resetFilters}
-                type='button'
-              >
-                Réinitialiser
-              </button>
-            )}
-          </div>
-
-          <div className='flex items-center justify-between gap-4 border-b border-slate-100 px-6 py-3'>
-            <p className='text-sm text-slate-500'>
-              {filteredPackagings.length > 0
-                ? `${firstPackagingIndex + 1}–${firstPackagingIndex + paginatedPackagings.length} sur ${filteredPackagings.length} conditionnements${filtersActive ? ` (${packagings.length} au total)` : ''}`
-                : `0 conditionnement sur ${packagings.length}`}
-            </p>
-          </div>
-
-          {paginatedPackagings.length > 0 ? (
-            <ul>
-              {paginatedPackagings.map((packaging, index) => (
-                <li
-                  className={`flex flex-wrap items-center justify-between gap-4 px-6 py-4 ${index > 0 ? 'border-t border-slate-100' : ''}`}
-                  key={packaging.id}
-                >
-                  <div>
-                    <p className='text-[15px] font-semibold text-slate-900'>
-                      {packaging.label}
-                    </p>
-                    <p className='mt-1 text-[13px] text-slate-500'>
-                      1 {packaging.label.toLocaleLowerCase('fr')} ={' '}
-                      {packaging.quantity} {quantityUnitLabel}
-                    </p>
-                  </div>
-                  <div className='flex flex-wrap items-center gap-4'>
-                    <span className='rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[13px] font-semibold text-slate-700'>
-                      {packaging.quantity} {quantityUnitLabel}
-                    </span>
-                    {canDeletePackaging && (
-                      <PackagingRemovalButton
-                        packaging={packaging}
-                        product={product}
-                      />
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className='px-6 py-10 text-center'>
-              <p className='font-semibold text-slate-800'>
-                Aucun conditionnement trouvé
-              </p>
-              <p className='mt-2 text-sm text-slate-500'>
-                Modifiez la recherche ou le filtre de conversion.
-              </p>
-              <button
-                className='mt-4 rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                onClick={resetFilters}
-                type='button'
-              >
-                Voir tous les conditionnements
-              </button>
-            </div>
-          )}
-
-          <nav
-            aria-label='Pagination des conditionnements'
-            className='flex items-center justify-between gap-4 border-t border-slate-100 px-6 py-3'
-          >
-            <button
-              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
-              disabled={activePage === 1 || filteredPackagings.length === 0}
-              onClick={() => setCurrentPage(activePage - 1)}
-              type='button'
-            >
-              Précédent
-            </button>
-            <p aria-live='polite' className='text-sm font-medium text-slate-600'>
-              Page {activePage} sur {totalPages}
-            </p>
-            <button
-              className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
-              disabled={
-                activePage === totalPages || filteredPackagings.length === 0
-              }
-              onClick={() => setCurrentPage(activePage + 1)}
-              type='button'
-            >
-              Suivant
-            </button>
+        {paginatedPackagings.length ? <ul>{paginatedPackagings.map((packaging) => <li className={styles.packRow} key={packaging.id}>
+          <div className={styles.packLabel}><span className={styles.packIcon}><ProductIcon name='box' /></span><div><strong>{packaging.label}</strong><small>Conversion en unités de base</small></div></div>
+          <p className={styles.conversion}>1 {packaging.label.toLocaleLowerCase('fr')} = <strong>{new Intl.NumberFormat('fr-DZ').format(packaging.quantity)}</strong> {quantityUnitLabel}</p>
+          <div>{canDeletePackaging && <PackagingRemovalButton packaging={packaging} product={product} />}</div>
+        </li>)}</ul> : <div className={styles.empty}><ProductIcon name='box' /><h3>{packagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement défini'}</h3><p>{packagings.length ? 'Modifiez la recherche ou le filtre de conversion.' : 'Aucun pack, carton ou autre conditionnement n’est encore défini pour ce produit.'}</p>{filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Voir tous les conditionnements</button>}</div>}
+        <div className={styles.footer}><span>{filteredPackagings.length ? `${firstPackagingIndex + 1}–${firstPackagingIndex + paginatedPackagings.length}` : '0'} sur {filteredPackagings.length} conditionnements{filtersActive ? ` (${packagings.length} au total)` : ''}</span>
+          <nav aria-label='Pagination des conditionnements' className={styles.pagination}>
+            <button disabled={activePage === 1} onClick={() => setCurrentPage(activePage - 1)} type='button'>Précédent</button><span aria-live='polite'>Page {activePage} sur {totalPages}</span>
+            <button disabled={activePage === totalPages} onClick={() => setCurrentPage(activePage + 1)} type='button'>Suivant</button>
           </nav>
-        </>
-      ) : !isOpen ? (
-        <div className='flex flex-col items-center px-6 py-8 text-center'>
-          <p className='text-[15px] font-semibold text-slate-700'>
-            Aucun conditionnement défini
-          </p>
-          <p className='mt-2 max-w-md text-sm leading-6 text-slate-500'>
-            Aucun pack, carton ou autre conditionnement avec quantité de
-            conversion n’est encore défini pour ce produit.
-          </p>
         </div>
-      ) : null}
-
-      {state.message && !isOpen && (
-        <p
-          className='border-t border-emerald-100 bg-emerald-50 px-6 py-3.5 text-sm font-semibold text-emerald-700'
-          role='status'
-        >
-          {state.message}
-        </p>
-      )}
-
-    </section>
+      </section>
+      <p className={styles.help}>Une conversion ne crée pas de stock. Les quantités physiques restent exprimées en unités de base.</p>
+    </>
   );
 };
 

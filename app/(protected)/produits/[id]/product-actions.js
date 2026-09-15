@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache.js';
-import { redirect } from 'next/navigation.js';
 
 import { updateProduct as saveProduct } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
@@ -56,5 +55,5 @@ export const updateProduct = async (productId, previousState, formData) => {
 
   revalidatePath('/produits');
   revalidatePath(`/produits/${productId}`);
-  redirect(`/produits/${productId}?updated=1`);
+  return { errors: {}, revision, values, message: 'Le produit a été modifié avec succès.' };
 };

@@ -16,6 +16,7 @@ export const updateProductSalePrice = async (
   formData,
 ) => {
   const session = await requirePermission('pricing.update');
+  await requirePermission('pricing.read');
   const values = { price: readTextField(formData, 'price') };
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
@@ -42,6 +43,7 @@ export const updateProductSalePrice = async (
       };
     }
 
+    revalidatePath('/produits');
     revalidatePath(`/produits/${productId}`);
 
     return {

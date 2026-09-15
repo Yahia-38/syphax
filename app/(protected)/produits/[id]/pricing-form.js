@@ -1,331 +1,90 @@
 'use client';
 
-import { useActionState, useEffect, useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { validateProductSalePrice } from '../../../../lib/product-pricing.js';
+import ConfirmationDialog from '../../confirmation-dialog.js';
+import EditableCard, { EditingButtons, useInlineSave } from '../../components/editable-card.js';
+import styles from './product-detail.module.css';
+import ProductIcon from './product-icon.js';
 import { updateProductSalePrice } from './pricing-actions.js';
 
-const INITIAL_STATE = {
-  errors: {},
-  message: null,
-  revision: 0,
-  values: { price: '' },
-};
+const formatAmount = (centimes) => new Intl.NumberFormat('fr-DZ', { maximumFractionDigits: 2 }).format(centimes / 100);
 
-const formatPrice = (value) => {
-  const amount = Number(String(value).replace(',', '.'));
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return 'Non renseigné';
-  }
-
-  return `${new Intl.NumberFormat('fr-DZ', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  }).format(amount)} DA TTC`;
-};
-
-const formatAmount = (amount) => new Intl.NumberFormat('fr-DZ', {
-  maximumFractionDigits: 2,
-  minimumFractionDigits: 0,
-}).format(amount);
-
-const getPriceHelper = (priceValue, currentPriceInCentimes) => {
-  const proposedPrice = Number(String(priceValue).replace(',', '.'));
-
-  if (!Number.isFinite(proposedPrice) || proposedPrice <= 0) {
-    return 'Saisissez un prix positif.';
-  }
-
-  if (!Number.isSafeInteger(currentPriceInCentimes)) {
-    return `Le prix de vente sera défini à ${formatAmount(proposedPrice)} DA.`;
-  }
-
-  const currentPrice = currentPriceInCentimes / 100;
-  const difference = proposedPrice - currentPrice;
-
-  if (Math.abs(difference) < 0.005) {
-    return 'Identique au prix actuel.';
-  }
-
-  const sign = difference > 0 ? '+' : '−';
-
-  return `${sign}${formatAmount(Math.abs(difference))} DA par rapport au prix actuel (${formatAmount(currentPrice)} DA).`;
-};
-
-const PricingForm = ({
-  baseUnitLabel,
-  canUpdatePrice,
-  currentPrice,
-  currentPriceInCentimes,
-  initiallyOpen,
-  lastChange,
-  productId,
-}) => {
-  const confirmationGrantedRef = useRef(false);
+const PriceEditor = ({ currentPrice, currentPriceInCentimes, productId, unitLabel, onCancel, onSuccess, onPending }) => {
+  const [price, setPrice] = useState(currentPrice);
+  const [localError, setLocalError] = useState(null);
   const dialogRef = useRef(null);
+  const submitRef = useRef(null);
   const inputRef = useRef(null);
-  const submitButtonRef = useRef(null);
-  const titleId = useId();
-  const [isOpen, setIsOpen] = useState(initiallyOpen);
-  const [priceValue, setPriceValue] = useState(currentPrice);
-  const [proposedPrice, setProposedPrice] = useState('');
-  const updatePriceWithProductId = updateProductSalePrice.bind(null, productId);
-  const runPriceUpdate = async (previousState, formData) => {
-    const nextState = await updatePriceWithProductId(previousState, formData);
-
-    setPriceValue(nextState.values.price);
-    setIsOpen(!nextState.message);
-
-    return nextState;
-  };
-  const [state, formAction, pending] = useActionState(
-    runPriceUpdate,
-    INITIAL_STATE,
-  );
-  const unitLabel = baseUnitLabel.toLocaleLowerCase('fr');
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    inputRef.current?.focus();
-  }, [isOpen, state.revision]);
-
-  const handleSubmit = (event) => {
-    if (confirmationGrantedRef.current) {
-      confirmationGrantedRef.current = false;
-      return;
-    }
-
-    event.preventDefault();
-    setProposedPrice(inputRef.current?.value ?? '');
-    dialogRef.current?.showModal();
-  };
-
-  const confirmSubmission = () => {
-    confirmationGrantedRef.current = true;
-    dialogRef.current?.close();
-  };
-
-  const closeDialog = () => {
-    dialogRef.current?.close();
-  };
-
+  const dataRef = useRef(null);
+  const { state, pending, formRef, save } = useInlineSave({
+    action: updateProductSalePrice.bind(null, productId),
+    initialState: { errors: {}, revision: 0, values: { price: currentPrice } },
+    onSuccess, onPending,
+    failureMessage: 'La modification du prix est momentanément indisponible.',
+  });
+  const validation = validateProductSalePrice(price);
+  const proposed = validation.data?.amountInCentimes;
+  const difference = Number.isSafeInteger(currentPriceInCentimes) && Number.isSafeInteger(proposed)
+    ? proposed - currentPriceInCentimes : null;
+  const error = localError ?? state.errors.price;
   return (
-    <section
-      aria-labelledby='pricing-title'
-      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <div className='flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-6 py-5'>
-        <div>
-          <h2
-            className='text-lg font-semibold text-slate-900'
-            id='pricing-title'
-          >
-            Prix de vente
-          </h2>
-          <p className='mt-1 text-sm leading-6 text-slate-600'>
-            TTC, appliqué à l’unité de base. Chaque changement est historisé.
-          </p>
-        </div>
-        {canUpdatePrice && !isOpen && (
-          <button
-            aria-label='Modifier le prix de vente'
-            className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={() => setIsOpen(true)}
-            title='Modifier le prix de vente'
-            type='button'
-          >
-            <svg
-              aria-hidden='true'
-              fill='none'
-              height='18'
-              stroke='currentColor'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              strokeWidth='2'
-              viewBox='0 0 24 24'
-              width='18'
-            >
-              <path d='M12 20h9' />
-              <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' />
-            </svg>
-          </button>
-        )}
+    <form className={styles.editForm} ref={formRef} onSubmit={(event) => {
+      event.preventDefault();
+      if (pending) return;
+      if (validation.errors) {
+        setLocalError(validation.errors.price);
+        inputRef.current?.focus();
+        return;
+      }
+      setLocalError(null);
+      dataRef.current = new FormData(event.currentTarget);
+      dialogRef.current?.showModal();
+    }}>
+      {state.errors.form && <p className='mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800' role='alert' tabIndex={-1}>{state.errors.form}</p>}
+      <label className='block text-sm font-medium text-slate-700' htmlFor='sale-price'>Nouveau prix TTC en DA / {unitLabel}</label>
+      <div className={styles.priceInput}><input aria-describedby={error ? 'sale-price-error sale-price-helper' : 'sale-price-helper'} aria-invalid={Boolean(error)} autoComplete='off'
+        className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xl font-semibold text-slate-900 focus:border-blue-600 focus:outline-blue-600 aria-invalid:border-red-500'
+        disabled={pending} id='sale-price' inputMode='decimal' name='price' ref={inputRef} required type='text' value={price}
+        onChange={(event) => { setPrice(event.target.value); setLocalError(null); }} /><span>DA TTC</span></div>
+      <p aria-live='polite' className={styles.preview} id='sale-price-helper'>
+        {Number.isSafeInteger(proposed)
+          ? difference === null ? `Premier prix : ${formatAmount(proposed)} DA.`
+            : difference === 0 ? 'Identique au prix actuel.'
+              : `Écart : ${difference > 0 ? '+' : '−'}${formatAmount(Math.abs(difference))} DA par rapport au prix actuel (${formatAmount(currentPriceInCentimes)} DA).`
+          : 'Saisissez un prix positif avec deux décimales maximum.'}
+      </p>
+      {error && <p className='mt-2 text-sm text-red-700' id='sale-price-error'>{error}</p>}
+      <div ref={submitRef}><EditingButtons pending={pending} onCancel={onCancel} /></div>
+      <ConfirmationDialog confirmLabel='Confirmer le nouveau prix' confirmType='button' dialogRef={dialogRef}
+        onClose={() => submitRef.current?.querySelector('[type="submit"]')?.focus()}
+        onConfirm={() => {
+          dialogRef.current?.close();
+          if (dataRef.current) save(dataRef.current);
+        }} pending={pending} title='Confirmer le changement de prix ?'>
+        <p>{Number.isSafeInteger(currentPriceInCentimes) ? `Prix actuel : ${formatAmount(currentPriceInCentimes)} DA.` : 'Aucun prix actuel.'} Nouveau prix : {Number.isSafeInteger(proposed) ? formatAmount(proposed) : '—'} DA TTC / {unitLabel}.</p>
+        <p>Ce changement sera conservé dans l’historique.</p>
+      </ConfirmationDialog>
+    </form>
+  );
+};
+
+const PricingForm = ({ baseUnitLabel, canUpdatePrice, currentPrice, currentPriceInCentimes, initiallyOpen, lastChange, productId }) => {
+  const unitLabel = baseUnitLabel.toLocaleLowerCase('fr');
+  return (
+    <EditableCard title='Prix de vente TTC' titleIcon={<ProductIcon name='price' />} className={styles.priceCurrent} canEdit={canUpdatePrice} initiallyOpen={initiallyOpen}
+      formComponent={PriceEditor} formProps={{ currentPrice, currentPriceInCentimes, productId, unitLabel }}>
+      <div className={styles.priceMain}>
+        <p className={styles.eyebrow}>Prix de vente actuel</p>
+        {Number.isSafeInteger(currentPriceInCentimes) ? <p className={styles.priceValue}><strong>{formatAmount(currentPriceInCentimes)}</strong><span>DA TTC / {unitLabel}</span></p>
+          : <p className={styles.emptyValue}>À renseigner</p>}
+        <p className={styles.priceHint}>Par unité de base · chaque changement est historisé.</p>
       </div>
-
-      <div className='flex flex-wrap gap-5 p-6'>
-        {isOpen ? (
-          <form
-            action={formAction}
-            className='flex-[1_1_260px] rounded-xl border border-emerald-100 bg-emerald-50 p-5'
-            onSubmit={handleSubmit}
-          >
-            <label
-              className='text-[12px] font-bold uppercase tracking-[0.08em] text-emerald-700'
-              htmlFor='sale-price'
-            >
-              Prix de vente actuel · par {unitLabel}
-            </label>
-
-            {state.errors.form && (
-              <p
-                className='mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800'
-                role='alert'
-              >
-                {state.errors.form}
-              </p>
-            )}
-
-            <div className='mt-2 flex max-w-sm items-stretch rounded-lg shadow-sm'>
-              <input
-                aria-describedby={
-                  state.errors.price
-                    ? 'sale-price-error sale-price-helper'
-                    : 'sale-price-helper'
-                }
-                aria-invalid={Boolean(state.errors.price)}
-                className='min-w-0 flex-1 rounded-l-lg border border-r-0 border-emerald-200 bg-white px-3 py-1 text-[32px] leading-[42px] font-bold text-emerald-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                id='sale-price'
-                inputMode='decimal'
-                min='0.01'
-                name='price'
-                onChange={(event) => setPriceValue(event.target.value)}
-                placeholder='150'
-                ref={inputRef}
-                required
-                step='0.01'
-                type='number'
-                value={priceValue}
-              />
-              <span className='inline-flex items-center rounded-r-lg border border-emerald-200 bg-emerald-100 px-3 text-sm font-semibold text-emerald-700'>
-                DA TTC / {unitLabel}
-              </span>
-            </div>
-
-            <p
-              aria-live='polite'
-              className='mt-3 text-xs leading-5 text-emerald-800'
-              id='sale-price-helper'
-            >
-              {getPriceHelper(priceValue, currentPriceInCentimes)}
-            </p>
-            {state.errors.price && (
-              <p className='mt-1.5 text-sm text-red-700' id='sale-price-error'>
-                {state.errors.price}
-              </p>
-            )}
-
-            <div className='mt-4 flex flex-wrap gap-3'>
-              <button
-                className='rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                ref={submitButtonRef}
-                type='submit'
-              >
-                {pending ? 'Enregistrement…' : 'Enregistrer'}
-              </button>
-              <button
-                className='rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                onClick={() => setIsOpen(false)}
-                type='button'
-              >
-                Annuler
-              </button>
-            </div>
-
-            <dialog
-              aria-labelledby={titleId}
-              className='m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-left shadow-xl backdrop:bg-slate-950/40'
-              onClose={() => submitButtonRef.current?.focus()}
-              ref={dialogRef}
-            >
-              <div className='p-6'>
-                <div className='flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-xl font-semibold text-blue-700'>
-                  ?
-                </div>
-                <h2
-                  className='mt-4 text-xl font-semibold text-slate-900'
-                  id={titleId}
-                >
-                  Confirmer le changement de prix ?
-                </h2>
-                <p className='mt-2 text-sm leading-6 text-slate-600'>
-                  Le prix de vente par {unitLabel} passera de{' '}
-                  <strong>{formatPrice(currentPrice)}</strong> à{' '}
-                  <strong>{formatPrice(proposedPrice)}</strong>.
-                </p>
-                <p className='mt-3 text-sm leading-6 text-slate-600'>
-                  L’ancien et le nouveau prix seront conservés dans
-                  l’historique.
-                </p>
-
-                <div className='mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
-                  <button
-                    className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                    disabled={pending}
-                    onClick={closeDialog}
-                    type='button'
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                    disabled={pending}
-                    onClick={confirmSubmission}
-                    type='submit'
-                  >
-                    {pending
-                      ? 'Enregistrement…'
-                      : 'Confirmer le nouveau prix'}
-                  </button>
-                </div>
-              </div>
-            </dialog>
-          </form>
-        ) : (
-          <div className='flex-[1_1_260px] rounded-xl border border-emerald-100 bg-emerald-50 p-5'>
-            <p className='text-[12px] font-bold uppercase tracking-[0.08em] text-emerald-700'>
-              Prix de vente actuel · unité de base
-            </p>
-            {Number.isSafeInteger(currentPriceInCentimes) ? (
-              <>
-                <p className='mt-2 flex flex-wrap items-baseline gap-2'>
-                  <span className='text-[40px] leading-[44px] font-bold text-emerald-900'>
-                    {formatAmount(currentPriceInCentimes / 100)}
-                  </span>
-                  <span className='text-base font-semibold text-emerald-700'>
-                    DA TTC / {unitLabel}
-                  </span>
-                </p>
-                {lastChange && (
-                  <p className='mt-3 text-xs leading-5 text-emerald-800'>
-                    Dernière modification le {lastChange.date} ·{' '}
-                    {lastChange.author}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className='mt-3 text-2xl font-semibold text-slate-500'>
-                Non renseigné
-              </p>
-            )}
-          </div>
-        )}
-
-      </div>
-
-      {state.message && !isOpen && (
-        <p
-          className='border-t border-emerald-100 bg-emerald-50 px-6 py-3.5 text-sm font-semibold text-emerald-700'
-          role='status'
-        >
-          Prix de vente mis à jour.
-        </p>
-      )}
-    </section>
+      <div className={styles.sourceBox}><ProductIcon name='clock' /><div className='min-w-0 flex-1'>
+        <p>Dernier changement</p><small>{lastChange ? `${lastChange.date} · ${lastChange.author}` : 'Aucun changement renseigné'}</small>
+      </div></div>
+    </EditableCard>
   );
 };
 

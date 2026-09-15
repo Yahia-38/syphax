@@ -65,6 +65,8 @@ const ConfirmationDialog = ({
   children,
   confirmDisabled = false,
   confirmLabel,
+  cancelLabel = 'Annuler',
+  confirmType = 'submit',
   dialogRef,
   onClose,
   onConfirm,
@@ -100,18 +102,18 @@ const ConfirmationDialog = ({
         </div>
         <div className='mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
           <button
-            className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
+            className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 motion-safe:transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
             disabled={pending}
             onClick={() => dialogRef.current?.close()}
             type='button'
           >
-            Annuler
+            {cancelLabel}
           </button>
           <button
-            className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${styles.confirm}`}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${styles.confirm}`}
             disabled={pending || confirmDisabled}
             onClick={onConfirm}
-            type='submit'
+            type={confirmType}
           >
             {pending ? pendingLabel : confirmLabel}
           </button>

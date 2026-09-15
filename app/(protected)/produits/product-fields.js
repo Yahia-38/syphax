@@ -1,4 +1,4 @@
-const ProductFields = ({ baseUnits, state }) => {
+const ProductFields = ({ baseUnits, state, onChange }) => {
   return (
     <>
       <div>
@@ -15,7 +15,9 @@ const ProductFields = ({ baseUnits, state }) => {
           aria-invalid={Boolean(state.errors.code)}
           autoComplete='off'
           className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-          defaultValue={state.values.code}
+          defaultValue={onChange ? undefined : state.values.code}
+          value={onChange ? state.values.code : undefined}
+          onChange={onChange ? (event) => onChange('code', event.target.value) : undefined}
           id='code'
           maxLength={50}
           name='code'
@@ -47,7 +49,9 @@ const ProductFields = ({ baseUnits, state }) => {
           }
           aria-invalid={Boolean(state.errors.designation)}
           className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-          defaultValue={state.values.designation}
+          defaultValue={onChange ? undefined : state.values.designation}
+          value={onChange ? state.values.designation : undefined}
+          onChange={onChange ? (event) => onChange('designation', event.target.value) : undefined}
           id='designation'
           maxLength={150}
           name='designation'
@@ -79,7 +83,9 @@ const ProductFields = ({ baseUnits, state }) => {
           }
           aria-invalid={Boolean(state.errors.baseUnit)}
           className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-          defaultValue={state.values.baseUnit}
+          defaultValue={onChange ? undefined : state.values.baseUnit}
+          value={onChange ? state.values.baseUnit : undefined}
+          onChange={onChange ? (event) => onChange('baseUnit', event.target.value) : undefined}
           id='baseUnit'
           name='baseUnit'
           required

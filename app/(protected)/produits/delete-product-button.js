@@ -3,11 +3,13 @@
 import { useActionState, useId, useRef } from 'react';
 
 import { deleteProduct } from './delete-actions.js';
+import { useEditingSession } from '../components/editing-session.js';
 
 const INITIAL_STATE = { error: null };
 
 const DeleteProductButton = ({ compact = false, product }) => {
   const dialogRef = useRef(null);
+  const editingSession = useEditingSession();
   const triggerRef = useRef(null);
   const titleId = useId();
   const deleteProductWithId = deleteProduct.bind(null, product.id);
@@ -24,7 +26,10 @@ const DeleteProductButton = ({ compact = false, product }) => {
             ? 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700'
             : 'rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:border-red-300 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700'
         }
-        onClick={() => dialogRef.current?.showModal()}
+        onClick={() => {
+          const open = () => dialogRef.current?.showModal();
+          if (editingSession) editingSession.request(open); else open();
+        }}
         ref={triggerRef}
         type='button'
       >
@@ -34,6 +39,7 @@ const DeleteProductButton = ({ compact = false, product }) => {
       <dialog
         aria-labelledby={titleId}
         className='m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-0 text-left shadow-xl backdrop:bg-slate-950/40'
+        onCancel={(event) => { if (pending) event.preventDefault(); }}
         onClose={() => triggerRef.current?.focus()}
         ref={dialogRef}
       >

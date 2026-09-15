@@ -19,6 +19,7 @@ export const addProductPackaging = async (
   formData,
 ) => {
   const session = await requirePermission('packaging.create');
+  await requirePermission('packaging.read');
   const values = {
     label: readTextField(formData, 'label'),
     quantity: readTextField(formData, 'quantity'),
@@ -76,6 +77,7 @@ export const removePackagingAction = async (
   previousState,
 ) => {
   await requirePermission('packaging.delete');
+  await requirePermission('packaging.read');
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
     : 0;

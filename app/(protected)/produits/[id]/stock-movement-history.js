@@ -1,7 +1,10 @@
 'use client';
 
-import Link from 'next/link';
+import { EditingLink } from '../../components/editing-session.js';
 import { useMemo, useState } from 'react';
+
+import styles from './product-detail.module.css';
+import ProductIcon from './product-icon.js';
 
 const MOVEMENTS_PER_PAGE = 8;
 
@@ -13,6 +16,7 @@ const formatDate = (value) => {
   return new Intl.DateTimeFormat('fr-DZ', {
     dateStyle: 'long',
     timeStyle: 'short',
+    hourCycle: 'h23',
     timeZone: 'Africa/Algiers',
   }).format(new Date(value));
 };
@@ -29,7 +33,7 @@ const formatMovementKind = (kind) => kind === 'TOUR_LOADING_OUT'
     ? 'Réception'
     : 'Mouvement physique';
 
-const StockMovementHistory = ({ movements }) => {
+const StockMovementHistory = ({ movements, movementCount, baseUnitLabel, stock }) => {
   const [query, setQuery] = useState('');
   const [direction, setDirection] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,6 +46,8 @@ const StockMovementHistory = ({ movements }) => {
       formatMovementKind(movement.kind),
       movement.author,
       movement.sourceTour?.reference,
+      movement.sourceReception?.reference,
+      formatDate(movement.occurredOn ?? movement.recordedAt),
     ].filter(Boolean).join(' ').toLocaleLowerCase('fr');
 
     return matchesDirection
@@ -59,116 +65,45 @@ const StockMovementHistory = ({ movements }) => {
   );
 
   return (
-    <section className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
-      <div className='border-b border-slate-200 p-5 sm:p-6'>
-        <h2 className='text-lg font-semibold text-slate-900'>Historique physique</h2>
-        <p className='mt-1 text-sm text-slate-600'>
-          Chaque entrée et sortie est conservée dans l’unité de base.
-        </p>
-      </div>
-
-      <div className='space-y-4 border-b border-slate-200 p-5 sm:p-6' role='search'>
-        <input
-          aria-label='Rechercher un mouvement physique'
-          className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-          maxLength={100}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setCurrentPage(1);
-          }}
-          placeholder='Rechercher par type, auteur ou tournée'
-          type='search'
-          value={query}
-        />
-        <div aria-label='Filtrer les mouvements' className='flex flex-wrap gap-2' role='group'>
-          {[
-            ['ALL', 'Tous'],
-            ['IN', 'Entrées'],
-            ['OUT', 'Sorties'],
-          ].map(([value, label]) => (
-            <button
-              aria-pressed={direction === value}
-              className={`rounded-full border px-3 py-2 text-sm font-medium ${direction === value ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-600'}`}
-              key={value}
-              onClick={() => {
-                setDirection(value);
-                setCurrentPage(1);
-              }}
-              type='button'
-            >
-              {label}
-            </button>
-          ))}
+    <section className={styles.card} aria-labelledby='stock-history-title'>
+      <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='clock' /><h2 id='stock-history-title'>Historique physique</h2></div></div>
+      {stock && <dl className={styles.stockSummary}>
+        <div><dt>Entrées</dt><dd className={styles.positive}>+{formatQuantity(stock.inputQuantityInBaseUnits)} {baseUnitLabel.toLocaleLowerCase('fr')}</dd></div>
+        <div><dt>Sorties</dt><dd className={styles.negative}>−{formatQuantity(stock.outputQuantityInBaseUnits)} {baseUnitLabel.toLocaleLowerCase('fr')}</dd></div>
+        <div><dt>Mouvements</dt><dd>{movementCount}</dd></div>
+        <div><dt>Dernier mouvement</dt><dd>{formatDate(stock.lastMovementAt)}</dd></div>
+      </dl>}
+      <p className={styles.scope}>Compteurs : tous les mouvements physiques du produit. {movements.length} mouvements chargés sur {movementCount ?? movements.length} enregistrés. Les filtres portent sur les mouvements chargés.</p>
+      <div className={styles.filters} role='search'>
+        <div className={styles.search}><ProductIcon name='search' /><input aria-label='Rechercher un mouvement physique' maxLength={100} placeholder='Type, date, auteur ou source disponible' type='search' value={query}
+          onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} /></div>
+        <div aria-label='Filtrer les mouvements' className={styles.segmented} role='group'>
+          {[['ALL', 'Tous'], ['IN', 'Entrées'], ['OUT', 'Sorties']].map(([value, label]) => <button aria-pressed={direction === value} key={value} type='button'
+            onClick={() => { setDirection(value); setCurrentPage(1); }}>{label}</button>)}
         </div>
       </div>
-
-      {paginatedMovements.length > 0 ? (
-        <div className='divide-y divide-slate-100'>
-          {paginatedMovements.map((movement) => {
-            const isOutput = movement.quantityDeltaInBaseUnits < 0;
-
-            return (
-              <article className='flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6' key={movement.id}>
-                <div>
-                  <p className='font-semibold text-slate-900'>
-                    {formatMovementKind(movement.kind)}
-                  </p>
-                  <p className='mt-1 text-sm text-slate-600'>
-                    {formatDate(movement.occurredOn ?? movement.recordedAt)}
-                    {' · '}
-                    {movement.author ?? 'Compte indisponible'}
-                  </p>
-                  {movement.sourceTour && (
-                    <Link
-                      className='mt-2 inline-flex text-sm font-medium text-blue-700 hover:underline'
-                      href={`/tournees/${movement.sourceTour.id}`}
-                    >
-                      Voir {movement.sourceTour.reference}
-                    </Link>
-                  )}
-                </div>
-                <p className={`text-xl font-bold tabular-nums ${isOutput ? 'text-red-700' : 'text-emerald-700'}`}>
-                  {isOutput ? '−' : '+'}{formatQuantity(
-                    movement.quantityDeltaInBaseUnits,
-                  )} {movement.baseUnit ?? ''}
-                </p>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className='p-10 text-center'>
-          <p className='font-semibold text-slate-900'>Aucun mouvement trouvé</p>
-          <p className='mt-1 text-sm text-slate-600'>
-            Modifiez la recherche ou le filtre.
-          </p>
-        </div>
-      )}
-
-      <nav
-        aria-label='Pagination de l’historique physique'
-        className='flex items-center justify-between gap-4 border-t border-slate-200 px-5 py-4 sm:px-6'
-      >
-        <button
-          className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40'
-          disabled={activePage === 1}
-          onClick={() => setCurrentPage(activePage - 1)}
-          type='button'
-        >
-          Précédent
-        </button>
-        <span className='text-sm text-slate-600'>
-          Page {activePage} sur {totalPages}
-        </span>
-        <button
-          className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40'
-          disabled={activePage === totalPages}
-          onClick={() => setCurrentPage(activePage + 1)}
-          type='button'
-        >
-          Suivant
-        </button>
-      </nav>
+      {paginatedMovements.length ? <table className={styles.table}>
+        <caption className='sr-only'>Mouvements physiques · quantités en {baseUnitLabel.toLocaleLowerCase('fr')}</caption>
+        <thead><tr>{['Type', 'Date', 'Source', 'Auteur', 'Quantité'].map((label) => <th scope='col' key={label}>{label}</th>)}</tr></thead>
+        <tbody>{paginatedMovements.map((movement) => {
+          const isOutput = movement.quantityDeltaInBaseUnits < 0;
+          const source = movement.sourceReception ?? movement.sourceTour;
+          return <tr key={movement.id}>
+            <td data-label='Type' className={styles.eventCell}><div className={styles.typeLabel}><span className={`${styles.typeIcon} ${isOutput ? styles.negative : ''}`}><ProductIcon name={isOutput ? 'out' : 'in'} /></span><strong>{formatMovementKind(movement.kind)}</strong></div></td>
+            <td data-label='Date'>{formatDate(movement.occurredOn ?? movement.recordedAt)}</td>
+            <td data-label='Source'>{source ? <EditingLink className={styles.sourceLink} href={`/${movement.sourceReception ? 'receptions' : 'tournees'}/${source.id}`}>{source.reference}<ProductIcon name='arrow' /></EditingLink> : 'Indisponible'}</td>
+            <td data-label='Auteur'>{movement.author ?? 'Compte indisponible'}</td>
+            <td data-label='Quantité' className={styles.right}><strong className={`${styles.delta} ${isOutput ? styles.negative : styles.positive}`}>{isOutput ? '−' : '+'}{formatQuantity(movement.quantityDeltaInBaseUnits)}</strong><small>{baseUnitLabel?.toLocaleLowerCase('fr') ?? movement.baseUnit ?? ''}</small></td>
+          </tr>;
+        })}</tbody>
+      </table> : <div className={styles.empty}><ProductIcon name='stock' /><h3>{movements.length ? 'Aucun mouvement trouvé' : 'Aucun mouvement enregistré'}</h3><p>{movements.length ? 'Modifiez la recherche ou le filtre.' : 'Les opérations métier alimenteront cet historique.'}</p></div>}
+      <div className={styles.footer}><span>{filteredMovements.length ? `${firstMovementIndex + 1}–${firstMovementIndex + paginatedMovements.length}` : '0'} sur {filteredMovements.length} mouvements filtrés</span>
+        <nav aria-label='Pagination de l’historique physique' className={styles.pagination}>
+          <button disabled={activePage === 1} onClick={() => setCurrentPage(activePage - 1)} type='button'>Précédent</button>
+          <span aria-live='polite'>Page {activePage} sur {totalPages}</span>
+          <button disabled={activePage === totalPages} onClick={() => setCurrentPage(activePage + 1)} type='button'>Suivant</button>
+        </nav>
+      </div>
     </section>
   );
 };

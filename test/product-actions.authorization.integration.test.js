@@ -281,7 +281,7 @@ test('protège la création de conditionnement et conserve son auteur', async ()
   );
   const { token: allowedToken, userId: allowedUserId } = await createUserSession(
     'creation-conditionnement-autorisee',
-    ['products.read', 'packaging.create'],
+    ['products.read', 'packaging.read', 'packaging.create'],
   );
 
   await database.collection('products').insertOne({
@@ -415,4 +415,22 @@ test('protège la suppression des conditionnements', async () => {
     _id: productId,
   });
   assert.deepEqual(productAfterRemoval.packagings, []);
+});
+
+
+test('refuse une écriture de prix sans sa lecture même avec pricing.update', async () => {
+  const { token } = await createUserSession('ecriture-prix-sans-lecture', ['products.read', 'pricing.update']);
+  const formData = new FormData();
+  formData.set('price', '125');
+  await assert.rejects(callWithSession(token, () => updateProductSalePrice(new ObjectId().toString(), { revision: 0 }, formData)), isPermissionDenied('pricing.read'));
+});
+
+test('refuse les actions de conditionnement sans packaging.read', async () => {
+  const { token } = await createUserSession('conditionnement-sans-lecture', ['products.read', 'packaging.create', 'packaging.delete']);
+  const formData = new FormData();
+  formData.set('label', 'Carton');
+  formData.set('quantity', '12');
+  const productId = new ObjectId().toString();
+  await assert.rejects(callWithSession(token, () => addProductPackaging(productId, { revision: 0 }, formData)), isPermissionDenied('packaging.read'));
+  await assert.rejects(callWithSession(token, () => removePackagingAction(productId, new ObjectId().toString(), { revision: 0 })), isPermissionDenied('packaging.read'));
 });

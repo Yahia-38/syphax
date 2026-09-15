@@ -624,3 +624,12 @@ test('modifie le prix de vente et conserve son historique complet', async () => 
   assert.equal(details.salePriceHistory[1].oldAmountInCentimes, null);
   assert.equal(details.salePriceHistory[1].changedBy, 'tarif-initial');
 });
+
+
+test('la fiche peut exclure les conditionnements de sa lecture', async () => {
+  const result = await createProduct({ code: 'LECTURE-SANS-CONVERSION', designation: 'Lecture filtrée', baseUnit: 'PIECE', createdBy: new ObjectId().toString() });
+  await addProductPackaging({ productId: result.product.id, label: 'Carton secret', quantity: '12', createdBy: new ObjectId().toString() });
+  const filtered = await getProductById(result.product.id, { includePackagings: false });
+  assert.deepEqual(filtered.packagings, []);
+  assert.equal(JSON.stringify(filtered).includes('Carton secret'), false);
+});

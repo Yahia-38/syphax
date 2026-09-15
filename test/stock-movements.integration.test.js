@@ -16,6 +16,7 @@ const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const {
   backfillReceptionStockMovements,
   getProductStockSummaries,
+  listProductStockMovements,
 } = await import('../lib/stock-movements.js');
 
 let database;
@@ -163,4 +164,25 @@ test('déduit uniquement les réservations actives du disponible', async () => {
   assert.equal(summary.quantityInBaseUnits, 100);
   assert.equal(summary.reservedQuantityInBaseUnits, 30);
   assert.equal(summary.availableQuantityInBaseUnits, 70);
+});
+
+test('ne retourne les sources sensibles des mouvements que sur demande explicite', async () => {
+  const productId = new ObjectId();
+  const receptionId = new ObjectId();
+  const tourId = new ObjectId();
+  await database.collection('receptions').insertOne({ _id: receptionId, supplierReference: 'SOURCE-PRIVEE' });
+  await database.collection('stockMovements').insertOne({
+    productId, kind: 'RECEPTION_IN', baseUnit: 'PIECE', quantityDeltaInBaseUnits: 12,
+    occurredOn: new Date(), sourceReceptionId: receptionId, sourceTourId: tourId, tourReference: 'TOUR-PRIVEE',
+  });
+  const denied = await listProductStockMovements(productId, { database });
+  assert.equal(denied[0].sourceReception, null);
+  assert.equal(denied[0].sourceTour, null);
+  assert.equal(JSON.stringify(denied).includes('PRIVEE'), false);
+  const receptionOnly = await listProductStockMovements(productId, { database, includeReceptionSources: true });
+  assert.deepEqual(receptionOnly[0].sourceReception, { id: receptionId.toString(), reference: 'SOURCE-PRIVEE' });
+  assert.equal(receptionOnly[0].sourceTour, null);
+  const tourOnly = await listProductStockMovements(productId, { database, includeTourSources: true });
+  assert.equal(tourOnly[0].sourceReception, null);
+  assert.deepEqual(tourOnly[0].sourceTour, { id: tourId.toString(), reference: 'TOUR-PRIVEE' });
 });

@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from 'react';
 
+import styles from './product-detail.module.css';
+import ProductIcon from './product-icon.js';
+
 const HISTORY_PER_PAGE = 5;
 
 const CHANGE_TYPES = [
@@ -19,6 +22,7 @@ const formatDate = (value) => {
   return new Intl.DateTimeFormat('fr-DZ', {
     dateStyle: 'long',
     timeStyle: 'short',
+    hourCycle: 'h23',
     timeZone: 'Africa/Algiers',
   }).format(new Date(value));
 };
@@ -88,10 +92,6 @@ const PriceHistory = ({ history }) => {
     firstHistoryIndex + HISTORY_PER_PAGE,
   );
 
-  if (history.length === 0) {
-    return null;
-  }
-
   const resetFilters = () => {
     setQuery('');
     setChangeType('ALL');
@@ -99,145 +99,38 @@ const PriceHistory = ({ history }) => {
   };
 
   return (
-    <section
-      aria-labelledby='price-history-title'
-      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <div className='border-b border-slate-100 px-6 py-5'>
-        <h2
-          className='text-lg font-semibold text-slate-900'
-          id='price-history-title'
-        >
-          Historique du prix
-        </h2>
-        <p className='mt-1 text-sm leading-6 text-slate-600'>
-          {history.length === 1
-            ? '1 changement enregistré.'
-            : `${history.length} changements enregistrés.`}
-        </p>
+    <section aria-labelledby='price-history-title' className={styles.card}>
+      <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='clock' /><h2 id='price-history-title'>Historique du prix</h2></div><span className={styles.pill}>{history.length} changements</span></div>
+      <div className={styles.filters} role='search'>
+        <div className={styles.search}><ProductIcon name='search' /><label className='sr-only' htmlFor='price-history-search'>Rechercher dans l’historique</label>
+          <input id='price-history-search' maxLength={100} placeholder='Rechercher par auteur, date ou montant' type='search' value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} /></div>
+        <label className='sr-only' htmlFor='price-change-filter'>Filtrer par type de variation</label>
+        <select id='price-change-filter' value={changeType} onChange={(event) => { setChangeType(event.target.value); setCurrentPage(1); }}>
+          <option value='ALL'>Toutes les variations</option>{availableChangeTypes.map(({ label, value }) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Réinitialiser</button>}
       </div>
-
-      <div className='flex flex-wrap items-end gap-3 border-b border-slate-100 p-4'>
-        <div className='min-w-[220px] flex-1'>
-          <label className='sr-only' htmlFor='price-history-search'>
-            Rechercher dans l’historique
-          </label>
-          <input
-            className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-            id='price-history-search'
-            maxLength={100}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder='Rechercher par auteur, date ou montant'
-            type='search'
-            value={query}
-          />
-        </div>
-        <div>
-          <label className='sr-only' htmlFor='price-change-filter'>
-            Filtrer par type de variation
-          </label>
-          <select
-            className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-            id='price-change-filter'
-            onChange={(event) => {
-              setChangeType(event.target.value);
-              setCurrentPage(1);
-            }}
-            value={changeType}
-          >
-            <option value='ALL'>Toutes les variations</option>
-            {availableChangeTypes.map(({ label, value }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {filtersActive && (
-          <button
-            className='rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={resetFilters}
-            type='button'
-          >
-            Réinitialiser
-          </button>
-        )}
+      {paginatedHistory.length ? <table className={styles.table}>
+        <caption className='sr-only'>Historique du prix de vente TTC en DA</caption>
+        <thead><tr>{['Date', 'Ancien prix', 'Nouveau prix', 'Variation', 'Auteur'].map((label) => <th scope='col' key={label}>{label}</th>)}</tr></thead>
+        <tbody>{paginatedHistory.map((entry) => {
+          const initial = !Number.isSafeInteger(entry.oldAmountInCentimes);
+          const difference = initial ? null : entry.newAmountInCentimes - entry.oldAmountInCentimes;
+          return <tr key={entry.id}>
+            <td data-label='Date'>{formatDate(entry.changedAt)}</td>
+            <td data-label='Ancien prix'>{formatMoney(entry.oldAmountInCentimes)}</td>
+            <td data-label='Nouveau prix'><strong>{formatMoney(entry.newAmountInCentimes)}</strong></td>
+            <td data-label='Variation'><span className={`${styles.pill} ${difference < 0 ? styles.pillDown : ''}`}>{initial ? 'Premier prix' : `${difference > 0 ? '+' : difference < 0 ? '−' : ''}${formatMoney(Math.abs(difference))}`}</span></td>
+            <td data-label='Auteur'>{entry.changedBy ?? 'Compte indisponible'}</td>
+          </tr>;
+        })}</tbody>
+      </table> : <div className={styles.empty}><ProductIcon name='price' /><h3>{history.length ? 'Aucun changement trouvé' : 'Aucun changement enregistré'}</h3><p>{history.length ? 'Modifiez la recherche ou le filtre de variation.' : 'Le premier prix renseigné apparaîtra ici.'}</p>{filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Voir tout l’historique</button>}</div>}
+      <div className={styles.footer}><span>{filteredHistory.length ? `${firstHistoryIndex + 1}–${firstHistoryIndex + paginatedHistory.length}` : '0'} sur {filteredHistory.length} changements{filtersActive ? ` (${history.length} au total)` : ''}</span>
+        <nav aria-label='Pagination de l’historique des prix' className={styles.pagination}>
+          <button disabled={activePage === 1} onClick={() => setCurrentPage(activePage - 1)} type='button'>Précédent</button><span aria-live='polite'>Page {activePage} sur {totalPages}</span>
+          <button disabled={activePage === totalPages} onClick={() => setCurrentPage(activePage + 1)} type='button'>Suivant</button>
+        </nav>
       </div>
-
-      <div className='border-b border-slate-100 px-6 py-3'>
-        <p className='text-sm text-slate-500'>
-          {filteredHistory.length > 0
-            ? `${firstHistoryIndex + 1}–${firstHistoryIndex + paginatedHistory.length} sur ${filteredHistory.length} changements${filtersActive ? ` (${history.length} au total)` : ''}`
-            : `0 changement sur ${history.length}`}
-        </p>
-      </div>
-
-      {paginatedHistory.length > 0 ? (
-        <ul>
-          {paginatedHistory.map((entry, index) => (
-            <li
-              className={`flex flex-wrap items-center justify-between gap-3 px-6 py-4 ${index > 0 ? 'border-t border-slate-100' : ''}`}
-              key={entry.id}
-            >
-              <p className='text-sm font-medium text-slate-900'>
-                {formatMoney(entry.oldAmountInCentimes)}{' '}
-                <span className='text-slate-400'>→</span>{' '}
-                <span className='font-semibold text-emerald-700'>
-                  {formatMoney(entry.newAmountInCentimes)}
-                </span>
-              </p>
-              <p className='text-[13px] text-slate-500'>
-                {formatDate(entry.changedAt)} ·{' '}
-                {entry.changedBy ?? 'Compte indisponible'}
-              </p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className='px-6 py-10 text-center'>
-          <p className='font-semibold text-slate-800'>
-            Aucun changement trouvé
-          </p>
-          <p className='mt-2 text-sm text-slate-500'>
-            Modifiez la recherche ou le filtre de variation.
-          </p>
-          <button
-            className='mt-4 rounded-lg px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={resetFilters}
-            type='button'
-          >
-            Voir tout l’historique
-          </button>
-        </div>
-      )}
-
-      <nav
-        aria-label='Pagination de l’historique des prix'
-        className='flex items-center justify-between gap-4 border-t border-slate-100 px-6 py-3'
-      >
-        <button
-          className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
-          disabled={activePage === 1 || filteredHistory.length === 0}
-          onClick={() => setCurrentPage(activePage - 1)}
-          type='button'
-        >
-          Précédent
-        </button>
-        <p aria-live='polite' className='text-sm font-medium text-slate-600'>
-          Page {activePage} sur {totalPages}
-        </p>
-        <button
-          className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-40'
-          disabled={activePage === totalPages || filteredHistory.length === 0}
-          onClick={() => setCurrentPage(activePage + 1)}
-          type='button'
-        >
-          Suivant
-        </button>
-      </nav>
     </section>
   );
 };
