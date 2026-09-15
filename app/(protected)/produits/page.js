@@ -28,14 +28,17 @@ const ProductsPage = async ({ searchParams }) => {
   const products = await listProducts({ includePricing: canReadPricing });
 
   return (
-    <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
-      <div className='flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between'>
+    <main className='mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 sm:py-9 lg:pb-12'>
+      <div className='flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between'>
         <div>
+          <p className='mb-2 text-[10px] font-bold tracking-[0.14em] text-slate-500'>
+            CATALOGUE &amp; STOCK
+          </p>
           <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
             Produits
           </h1>
           <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Consultez les produits utilisés pour les achats et le suivi du stock.
+            Vos références, leur disponibilité et leurs unités en un coup d’œil.
           </p>
         </div>
 
@@ -44,6 +47,7 @@ const ProductsPage = async ({ searchParams }) => {
             className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
             href='/produits/nouveau'
           >
+            <span aria-hidden='true' className='mr-1 text-lg leading-none'>＋</span>
             Nouveau produit
           </Link>
         )}
