@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import { EditingButtons, useInlineSave } from '../../components/editable-card.js';
 import { EditingLink, useEditingSession } from '../../components/editing-session.js';
-import ProductIcon from '../[id]/product-icon.js';
+import ProductIcon, { BASE_UNIT_ICONS } from '../[id]/product-icon.js';
 import ProductFields, { PRODUCT_INPUT_CLASS } from '../product-fields.js';
 import { createProduct } from './actions.js';
 import styles from './product-form.module.css';
@@ -18,6 +18,15 @@ const pluralUnit = (baseUnits, code) => {
 const conversionText = (baseUnits, values) => values.baseUnit
   ? `1 ${values.label.trim() || 'conditionnement'} = ${values.quantity || '…'} ${pluralUnit(baseUnits, values.baseUnit)}`
   : 'Choisissez une unité de base pour préciser la conversion.';
+
+const ConversionPreview = ({ text }) => {
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setAnnouncement(text), 500);
+    return () => clearTimeout(timer);
+  }, [text]);
+  return <p className={styles.conversion}><span aria-hidden='true'>{text}</span><span aria-live='polite' aria-atomic='true' className='sr-only'>{announcement}</span></p>;
+};
 
 const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
   const [values, setValues] = useState({ ...EMPTY_VALUES });
@@ -110,17 +119,17 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
                     </div>
                   ))}
                 </div>
-                <p className={styles.conversion}>{conversionText(baseUnits, values)}</p>
+                <ConversionPreview text={conversionText(baseUnits, values)} />
               </div>
             )}
           </section>
         </fieldset>
-        <EditingButtons note='Les trois champs d’identification sont obligatoires.' onCancel={cancel} pending={isPending} pendingLabel='Création…' submitLabel='Créer le produit' />
+        <EditingButtons note='Les trois champs d’identification sont obligatoires.' onCancel={cancel} pending={isPending} pendingLabel='Création…' submitIcon={<ProductIcon name='plus' />} submitLabel='Créer le produit' />
       </form>
       <aside className={styles.previewColumn} aria-label='Aperçu du produit saisi'>
         <div className={styles.previewCaption}><span>APERÇU DU PRODUIT</span><span>Brouillon</span></div>
         <section className={styles.preview}>
-          <ProductIcon className={styles.previewIcon} name='box' />
+          <ProductIcon className={styles.previewIcon} name={BASE_UNIT_ICONS[values.baseUnit] ?? 'box'} />
           <h2 className={!values.designation.trim() ? styles.placeholder : ''}>{values.designation.trim() || 'Désignation du produit'}</h2>
           <div className={styles.previewMeta}><code className={!values.code.trim() ? styles.placeholder : ''}>{values.code.trim().toLocaleUpperCase('fr') || 'Code à renseigner'}</code><span>{baseUnits.find((unit) => unit.code === values.baseUnit)?.label || 'Unité à choisir'}</span></div>
           <dl className={styles.previewDetails}><div><dt>Prix de vente</dt><dd>À renseigner ensuite</dd></div><div><dt>Stock initial</dt><dd>Aucun stock ajouté</dd></div></dl>
@@ -128,7 +137,10 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
         </section>
         <div className={styles.nextSteps}>
           <h3>Après la création</h3>
-          <p>Selon vos droits, la fiche permet de renseigner le prix de vente et d’ajouter d’autres conditionnements. Une réception permet ensuite d’alimenter le stock.</p>
+          <p className={styles.nextStepsNote}>Les actions suivantes sont accessibles selon vos droits.</p>
+          <div className={styles.nextStep}><ProductIcon name='price' /><p><strong>Compléter la tarification</strong>Renseigner le prix de vente depuis la fiche.</p></div>
+          <div className={styles.nextStep}><ProductIcon name='stock' /><p><strong>Enregistrer une réception</strong>Alimenter le stock avec les produits reçus.</p></div>
+          <div className={styles.nextStep}><ProductIcon name='box' /><p><strong>Ajouter des conditionnements</strong>Définir d’autres conversions si nécessaire.</p></div>
           <small>Cet aperçu n’est pas enregistré.</small>
         </div>
       </aside>
@@ -164,7 +176,7 @@ const ProductForm = ({ baseUnits, canReadProducts }) => {
             {!canReadProducts && <p className={styles.successNote}>La consultation de la fiche nécessite un droit de lecture.</p>}
             <div className={styles.successActions}>
               {canReadProducts && <EditingLink className={styles.primaryLink} href={`/produits/${created.id}`}>Ouvrir la fiche produit <ProductIcon name='arrow' /></EditingLink>}
-              <button onClick={() => { setCreated(null); setFormRevision((revision) => revision + 1); }} type='button'>Créer un autre produit</button>
+              <button onClick={() => { setCreated(null); setFormRevision((revision) => revision + 1); }} type='button'><ProductIcon name='plus' />Créer un autre produit</button>
             </div>
           </div>
         </section>

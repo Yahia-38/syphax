@@ -1,11 +1,22 @@
 .required { color: #65758b; font-size: 11px; font-weight: 400; }
 .code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.codeRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; align-items: center; }
+.codeGuidance { color: #65758b; font-size: 12px; line-height: 1.8; padding-top: 10px; }
 .unitFieldset { min-width: 0; }
 .units { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-.unit { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; border: 1px solid #dce3ed; border-radius: 9px; padding: 15px 10px; cursor: pointer; color: #445570; font-size: 13px; }
-.unit input { accent-color: #3154d6; width: 16px; height: 16px; }
-.unit small { grid-column: 2; font-size: 10px; color: #65758b; }
+.unit { position: relative; display: flex; flex-direction: column; gap: 7px; align-items: center; border: 1px solid #dce3ed; border-radius: 9px; padding: 20px 10px 13px; cursor: pointer; color: #445570; background: #fcfdff; font-size: 12px; }
+.unit input { position: absolute; top: 8px; right: 8px; accent-color: #3154d6; width: 14px; height: 14px; }
+.unit > svg { width: 24px; height: 24px; flex: none; }
+.unit > span { font-weight: 600; }
+.unit small { font-size: 10px; color: #65758b; }
 .unit:has(:checked) { border-color: #3154d6; background: #f0f4ff; color: #2341b8; }
 .unit:has(:focus-visible) { outline: 3px solid #6a86ee; outline-offset: 3px; }
 .unitFieldset[aria-invalid='true'] .unit { border-color: #b33344; }
-@media (max-width: 640px) { .units { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 950px) { .codeRow { grid-template-columns: minmax(0, 1fr); } .codeGuidance { display: none; } }
+@media (max-width: 640px) {
+  .units { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .unit { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 4px 9px; padding: 16px 11px; }
+  .unit > svg { grid-row: 1 / 3; }
+  .unit > span { padding-right: 14px; }
+  .unit small { grid-column: 2; }
+}

@@ -34,17 +34,21 @@
 .previewCaption { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: #65758b; font-weight: 600; margin: 2px 2px 10px; }
 .previewCaption span:last-child { text-transform: none; font-weight: 400; }
 .preview { border: 1px solid #dce5f8; border-radius: 12px; background: linear-gradient(140deg, #f5f8ff, #fff 65%); padding: 24px; }
-.previewIcon { width: 38px; height: 38px; padding: 8px; box-sizing: content-box; border: 1px solid #dce5f8; background: #edf2fc; border-radius: 12px; color: #526fac; margin-bottom: 17px; }
+.previewIcon { width: 47px; height: 47px; padding: 10px; box-sizing: border-box; border: 1px solid #dce5f8; background: #edf2fc; border-radius: 12px; color: #526fac; margin-bottom: 17px; }
 .preview h2 { font-size: 22px; font-weight: 650; line-height: 1.35; letter-spacing: -.5px; overflow-wrap: anywhere; }
 .placeholder { color: #718198; font-style: italic; font-weight: 400; }
 .previewMeta { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; font-size: 12px; color: #65758b; overflow-wrap: anywhere; }
-.previewMeta code { max-width: 100%; }
+.previewMeta code { max-width: 100%; padding: 2px 6px; border: 1px solid #e1e7ef; border-radius: 4px; background: #fff; }
 .previewDetails { border-top: 1px solid #e1e7ef; padding-top: 18px; margin-top: 22px; display: grid; gap: 13px; font-size: 12px; }
 .previewDetails > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 10px; }
 .previewDetails dt { color: #65758b; }
 .previewDetails dd { font-weight: 600; }
 .nextSteps { margin: 23px 3px; font-size: 12px; line-height: 1.8; color: #65758b; }
 .nextSteps h3 { color: #445570; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.nextStepsNote { margin-bottom: 15px; font-size: 11px; }
+.nextStep { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 15px; font-size: 12px; line-height: 1.7; }
+.nextStep > svg { flex: none; color: #7790b1; margin-top: 3px; }
+.nextStep strong { display: block; font-weight: 600; color: #445570; }
 .nextSteps small { display: block; margin-top: 14px; font-size: 11px; }
 .alert { margin-bottom: 18px; padding: 13px 16px; color: #9e2637; background: #fff3f4; border: 1px solid #edc7cd; border-radius: 8px; font-size: 13px; }
 .alert button { display: block; text-align: left; text-decoration: underline; margin-top: 7px; cursor: pointer; }
@@ -65,6 +69,7 @@
 .successActions .primaryLink:hover { background: #2341b8; }
 .successActions button:hover { background: #f3f6fb; }
 @media (max-width: 800px) { .grid { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+@media (min-width: 801px) and (min-height: 800px) { .previewColumn { position: sticky; top: 24px; } }
 @media (max-width: 640px) {
   .page { padding: 20px 16px 35px; }
   .breadcrumb { margin-bottom: 20px; }

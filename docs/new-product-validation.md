@@ -37,6 +37,9 @@ créé. Les vues de produits sont revalidées après succès.
 - `app/(protected)/components/editable-card.js`, `editing-session.js` : libellés
   configurables, résultat transmis au callback de succès, focus après réactivation
   et garde de création ; comportements d’édition par défaut conservés.
+- `app/(protected)/components/editable-card.module.css` et
+  `app/(protected)/produits/[id]/product-icon.js` : espacement des pictogrammes
+  d’action et pictogrammes des unités dans le système existant.
 - `lib/products.js` : conditionnement validé dans le résultat de création,
   sans modification de l’opération de persistance.
 - `test/product-actions.authorization.integration.test.js` : contrôles ciblés de
@@ -66,6 +69,23 @@ de débordement, y compris le dialogue et le succès.
 
 Scripts et captures : `/tmp/syphax-create-ui-*.mjs`, `/tmp/syphax-create-*.png`.
 Les bases temporaires sont supprimées après la vérification.
+
+## Compléments visuels du 16 septembre 2026
+
+Comparaison du HTML de référence et des captures de l'application : ajout des
+pictogrammes dans les quatre choix d'unité, pictogramme d'aperçu lié à l'unité
+sélectionnée, aide latérale du code sur bureau, code secondaire en étiquette,
+trois indications après création avec titres et pictogrammes, et pictogrammes
+des actions de création. L'aperçu reste visible au défilement sur les grands
+écrans disposant d'une hauteur suffisante ; il reste dans le flux sur mobile et
+les écrans courts. La conversion est annoncée après une pause de 500 ms, sans
+annoncer tout l'aperçu.
+
+Lint ciblé et compilation webpack réussis. Les parcours Chrome ciblés ont été
+relancés sur une nouvelle base isolée, y compris les éléments visuels ajoutés,
+la conversion annoncée, les quatre colonnes bureau/deux colonnes mobile, les
+droits, erreurs, annulation, requête en cours, succès et édition partagée.
+Captures à 1440 et 360 px vérifiées visuellement ; aucun débordement.
 
 ## Limites
 

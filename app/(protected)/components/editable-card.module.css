@@ -16,7 +16,7 @@
 .creation:not(.editing) .header { border-bottom: 0; padding: 18px; }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 9px; border-top: 1px solid #e4eaf6; margin-top: 20px; padding: 15px 0 0; }
 .actions small { margin-right: auto; font-size: 10px; color: #65758b; }
-.actions button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 13px; border: 1px solid #e1e7ef; border-radius: 8px; background: #fff; color: #445570; font-size: 12px; font-weight: 600; cursor: pointer; }
+.actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 8px 13px; border: 1px solid #e1e7ef; border-radius: 8px; background: #fff; color: #445570; font-size: 12px; font-weight: 600; cursor: pointer; }
 .actions button[type='submit'] { background: #3154d6; border-color: #3154d6; color: #fff; }
 .actions button[type='submit']:hover { background: #2341b8; }
 .actions button:disabled { cursor: wait; opacity: .6; }

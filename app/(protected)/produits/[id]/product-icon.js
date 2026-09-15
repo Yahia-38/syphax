@@ -1,6 +1,10 @@
 const ProductIcon = ({ name, className }) => {
   const paths = {
     box: <><path d='m12 3 9 5v9l-9 5-9-5V8l9-5Z M3 8l9 5 9-5 M12 13v9' /><path d='m7.5 5.5 9 5v4' /></>,
+    piece: <><rect x='5' y='5' width='14' height='14' rx='3' /><path d='M9 9h6M9 13h6' /></>,
+    bottle: <><path d='M10 3h4v5l3 4v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-8l3-4V3Z' /><path d='M10 6h4M7 14h10M7 17h10' /></>,
+    bag: <><path d='M7 3h10l-1 5 3 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L8 8 7 3Z' /><path d='M8 8h8M9 13h6M9 16h6' /></>,
+    plus: <path d='M12 5v14M5 12h14' />,
     stock: <path d='M3 21h18 M4 21V8l8-5 8 5v13 M8 21v-9h8v9 M8 16h8' />,
     identification: <><rect x='3' y='5' width='18' height='15' rx='2' /><path d='M8 3v4 M16 3v4 M7 11h10 M7 15h6' /></>,
     price: <><path d='m3 3 9 .1 9 9-9 9-9-9V3Z' /><circle cx='8' cy='8' r='1.5' /></>,
@@ -19,3 +23,5 @@ const ProductIcon = ({ name, className }) => {
 };
 
 export default ProductIcon;
+
+export const BASE_UNIT_ICONS = { PIECE: 'piece', BOUTEILLE: 'bottle', BOITE: 'box', SACHET: 'bag' };

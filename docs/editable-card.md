@@ -40,6 +40,8 @@ un récapitulatif de création fondé sur les données serveur. `EditingButtons`
 accepte `submitLabel`, `pendingLabel` et `note` ; ses valeurs par défaut restent
 celles de l’édition. Capturer `FormData` avant d’appeler `save`, puis désactiver
 les champs avec le `pending` renvoyé par le hook.
+`submitIcon` permet d'accompagner le libellé d'action d'un pictogramme décoratif,
+masqué pendant la requête ; le bouton conserve toujours son libellé textuel.
 
 `EditingSessionProvider creation` emploie les libellés « Continuer la saisie »
 et « Quitter sans créer ». Dans ce mode, il protège également les liens internes

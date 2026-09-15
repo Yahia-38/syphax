@@ -5,11 +5,11 @@ import { startTransition, useActionState, useCallback, useEffect, useId, useLayo
 import { useEditingSession } from './editing-session.js';
 import styles from './editable-card.module.css';
 
-export const EditingButtons = ({ pending, onCancel, submitLabel = 'Enregistrer', pendingLabel = 'Enregistrement…', note = 'Modifications non enregistrées' }) => (
+export const EditingButtons = ({ pending, onCancel, submitLabel = 'Enregistrer', pendingLabel = 'Enregistrement…', note = 'Modifications non enregistrées', submitIcon }) => (
   <div className={styles.actions}>
     <small>{pending ? pendingLabel : note}</small>
     <button disabled={pending} onClick={onCancel} type='button'>Annuler</button>
-    <button disabled={pending} type='submit'>{pending ? pendingLabel : submitLabel}</button>
+    <button disabled={pending} type='submit'>{!pending && submitIcon}{pending ? pendingLabel : submitLabel}</button>
   </div>
 );
 
