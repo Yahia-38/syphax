@@ -30,9 +30,7 @@ const formatCountingDate = (value) => {
   return Number.isNaN(date.getTime())
     ? 'Date indisponible'
     : new Intl.DateTimeFormat('fr-DZ', {
-        dateStyle: 'medium',
-        hourCycle: 'h23',
-        timeStyle: 'short',
+        dateStyle: 'short',
         timeZone: 'Africa/Algiers',
       }).format(date);
 };
@@ -182,36 +180,10 @@ const DelivererCashAllocationPreview = ({
 
   return (
     <div className={styles.allocationForm}>
-        <dl className='grid gap-px bg-slate-200 sm:grid-cols-3'>
-          <div className='min-w-0 bg-white px-5 py-4 sm:px-6'>
-            <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-              Livreur
-            </dt>
-            <dd className='mt-1 break-words text-sm font-semibold text-slate-950'>
-              {remainder.deliverer.code} — {remainder.deliverer.name || 'Nom non renseigné'}
-            </dd>
-          </div>
-          <div className='min-w-0 bg-white px-5 py-4 sm:px-6'>
-            <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-              Caisse destinataire
-            </dt>
-            <dd className='mt-1 break-words text-sm font-semibold text-slate-950'>
-              {destination
-                ? `${destination.name} (${destination.code}, DZD)`
-                : 'Caisse indisponible'}
-            </dd>
-          </div>
-          <div className='min-w-0 bg-white px-5 py-4 sm:px-6'>
-            <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-              Reste total actuel
-            </dt>
-            <dd className='mt-1 text-xl font-bold tabular-nums text-slate-950'>
-              {remainder.blockingAnomalies.length > 0
-                ? 'Non calculable'
-                : formatReceptionMoney(remainder.remainingDueInCentimes)}
-            </dd>
-          </div>
-        </dl>
+        <div className={styles.allocationContext}>
+          <span>Caisse destinataire : <strong>{destination ? `${destination.name} · ${destination.code} · DZD` : 'Caisse indisponible'}</strong></span>
+          <span><strong>{remainder.deliverer.name || 'Nom non renseigné'}</strong> · {remainder.deliverer.code}</span>
+        </div>
 
         <form
           action={submitPayment}
@@ -227,7 +199,8 @@ const DelivererCashAllocationPreview = ({
             requestConfirmation(event);
           }}
         >
-          <div className='grid gap-5 lg:grid-cols-2'>
+          {remainder.tours.some((tour) => tour.expenseDeclarationStatus === 'MISSING') && <p className={styles.warning}>Certaines tournées n’ont pas encore de frais déclarés. L’encaissement reste possible et réduit le maximum de frais encore déclarable.</p>}
+          <div className={styles.formFields}>
             <div>
               <label className='text-sm font-semibold text-slate-800' htmlFor='deliverer-payment-amount'>
                 Montant réellement reçu en DA
@@ -340,27 +313,35 @@ const DelivererCashAllocationPreview = ({
             </aside>
           )}
 
+          <dl className={styles.livePreview}>
+            {[
+              ['Reste avant', preview.totalRemainingDueInCentimes],
+              ['Montant reçu', preview.amountInCentimes],
+              ['Reste après', preview.totalRemainingAfterPaymentInCentimes],
+            ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatReceptionMoney(value)}</dd></div>)}
+          </dl>
           {preview.allocations.length > 0 && (
-            <section aria-labelledby='deliverer-payment-allocation-title' className='mt-6 rounded-xl border border-slate-200'>
-              <div className='border-b border-slate-200 p-4'>
+            <section aria-labelledby='deliverer-payment-allocation-title' className={styles.allocationPreview}>
+              <div className={styles.allocationHeading}>
                 <h3 className='font-semibold text-slate-950' id='deliverer-payment-allocation-title'>
-                  Répartition automatique complète ({preview.allocations.length} tournée{preview.allocations.length > 1 ? 's' : ''})
+                  Répartition automatique · {preview.allocations.length} tournée{preview.allocations.length > 1 ? 's' : ''}
                 </h3>
+                <span className={`${styles.badge} ${styles.blueBadge}`}>Comptages les plus anciens d’abord</span>
                 <p className='mt-1 text-xs leading-5 text-slate-500'>
                   La recherche et la pagination modifient uniquement l’affichage ; la confirmation porte toujours sur toutes les affectations.
                 </p>
                 <div className='mt-3'>
                   <label className='mb-1 block text-sm font-medium text-slate-700' htmlFor='deliverer-payment-allocation-search'>
-                    Rechercher une tournée dans la répartition
+                    Rechercher une référence
                   </label>
                   <input
-                    className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 sm:max-w-sm'
+                    className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950'
                     id='deliverer-payment-allocation-search'
                     onChange={(event) => {
                       setQuery(event.target.value);
                       setPage(1);
                     }}
-                    placeholder='Rechercher une référence de tournée'
+                    placeholder='Référence de tournée'
                     type='search'
                     value={query}
                   />
@@ -368,49 +349,16 @@ const DelivererCashAllocationPreview = ({
               </div>
 
               {paginatedAllocations.length > 0 ? paginatedAllocations.map((allocation) => (
-                <article
-                  className='border-t border-slate-200 px-4 py-4 first:border-t-0'
-                  key={allocation.tourId}
-                >
-                  <div className='flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between'>
-                    <p className='break-all font-mono text-sm font-semibold text-slate-950'>
-                      {allocation.tourReference}
-                    </p>
-                    <p className='text-xs text-slate-600'>
-                      Comptée le {formatCountingDate(allocation.countedAt)}
-                    </p>
+                <article className={styles.allocationRow} key={allocation.tourId}>
+                  <div><b>{allocation.tourReference}</b><small>Comptée le {formatCountingDate(allocation.countedAt)}</small>
+                    {allocation.expenseDeclarationStatus === 'MISSING' && <small>Frais non déclarés : cet encaissement réduit le maximum encore déclarable.</small>}
+                    {allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' && <small>Absence historique de déclaration de frais.</small>}
                   </div>
-                  {allocation.expenseDeclarationStatus === 'MISSING' && (
-                    <p className='mt-2 text-xs font-semibold text-blue-700'>
-                      Frais non déclarés : cet encaissement réduit le maximum encore déclarable.
-                    </p>
-                  )}
-                  {allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' && (
-                    <p className='mt-2 text-xs font-semibold text-slate-600'>
-                      Absence historique de déclaration de frais.
-                    </p>
-                  )}
-                  <dl className='mt-3 grid gap-px overflow-hidden rounded-lg bg-slate-200 sm:grid-cols-2 lg:grid-cols-3'>
-                    {[
-                      ['Ventes brutes', allocation.grossSalesInCentimes],
-                      ['Frais', allocation.expenseDeclarationStatus === 'DECLARED' ? allocation.totalExpensesInCentimes : null],
-                      ['Net à remettre', allocation.netDueInCentimes],
-                      ['Reste avant', allocation.remainingBeforePaymentInCentimes],
-                      ['Affecté', allocation.allocatedAmountInCentimes],
-                      ['Reste après', allocation.remainingAfterPaymentInCentimes],
-                    ].map(([label, value]) => (
-                      <div className='bg-slate-50 p-3' key={label}>
-                        <dt className='text-[11px] font-semibold uppercase tracking-wide text-slate-500'>
-                          {label}
-                        </dt>
-                        <dd className='mt-1 text-xs font-semibold text-slate-900'>
-                          {value === null
-                            ? (label === 'Frais' ? (allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' ? 'Absence historique' : 'Non déclarés') : 'Non calculable')
-                            : formatReceptionMoney(value)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
+                  {[
+                    ['Reste avant', allocation.remainingBeforePaymentInCentimes],
+                    ['Affecté', allocation.allocatedAmountInCentimes],
+                    ['Reste après', allocation.remainingAfterPaymentInCentimes],
+                  ].map(([label, value]) => <div key={label}><small>{label}</small><strong>{formatReceptionMoney(value)}</strong></div>)}
                 </article>
               )) : (
                 <p className='border-t border-slate-200 px-4 py-8 text-center text-sm text-slate-600'>
@@ -420,7 +368,7 @@ const DelivererCashAllocationPreview = ({
 
               <nav
                 aria-label='Pagination de la répartition automatique'
-                className='flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-3'
+                className={styles.pagination}
               >
                 <button
                   className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50'
@@ -431,7 +379,7 @@ const DelivererCashAllocationPreview = ({
                   Précédent
                 </button>
                 <p className='text-sm text-slate-600'>
-                  Page {activePage} sur {totalPages}
+                  {filteredAllocations.length} résultat{filteredAllocations.length > 1 ? 's' : ''} · page {activePage} / {totalPages}
                 </p>
                 <button
                   className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50'
@@ -442,38 +390,8 @@ const DelivererCashAllocationPreview = ({
                   Suivant
                 </button>
               </nav>
+              <div className={styles.allocationTotal}><span>Total affecté, toutes pages</span><strong>{formatReceptionMoney(preview.totalAllocatedInCentimes)}</strong></div>
             </section>
-          )}
-
-          {preview.amountInCentimes !== null && (
-            <dl className='mt-5 grid gap-px overflow-hidden rounded-xl bg-amber-200 sm:grid-cols-3'>
-              <div className='bg-amber-50 px-4 py-4'>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
-                  Montant reçu
-                </dt>
-                <dd className='mt-1 text-xl font-bold text-amber-950'>
-                  {formatReceptionMoney(preview.amountInCentimes)}
-                </dd>
-              </div>
-              <div className='bg-amber-50 px-4 py-4'>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
-                  Montant total réparti
-                </dt>
-                <dd className='mt-1 text-xl font-bold text-amber-950'>
-                  {formatReceptionMoney(preview.totalAllocatedInCentimes)}
-                </dd>
-              </div>
-              <div className='bg-amber-50 px-4 py-4'>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
-                  Reste total prévu
-                </dt>
-                <dd className='mt-1 text-xl font-bold text-amber-950'>
-                  {formatReceptionMoney(
-                    preview.totalRemainingAfterPaymentInCentimes,
-                  )}
-                </dd>
-              </div>
-            </dl>
           )}
 
           <input name='confirmationKey' type='hidden' value={confirmationKey} />
@@ -489,24 +407,10 @@ const DelivererCashAllocationPreview = ({
             value={JSON.stringify(preview)}
           />
 
-          <div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-            <p className='text-sm font-medium text-amber-900' role={pending ? 'status' : undefined}>
-              {pending
-                ? 'Enregistrement du versement et actualisation des soldes…'
-                : 'Une seule écriture de journal pour la répartition complète, sur toutes les pages.'}
-            </p>
-            <div className={styles.formActions}>
+          <div className={styles.formActions}>
+            <small role={pending ? 'status' : undefined}>{pending ? 'Enregistrement en cours…' : uncertain ? 'Demande verrouillée · résolution nécessaire' : 'Saisie non enregistrée'}</small>
             <button type='button' disabled={pending || uncertain} onClick={onClose}>Annuler</button>
-            {!uncertain && (
-              <button
-                className='rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50'
-                disabled={!previewIsComplete || pending}
-                type='submit'
-              >
-                {pending ? 'Enregistrement…' : 'Vérifier l’encaissement'}
-              </button>
-            )}
-            </div>
+            {!uncertain && <button disabled={!previewIsComplete || pending} type='submit'>{pending ? 'Enregistrement…' : 'Vérifier l’encaissement'}</button>}
           </div>
 
           <ConfirmationDialog

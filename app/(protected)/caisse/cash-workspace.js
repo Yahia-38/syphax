@@ -32,7 +32,7 @@ export const CashPageLink = ({ view, page, children, ...props }) => {
   return <EditingLink {...props} href={buildCashViewHref(parameters, view)}>{children}</EditingLink>;
 };
 
-const CashNavigation = ({ canCreatePayment }) => {
+const CashNavigation = ({ canCreatePayment, withdrawalEditing }) => {
   const parameters = useSearchParams();
   const view = readCashView(parameters.get('vue'));
   const session = useEditingSession();
@@ -42,10 +42,10 @@ const CashNavigation = ({ canCreatePayment }) => {
     document.getElementById('cash-remainder-search')?.focus();
   }, [view, focusRequested]);
   return <>
-    <div className={styles.choose}>
-      <p className={styles.eyebrow}>Restes des tournées</p>
-      <h2>Un encaissement précis</h2>
-      <p>Choisissez un livreur, puis encaissez sa remise sur une ou plusieurs tournées.</p>
+    <div className={styles.choose} hidden={withdrawalEditing}>
+      <div><p className={styles.eyebrow}>Situation actuelle des livreurs</p>
+      <h2>Retrouver un reste à encaisser</h2>
+      <p>Consultez les tournées comptées ou terminées, puis encaissez un livreur ou une tournée précise.</p></div>
       <button type='button' onClick={() => session.request(() => {
         setFocusRequested(true);
         session.router.push(buildCashViewHref(parameters.toString(), 'restes'), { scroll: false });
@@ -58,17 +58,20 @@ const CashNavigation = ({ canCreatePayment }) => {
   </>;
 };
 
-const CashContent = ({ children, balanceContent, canCreatePayment, withdrawalPreview, initialWithdrawalKey }) => {
+const CashContent = ({ children, balanceContent, balanceHeader, canCreatePayment, withdrawalPreview, initialWithdrawalKey }) => {
   const [notice, setNotice] = useState(null);
+  const [withdrawalEditing, setWithdrawalEditing] = useState(false);
   return <CashNoticeContext.Provider value={setNotice}>
-    <div className={styles.overview}>
+    <div className={`${styles.overview} ${withdrawalEditing ? styles.withdrawalEditing : ''}`}>
       <EditableCard title='Solde suivi' description='Caisse active · historique complet' className={styles.balance}
-        canEdit={Boolean(withdrawalPreview?.cashRegister && !withdrawalPreview?.error && Number.isSafeInteger(withdrawalPreview?.balanceInCentimes))}
+        headerContent={balanceHeader} onEditingChange={setWithdrawalEditing}
+        canEdit={Boolean(withdrawalPreview)}
+        editDisabled={!withdrawalPreview?.cashRegister || Boolean(withdrawalPreview?.error) || !Number.isSafeInteger(withdrawalPreview?.balanceInCentimes)}
         editLabel='Retirer des espèces' editingLabel='Retrait en cours' trackDraft
         formComponent={CashWithdrawalPreview} formProps={{ ...withdrawalPreview, initialConfirmationKey: initialWithdrawalKey }}>
         {balanceContent}
       </EditableCard>
-      <CashNavigation canCreatePayment={canCreatePayment} />
+      <CashNavigation canCreatePayment={canCreatePayment} withdrawalEditing={withdrawalEditing} />
     </div>
     {notice && <p className={styles.success} role='status'>{notice}</p>}
     {children}

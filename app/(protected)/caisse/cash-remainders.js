@@ -48,9 +48,11 @@ const DelivererTours = ({ remainder, cashRegister, canCreatePayment, canReadTour
   if (activeTour && !visibleTours.some((tour) => tour.id === activeTour.id)) visibleTours.push(remainder.tours.find((tour) => tour.id === activeTour.id) ?? { ...activeTour, remainingDueInCentimes: null });
   const change = (callback) => session.request(callback);
   return <div className={styles.tours}>
-    <button className={styles.detailsToggle} type='button' aria-expanded={open || Boolean(activeTour)} aria-controls={listId} onClick={() => {
+    <div className={styles.detailHeader}><button className={styles.detailsToggle} type='button' aria-expanded={open || Boolean(activeTour)} aria-controls={listId} onClick={() => {
       if (open || activeTour) change(() => setOpen(false)); else setOpen(true);
-    }}>Voir les tournées <span aria-hidden='true'>{open || activeTour ? '−' : '+'}</span></button>
+    }}>{open || activeTour ? 'Masquer les tournées' : 'Voir les tournées'}</button>
+      {remainder.tours.some((tour) => tour.expenseDeclarationStatus === 'MISSING') && <span>Frais à déclarer sur certaines tournées</span>}
+    </div>
     {(open || activeTour) && <div id={listId}>
       <div className={styles.tourSearch} role='search'>
         <label htmlFor={`${listId}-search`}>Référence de tournée</label>
@@ -61,7 +63,9 @@ const DelivererTours = ({ remainder, cashRegister, canCreatePayment, canReadTour
       </div>
       {visibleTours.map((tour) => <EditableCard id={`cash-tour-${tour.id}`} key={tour.id} title={canReadTours ? <EditingLink href={`/tournees/${tour.id}`}>{tour.reference}</EditingLink> : tour.reference}
         description={STATUS_LABELS[tour.status] ?? tour.status} className={styles.tourCard} editLabel='Encaisser cette tournée' editingLabel='Encaissement ciblé'
-        canEdit={Boolean(canCreatePayment && cashRegister && Number.isSafeInteger(tour.remainingDueInCentimes) && tour.remainingDueInCentimes > 0)}
+        headerContent={<span className={`${styles.badge} ${tour.expenseDeclarationStatus === 'DECLARED' ? '' : styles.amberBadge}`}>{tour.expenseDeclarationStatus === 'DECLARED' ? 'Frais déclarés' : tour.expenseDeclarationStatus === 'HISTORICAL_MISSING' ? 'Absence historique de frais' : 'Frais non déclarés'}</span>}
+        canEdit={canCreatePayment}
+        editDisabled={!cashRegister || !Number.isSafeInteger(tour.remainingDueInCentimes) || tour.remainingDueInCentimes <= 0}
         onEditingChange={(editing) => onEditingChange(editing, tour)}
         formComponent={CashTourPayment} formProps={{ cashRegister, deliverer: remainder.deliverer, tour, confirmationKey: crypto.randomUUID() }}>
         <TourFinancials tour={tour} />
@@ -76,29 +80,31 @@ const DelivererTours = ({ remainder, cashRegister, canCreatePayment, canReadTour
   </div>;
 };
 
-const CashRemainders = ({ anomalies, anomalyCount, canCreatePayment, canReadDeliverers, canReadTours, cashRegister, cashRegisterError, initialConfirmationKey, journalState, page, pageSize, query, remainders, totalItems, totalPages, totalRemainingDueInCentimes }) => {
+const CashRemainders = ({ anomalies, anomalyCount, canCreatePayment, canReadDeliverers, canReadTours, cashRegister, cashRegisterError, initialConfirmationKey, journalState, page, query, remainders, totalItems, totalPages, totalRemainingDueInCentimes }) => {
   const [active, setActive] = useState(null);
   const visibleRemainders = [...remainders];
   if (active && !visibleRemainders.some((item) => item.deliverer.id === active.remainder.deliverer.id)) visibleRemainders.push({ ...active.remainder, tours: [], remainingDueInCentimes: null });
-  const firstItem = totalItems ? (page - 1) * pageSize + 1 : 0;
   return <section className={styles.remainders} aria-labelledby='cash-remainders-title'>
     <div className={styles.sectionHeading}>
-      <div><p className={styles.eyebrow}>Situation actuelle · indépendante du journal</p><h2 id='cash-remainders-title'>À encaisser</h2><p>Tournées comptées ou terminées, après déduction des frais déclarés. Ces restes ne sont pas de l’argent déjà en caisse.</p></div>
-      <div className={styles.remainderTotal}><span>{anomalyCount ? 'Total partiel' : 'Total à encaisser'} · tous les résultats</span><strong><Money value={totalRemainingDueInCentimes} /></strong><small>{totalItems} livreur{totalItems > 1 ? 's' : ''}</small></div>
+      <div><h2 id='cash-remainders-title'>À encaisser</h2><p>Restes actuels des tournées comptées et terminées · après frais déclarés</p></div>
+      <span className={styles.sectionMeta}>Indépendant des dates du journal</span>
+    </div>
+    <CashFilterForm view='restes' className={styles.remainderFilters} role='search'>
+      <input type='hidden' name='vue' value='restes' />
+      {[['q', journalState.query], ['livreur', journalState.delivererId], ['du', journalState.dateFrom], ['au', journalState.dateTo], ['page', journalState.page]].filter(([, value]) => value).map(([name, value]) => <input key={name} type='hidden' name={name} value={value} />)}
+      <div><label htmlFor='cash-remainder-search'>Rechercher un livreur</label><input id='cash-remainder-search' name='resteRecherche' type='search' defaultValue={query} maxLength={100} placeholder='Code ou nom du livreur' /></div>
+      <button type='submit'>Rechercher</button>
+      {query && <CashResetLink view='restes' />}
+    </CashFilterForm>
+    <div className={styles.remainderTotal}>
+      <div><p className={styles.eyebrow}>{anomalyCount ? 'Total partiel' : 'Total à encaisser'} · résultats de cette recherche</p><strong><Money value={totalRemainingDueInCentimes} /></strong><p>Ce total couvre toutes les pages de résultats, hors tournées incohérentes. Ces restes ne sont pas de l’argent déjà en caisse.</p></div>
+      <span className={`${styles.badge} ${styles.amberBadge}`}>{totalItems} livreur{totalItems > 1 ? 's' : ''}</span>
     </div>
     {anomalyCount > 0 && <aside className={styles.warning} aria-label='Anomalies des restes'>
       <strong>{anomalyCount} anomalie{anomalyCount > 1 ? 's' : ''} · tournées exclues du total</strong>
       {anomalies.map((anomaly) => <p key={anomaly.code}>{anomaly.label} : {anomaly.tourReferences.join(', ')}</p>)}
     </aside>}
-    <CashFilterForm view='restes' className={styles.remainderFilters} role='search'>
-      <input type='hidden' name='vue' value='restes' />
-      {[['q', journalState.query], ['livreur', journalState.delivererId], ['du', journalState.dateFrom], ['au', journalState.dateTo], ['page', journalState.page]].filter(([, value]) => value).map(([name, value]) => <input key={name} type='hidden' name={name} value={value} />)}
-      <div><label htmlFor='cash-remainder-search'>Code ou nom du livreur</label><input id='cash-remainder-search' name='resteRecherche' type='search' defaultValue={query} maxLength={100} placeholder='Rechercher un livreur' /></div>
-      <button type='submit'>Appliquer</button>
-      {query && <CashResetLink view='restes' />}
-    </CashFilterForm>
     {cashRegisterError && <p className={styles.error} role='alert'>{cashRegisterError}{canCreatePayment ? ' Encaissement indisponible.' : ''}</p>}
-    <p className={styles.resultCount}>{totalItems ? `${firstItem}–${Math.min(totalItems, firstItem + remainders.length - 1)} sur ${totalItems} livreurs` : '0 livreur'}</p>
     <div className={styles.delivererCards}>
       {visibleRemainders.map((remainder) => {
         const blocking = remainder.blockingAnomalies ?? [];
@@ -107,11 +113,13 @@ const CashRemainders = ({ anomalies, anomalyCount, canCreatePayment, canReadDeli
         return <EditableCard id={`cash-deliverer-${remainder.deliverer.id}`} key={remainder.deliverer.id} className={styles.delivererCard}
           title={canReadDeliverers ? <EditingLink href={`/livreurs/${remainder.deliverer.id}`}>{remainder.deliverer.name || 'Nom non renseigné'}</EditingLink> : remainder.deliverer.name || 'Nom non renseigné'}
           description={`${remainder.deliverer.code} · ${remainder.tourCount} tournée${remainder.tourCount > 1 ? 's' : ''} concernée${remainder.tourCount > 1 ? 's' : ''}`}
-          editLabel='Encaisser le livreur' editingLabel='Encaissement du livreur' trackDraft
-          canEdit={Boolean(canCreatePayment && cashRegister && !blocking.length && Number.isSafeInteger(remainder.remainingDueInCentimes) && remainder.remainingDueInCentimes > 0)}
+          titleIcon={<span className={styles.avatar} aria-hidden='true'>{(remainder.deliverer.name || remainder.deliverer.code).split(/\s+/u).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase('fr')}</span>}
+          headerAside={<div className={styles.delivererDue}><span>{partial ? 'Reste connu · partiel' : 'Reste à payer'}</span><strong><Money value={remainder.remainingDueInCentimes} /></strong></div>}
+          editLabel='Encaisser le livreur' editingLabel='Encaissement en cours' trackDraft keepReadContent
+          canEdit={canCreatePayment}
+          editDisabled={!cashRegister || Boolean(blocking.length) || !Number.isSafeInteger(remainder.remainingDueInCentimes) || remainder.remainingDueInCentimes <= 0}
           onEditingChange={(editing) => editingChange(editing)}
           formComponent={AllocationForm} formProps={{ cashRegister, remainder, confirmationKey: initialConfirmationKey }}>
-          <div className={styles.delivererDue}><span>{partial ? 'Reste connu · partiel' : 'Reste à encaisser'}</span><strong><Money value={remainder.remainingDueInCentimes} /></strong></div>
           {blocking.length > 0 && <aside className={styles.warning}><strong>Encaissement du livreur indisponible : répartition globale impossible.</strong>{blocking.map((anomaly) => <p key={`${anomaly.code}-${anomaly.tourReference}`}>{anomaly.label} : {anomaly.tourReference}</p>)}</aside>}
           <DelivererTours remainder={remainder} cashRegister={cashRegister} canCreatePayment={canCreatePayment} canReadTours={canReadTours}
             onEditingChange={editingChange} activeTour={active?.remainder.deliverer.id === remainder.deliverer.id ? active.tour : null} />
@@ -121,7 +129,7 @@ const CashRemainders = ({ anomalies, anomalyCount, canCreatePayment, canReadDeli
     {!remainders.length && !active && <div className={styles.empty}><h3>{query ? 'Aucun livreur pour cette recherche' : anomalyCount ? 'Des restes restent à vérifier' : 'Tous les restes calculables sont soldés'}</h3><p>{query ? 'Modifiez la recherche de livreur.' : anomalyCount ? 'Les anomalies ne permettent pas de conclure que tous les livreurs sont soldés.' : 'Aucune tournée comptée ou terminée ne présente de reste positif calculable.'}</p></div>}
     <nav className={styles.pagination} aria-label='Pagination des restes à encaisser'>
       {page === 1 ? <span aria-disabled='true'>Précédent</span> : <CashPageLink view='restes' page={page - 1}>Précédent</CashPageLink>}
-      <p>Page {page} sur {totalPages}</p>
+      <p>{totalItems} résultat{totalItems > 1 ? 's' : ''} · page {page} / {totalPages}</p>
       {page === totalPages ? <span aria-disabled='true'>Suivant</span> : <CashPageLink view='restes' page={page + 1}>Suivant</CashPageLink>}
     </nav>
   </section>;

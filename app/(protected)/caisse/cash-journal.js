@@ -6,7 +6,6 @@ import CashJournalAllocations from './cash-journal-allocations.js';
 
 import {
   formatCashAmount,
-  formatCashPaymentDateTime,
 } from '../../../lib/cash-payments.js';
 
 const PaginationLink = ({ children, disabled, page }) => disabled ? (
@@ -24,6 +23,15 @@ const PaginationLink = ({ children, disabled, page }) => disabled ? (
   </CashPageLink>
 );
 
+const CashJournalDate = ({ value }) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return 'Non renseignée';
+  return <time dateTime={date.toISOString()}>
+    {new Intl.DateTimeFormat('fr-DZ', { dateStyle: 'short', timeZone: 'Africa/Algiers' }).format(date)}
+    <small>{new Intl.DateTimeFormat('fr-DZ', { timeStyle: 'short', hourCycle: 'h23', timeZone: 'Africa/Algiers' }).format(date)}</small>
+  </time>;
+};
+
 const CashJournal = ({
   canReadDeliverers,
   canReadTours,
@@ -34,7 +42,6 @@ const CashJournal = ({
   financialDataError,
   netVariationInCentimes,
   page,
-  pageSize,
   payments,
   query,
   remainderState,
@@ -44,26 +51,19 @@ const CashJournal = ({
   totalWithdrawalsInCentimes,
 }) => {
   const filtersActive = Boolean(query || delivererId || dateFrom || dateTo);
-  const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
-  const lastItem = firstItem + payments.length - 1;
   return (
     <>
+      <div className={styles.sectionHeading}>
+        <div><h2 id='cash-journal-title'>Journal de caisse</h2><p>Encaissements et retraits · du plus récent au plus ancien</p></div>
+        <span className={styles.sectionMeta}>Heures d’Alger</span>
+      </div>
       <section
         aria-labelledby='cash-journal-title'
         className={styles.journal}
       >
-        <div className='border-b border-slate-200 p-5 sm:p-6'>
-          <h2 className='text-lg font-semibold text-slate-900' id='cash-journal-title'>
-            Journal de caisse
-          </h2>
-          <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Consultez les encaissements et les retraits, du plus récent au plus ancien.
-          </p>
-        </div>
-
         <CashFilterForm view='journal'
           action='/caisse'
-          className='grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1fr)_minmax(12rem,0.8fr)_10rem_10rem_auto_auto]'
+          className={styles.journalFilters}
           method='get'
           role='search'
         >
@@ -84,7 +84,7 @@ const CashJournal = ({
           )}
           <div>
             <label className={styles.filterLabel} htmlFor='cash-search'>
-              Référence, livreur, note ou motif
+              Rechercher un mouvement
             </label>
             <input
               className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
@@ -146,55 +146,23 @@ const CashJournal = ({
           >
             Appliquer
           </button>
-          {filtersActive && (
-            <CashResetLink view='journal'
-              className='inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            >
-              Réinitialiser
-            </CashResetLink>
-          )}
         </CashFilterForm>
-        {delivererId && <p className={styles.scopeNote}>Le filtre livreur exclut les retraits : ceux-ci ne sont rattachés à aucun livreur.</p>}
+        <div className={styles.scopeNote}>
+          <span>{filtersActive ? 'Sélection filtrée' : 'Historique complet du journal'} · {totalItems} mouvement{totalItems > 1 ? 's' : ''}{delivererId ? ' · Les retraits ne sont liés à aucun livreur et sont exclus.' : ''}</span>
+          {filtersActive && <CashResetLink view='journal'>Réinitialiser les filtres</CashResetLink>}
+        </div>
         {dateFrom && dateTo && dateFrom > dateTo && <p className={styles.error} role='alert'>La date « Du » doit précéder ou égaler la date « Au ».</p>}
-        <div className={styles.selectionTotals}>
-          <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-            Sur la sélection · toutes les pages
-          </p>
-          {financialDataError ? (
-            <p className='mt-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900' role='alert'>
-              {financialDataError}
-            </p>
-          ) : (
-            <dl className='mt-3 grid gap-3 sm:grid-cols-3'>
-              {[
-                ['Entrées', formatCashAmount(totalEntriesInCentimes), 'text-emerald-800'],
-                ['Sorties', formatCashAmount(totalWithdrawalsInCentimes), 'text-red-800'],
-                ['Variation nette', formatCashSignedAmount(netVariationInCentimes), 'text-slate-950'],
-              ].map(([label, value, color]) => (
-                <div className='rounded-xl bg-slate-50 p-4' key={label}>
-                  <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                    {label}
-                  </dt>
-                  <dd className={`mt-1 text-xl font-bold ${color}`}>
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          <p className='mt-3 text-xs leading-5 text-slate-500'>
-            La variation filtrée dépend des critères ci-dessous ; elle ne doit
-            pas être confondue avec le solde suivi global.
-          </p>
-        </div>
-
-        <div className='flex min-h-12 items-center border-b border-slate-200 px-4 py-3 sm:px-6'>
-          <p className='text-sm text-slate-500'>
-            {totalItems > 0
-              ? `${firstItem}–${lastItem} sur ${totalItems} mouvements`
-              : '0 mouvement'}
-          </p>
-        </div>
+        {financialDataError ? (
+          <p className={styles.error} role='alert'>{financialDataError}</p>
+        ) : (
+          <dl className={styles.selectionTotals} aria-label='Totaux de la sélection, toutes les pages'>
+            {[
+              ['Entrées · sélection', formatCashAmount(totalEntriesInCentimes), styles.positive],
+              ['Sorties · sélection', formatCashAmount(totalWithdrawalsInCentimes), styles.negative],
+              ['Variation nette · sélection', formatCashSignedAmount(netVariationInCentimes), ''],
+            ].map(([label, value, color]) => <div key={label}><dt>{label}</dt><dd className={color}>{value}</dd></div>)}
+          </dl>
+        )}
 
         {payments.length > 0 ? (
           <>
@@ -204,10 +172,10 @@ const CashJournal = ({
                 <tr>
                   {[
                     ['Type', 'w-[12%]'],
-                    ['Date et heure', 'w-[16%]'],
+                    ['Date & heure', 'w-[15%]'],
                     ['Référence', 'w-[19%]'],
                     ['Informations', 'w-[25%]'],
-                    ['Montant en DA', 'w-[14%]'],
+                    ['Montant', 'w-[16%]'],
                     ['Auteur', 'w-[14%]'],
                   ].map(([label, width]) => (
                     <th
@@ -224,16 +192,14 @@ const CashJournal = ({
                 {payments.map((payment) => (
                   <tr className='align-top hover:bg-slate-50' key={payment.id}>
                     <td data-label='Type' className='break-words px-2 py-3 text-xs font-semibold sm:px-4'>
-                      <span className={payment.type === 'WITHDRAWAL'
-                        ? 'text-red-800'
-                        : 'text-emerald-800'}>
+                      <span className={`${styles.badge} ${payment.type === 'WITHDRAWAL' ? styles.redBadge : styles.greenBadge}`}>
                         {payment.type === 'WITHDRAWAL'
                           ? 'Retrait'
                           : 'Encaissement'}
                       </span>
                     </td>
                     <td data-label='Date & heure' className='break-words px-2 py-3 text-xs text-slate-600 sm:px-4'>
-                      {formatCashPaymentDateTime(payment.receivedAt)}
+                      <CashJournalDate value={payment.receivedAt} />
                     </td>
                     <td data-label='Référence' className='break-all px-2 py-3 font-mono text-xs font-semibold text-slate-900 sm:px-4'>
                       {payment.reference}
@@ -251,7 +217,7 @@ const CashJournal = ({
                     <td data-label='Informations' className='break-words px-2 py-3 text-xs text-slate-700 sm:px-4'>
                       {payment.type === 'WITHDRAWAL' ? (
                         <>
-                          <p className='font-semibold text-slate-900'>Motif</p>
+                          <p className='font-semibold text-slate-900'>Motif du retrait</p>
                           <p className='mt-1 whitespace-pre-wrap break-words'>
                             {payment.reason}
                           </p>
@@ -264,15 +230,15 @@ const CashJournal = ({
                                 className='font-medium text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
                                 href={`/livreurs/${payment.deliverer.id}`}
                               >
-                                {payment.deliverer.code}
+                                {payment.deliverer.name}
                               </Link>
                             ) : (
                               <span className='font-medium text-slate-900'>
-                                {payment.deliverer.code}
+                                {payment.deliverer.name}
                               </span>
                             )}
-                            <span className='ml-1'>{payment.deliverer.name}</span>
                           </p>
+                          <small>{payment.deliverer.code}</small>
                           {payment.allocations ? (
                             <CashJournalAllocations allocations={payment.allocations} canReadTours={canReadTours} />
                           ) : (
@@ -302,13 +268,13 @@ const CashJournal = ({
 
             <nav
               aria-label='Pagination des mouvements de caisse'
-              className='flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-3 sm:px-6'
+              className={`${styles.pagination} ${styles.journalPagination}`}
             >
               <PaginationLink disabled={page === 1} page={page - 1}>
                 Précédent
               </PaginationLink>
-              <p className='text-sm font-medium text-slate-600'>
-                Page {page} sur {totalPages}
+              <p>
+                {totalItems} résultat{totalItems > 1 ? 's' : ''} · page {page} / {totalPages}
               </p>
               <PaginationLink
                 disabled={page === totalPages}
@@ -332,6 +298,7 @@ const CashJournal = ({
             </p>
           </div>
         )}
+        <p className={styles.footnote}>La variation de la sélection n’est pas le solde suivi global. Les écritures enregistrées sont consultables en lecture seule.</p>
       </section>
     </>
   );

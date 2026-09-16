@@ -59,14 +59,16 @@ const CashPage = async ({ searchParams }) => {
   return (
     <main className={styles.page}>
       <header className={styles.hero}>
-        <div><p className={styles.eyebrow}>Gestion des espèces</p><h1>Caisse</h1><p>Suivez les mouvements et encaissez les remises des livreurs.</p></div>
-        {cashRegister && <p className={styles.registerBadge}>{cashRegister.name} · {cashRegister.code} · DZD</p>}
+        <div><p className={styles.eyebrow}>Gestion des espèces</p><h1>Caisse</h1><p>Suivez les mouvements et encaissez les restes des livreurs.</p></div>
+        <p className={`${styles.registerBadge} ${cashRegister ? styles.greenBadge : styles.amberBadge}`}>{cashRegister ? `${cashRegister.name} · DZD` : 'Caisse indisponible'}</p>
       </header>
       <CashWorkspace canCreatePayment={canCreatePayment} withdrawalPreview={withdrawalPreview} initialWithdrawalKey={randomUUID()}
-        balanceContent={<div className={styles.balanceRead}>
+        balanceHeader={<>
           <p className={styles.balanceValue}>{trackedBalance.error ? 'Non calculable' : formatCashSignedAmount(trackedBalance.balanceInCentimes)}</p>
           {trackedBalance.cashRegister && <p>{trackedBalance.cashRegister.name} · {trackedBalance.cashRegister.code}</p>}
-          <p className={styles.scope}>Fonds initial + tous les encaissements − tous les retraits. Les filtres n’affectent pas ce solde ; il ne constitue pas un comptage physique du tiroir.</p>
+        </>}
+        balanceContent={<div className={styles.balanceRead}>
+          <p className={styles.scope}>Fonds initial + tous les encaissements − tous les retraits. Ce montant ne dépend pas des filtres et ne constitue pas un comptage physique du tiroir.</p>
           {trackedBalance.error && <p className={styles.error} role='alert'>{trackedBalance.error}</p>}
           {withdrawalPreview?.error && withdrawalPreview.error !== trackedBalance.error && <p className={styles.error} role='alert'>Retrait indisponible : {withdrawalPreview.error}</p>}
         </div>}>

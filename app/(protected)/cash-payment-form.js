@@ -22,6 +22,7 @@ const CashPaymentForm = ({
   tourId,
   tourReference,
   onCancel, onConfirmedSubmit,
+  className, renderPreview,
 }) => {
   const [amount, setAmount] = useState(state.values?.amount ?? '');
   const [note, setNote] = useState(state.values?.note ?? '');
@@ -49,6 +50,7 @@ const CashPaymentForm = ({
   const noteErrorId = `${noteId}-error`;
   return (
     <form
+      className={className}
       action={formAction}
       onSubmit={(event) => {
         if (
@@ -118,6 +120,7 @@ const CashPaymentForm = ({
         </div>
       </div>
 
+      {renderPreview ? renderPreview({ calculation, remainingDueInCentimes }) : <>
       <p className='mt-4 text-sm text-slate-600'>Reste avant : {Number.isSafeInteger(remainingDueInCentimes) ? formatReceptionMoney(remainingDueInCentimes) : 'Non calculable'} · Montant saisi : {Number.isSafeInteger(calculation.amountInCentimes) ? formatReceptionMoney(calculation.amountInCentimes) : 'À renseigner'}</p>
       <div className='mt-5 rounded-xl border border-amber-200 bg-amber-100 px-4 py-4'>
         <p className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
@@ -135,6 +138,7 @@ const CashPaymentForm = ({
           </p>
         )}
       </div>
+      </>}
 
       {state.errors.form && (
         <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>

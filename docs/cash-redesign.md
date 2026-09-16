@@ -62,9 +62,38 @@ Vérifications exécutées le 16 septembre 2026 :
 - Captures bureau et mobile sans débordement horizontal ; lecteur caisse et
   encaisseur sans liens vers les fiches non autorisées.
 
-Limites : `caisse-apercu.html` n’était pas présent dans le dépôt. L’apparence
+Limites de la vérification initiale : `caisse-apercu.html` n’était pas présent dans le dépôt. L’apparence
 suit le prompt fourni et le système de cartes existant ; aucune comparaison
 visuelle directe avec cette maquette n’a été possible. La couverture clavier
 n’est pas exhaustive. Les projections financières et services transactionnels
 n’ont pas été refondus. Aucune écriture de vérification n’a été effectuée dans
 la caisse réelle. Aucun commit, déploiement, migration ou nouvelle permission.
+
+## Comparaison avec la maquette disponible
+
+La comparaison du 16 septembre 2026 utilise désormais `caisse-apercu.html`,
+ouvert dans Chrome à côté de l’application sur une base MongoDB temporaire.
+Les vues journal et restes, le formulaire d’encaissement du livreur et le retrait
+sont comparés à 1440 et 390 pixels, avec captures et contrôle du débordement.
+
+Corrections : fond et typographie, solde vert et montant dans l’en-tête,
+carte de choix et onglets, titre du journal au-dessus de la carte, bandeau de
+sélection et totaux sur une ligne, badges des mouvements, date et heure sur
+deux lignes, noms des livreurs au-dessus des codes, recherche des restes et
+total sur toute la largeur, avatars et restes dans l’en-tête des livreurs,
+statut des frais, champs et aperçus compacts, répartition à quatre colonnes.
+Le retrait occupe toute la largeur et la carte de choix est masquée sur mobile.
+Les actions autorisées mais indisponibles restent visibles et désactivées.
+La mise en forme de la navigation principale est limitée à `/caisse`.
+
+Les données affichées proviennent de l’application ; les outils de scénarios
+fictifs de la maquette ne sont pas intégrés. La déconnexion reste accessible.
+Les listes de tournées et d’affectations conservent recherche et pagination.
+
+Validation : 16 tests ciblés de navigation et calculs, ESLint sur les composants
+modifiés, build de production Webpack et parcours Chrome isolés : encaissement
+de sept tournées malgré une recherche ne montrant qu’une affectation,
+paiement ciblé, retrait, erreurs de saisie et focus, conflits sans écriture,
+réponses perdues et rejeu sans doublon, protection de navigation et brouillons,
+règlement concurrent retirant une ligne des résultats, profils de lecture et
+d’encaissement, fonds initial absent et plusieurs caisses actives.

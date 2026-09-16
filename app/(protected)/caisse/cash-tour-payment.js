@@ -4,6 +4,7 @@ import { startTransition, useActionState, useEffect, useRef, useState } from 're
 import CashPaymentForm from '../cash-payment-form.js';
 import { recordTourPayment } from '../cash-payment-actions.js';
 import { useCashNotice } from './cash-form-context.js';
+import { formatCashSignedAmount } from '../../../lib/cash-navigation.js';
 import styles from './cash.module.css';
 
 const INITIAL_STATE = { errors: {}, values: { amount: '', note: '' }, revision: 0, succeeded: false };
@@ -38,7 +39,15 @@ const CashTourPayment = ({ cashRegister, deliverer, tour, confirmationKey, onCan
   const projection = (pending || uncertain) && frozenProjection ? frozenProjection : { tour: cashRegister ? tour : { ...tour, remainingDueInCentimes: null }, cashRegister: cashRegister ?? initialCashRegister };
   return <div ref={formRef} className={styles.inlineForm}>
     <p className={styles.target}>Encaissement ciblé · <strong>{deliverer.code} — {deliverer.name}</strong> · {tour.reference}</p>
-    <CashPaymentForm cashRegister={projection.cashRegister} deliverer={deliverer}
+    {tour.expenseDeclarationStatus === 'MISSING' && <p className={styles.warning}>Les frais de cette tournée ne sont pas encore déclarés. L’encaissement réduit le maximum de frais encore déclarable.</p>}
+    <CashPaymentForm cashRegister={projection.cashRegister} deliverer={deliverer} className={styles.tourPaymentForm}
+      renderPreview={({ calculation, remainingDueInCentimes }) => <dl className={styles.livePreview}>
+        {[
+          ['Reste avant', remainingDueInCentimes],
+          ['Montant reçu', calculation.amountInCentimes],
+          ['Reste après', calculation.remainingAfterPaymentInCentimes],
+        ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatCashSignedAmount(value)}</dd></div>)}
+      </dl>}
       confirmationKey={state.confirmationKey ?? initialKey} formAction={dispatch}
       idPrefix={`cash-tour-${tour.id}`} pending={pending || uncertain}
       remainingDueInCentimes={projection.tour.remainingDueInCentimes}

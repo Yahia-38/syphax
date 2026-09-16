@@ -164,36 +164,10 @@ const CashWithdrawalPreview = ({
         }
         requestConfirmation(event);
       }}>
-          <p>
-            Le retrait sera enregistré définitivement dans le journal de la
-            caisse. Il ne crée ni charge de rentabilité ni mouvement de stock.
-          </p>
-
-          {summary.error ? (
-            <p className='rounded-xl border border-red-200 bg-red-50 p-4 font-semibold text-red-900' role='alert' tabIndex={-1}>
-              {summary.error}
-            </p>
-          ) : summary.cashRegister ? (
-            <dl className='grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2'>
-              <div>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                  Caisse
-                </dt>
-                <dd className='mt-1 font-semibold text-slate-950'>
-                  {summary.cashRegister.name} — {summary.cashRegister.code}
-                </dd>
-              </div>
-              <div>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                  Solde suivi avant retrait
-                </dt>
-                <dd className='mt-1 font-semibold text-slate-950'>
-                  {Number.isSafeInteger(summary.balanceInCentimes) ? formatReceptionMoney(summary.balanceInCentimes) : 'Non calculable'}
-                </dd>
-              </div>
-            </dl>
-          ) : null}
-
+          <div className={styles.editorContext}>Caisse source : <strong>{summary.cashRegister ? `${summary.cashRegister.name} · ${summary.cashRegister.code} · DZD` : 'Indisponible'}</strong></div>
+          <p className={styles.contextNotice}>Un retrait diminue le solde suivi. Il ne crée ni charge de rentabilité, ni mouvement de stock, ni réduction d’une dette livreur.</p>
+          {summary.error && <p className={styles.error} role='alert' tabIndex={-1}>{summary.error}</p>}
+          <div className={styles.formFields}>
           <div>
             <label className='font-semibold text-slate-800' htmlFor='cash-withdrawal-amount'>
               Montant retiré en DA
@@ -214,7 +188,7 @@ const CashWithdrawalPreview = ({
                 setAmount(event.target.value);
                 clearResolvedState();
               }}
-              placeholder='0,00'
+              placeholder='Ex. 5000'
               type='text'
               value={amount}
             />
@@ -227,7 +201,7 @@ const CashWithdrawalPreview = ({
 
           <div>
             <label className='font-semibold text-slate-800' htmlFor='cash-withdrawal-reason'>
-              Motif
+              Motif obligatoire
             </label>
             <textarea
               aria-describedby={touched.reason && validation.errors.reason
@@ -258,29 +232,14 @@ const CashWithdrawalPreview = ({
             )}
           </div>
 
-          {validation.amountInCentimes !== null
-            && validation.balanceAfterWithdrawalInCentimes !== null && (
-            <dl className='grid gap-2 rounded-xl border border-red-200 bg-red-50 p-4 sm:grid-cols-2'>
-              <div>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-red-700'>
-                  Montant retiré
-                </dt>
-                <dd className='mt-1 font-bold text-red-950'>
-                  {formatReceptionMoney(validation.amountInCentimes)}
-                </dd>
-              </div>
-              <div>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-red-700'>
-                  Solde prévu après retrait
-                </dt>
-                <dd className='mt-1 font-bold text-red-950'>
-                  {formatReceptionMoney(
-                    validation.balanceAfterWithdrawalInCentimes,
-                  )}
-                </dd>
-              </div>
-            </dl>
-          )}
+          </div>
+          <dl className={styles.livePreview}>
+            {[
+              ['Solde avant', summary.balanceInCentimes],
+              ['Retrait saisi', validation.amountInCentimes],
+              ['Solde après', validation.balanceAfterWithdrawalInCentimes],
+            ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatReceptionMoney(value)}</dd></div>)}
+          </dl>
 
           {actionState?.stale && (
             <div className='rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950' role='alert' tabIndex={-1}>
