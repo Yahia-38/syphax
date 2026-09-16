@@ -106,3 +106,26 @@ test('refuse une destination de retour externe ou étrangère à l’historique'
     '/receptions',
   );
 });
+
+test('préserve les quatre décimales du coût et refuse les quantités nulles', () => {
+  assert.equal(formatReceptionUnitCost({ amountInCentimes: 100, quantityInBaseUnits: 3 }), '0,3333 DA');
+  assert.equal(formatReceptionUnitCost({ amountInCentimes: 0, quantityInBaseUnits: 0 }), 'Non calculable');
+  assert.equal(formatReceptionUnitCost({ amountInCentimes: 0, quantityInBaseUnits: 3 }), '0 DA');
+});
+
+test('distingue total absent, réception vide et écarts signés', () => {
+  const lines = [{ amountInCentimes: 100 }];
+  assert.equal(summarizeReceptionAmounts(lines, 100).gapInCentimes, 0);
+  assert.equal(summarizeReceptionAmounts(lines, 50).gapInCentimes, -50);
+  assert.equal(summarizeReceptionAmounts(lines, 150).gapInCentimes, 50);
+  assert.equal(summarizeReceptionAmounts(lines).gapInCentimes, null);
+  assert.equal(summarizeReceptionAmounts([], 0).knownSubtotalInCentimes, null);
+  assert.equal(summarizeReceptionAmounts([], 0).gapInCentimes, null);
+  assert.equal(formatReceptionMoney(Number.MAX_SAFE_INTEGER + 1), 'Non renseigné');
+});
+
+test('canonise l’onglet réceptions et rejette fragments et onglets étrangers', () => {
+  assert.equal(validateReceptionHistoryHref('/receptions?onglet=receptions&page=2&recherche=eau'), '/receptions?recherche=eau&page=2');
+  assert.equal(validateReceptionHistoryHref('/receptions#lignes'), '/receptions');
+  assert.equal(validateReceptionHistoryHref('/receptions?onglet=fournisseurs'), '/receptions');
+});
