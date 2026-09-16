@@ -56,7 +56,7 @@ const serializeFields = (element) => JSON.stringify(
     .map((field) => [field.name, ['checkbox', 'radio'].includes(field.type) ? [field.checked, field.value] : field.value]),
 );
 
-const EditableCard = ({ title, description, canEdit, initiallyOpen = false, editLabel = 'Modifier', keepReadContent = false, children, formComponent: Form, formProps = {}, onSaved, titleIcon, creation = false, editingLabel = 'Modification en cours', className = '', trackDraft = false }) => {
+const EditableCard = ({ id, title, description, canEdit, initiallyOpen = false, editLabel = 'Modifier', keepReadContent = false, children, formComponent: Form, formProps = {}, onSaved, titleIcon, creation = false, editingLabel = 'Modification en cours', className = '', trackDraft = false, onEditingChange }) => {
   const titleId = useId();
   const [editing, setEditing] = useState(initiallyOpen && canEdit);
   const [message, setMessage] = useState(null);
@@ -65,10 +65,13 @@ const EditableCard = ({ title, description, canEdit, initiallyOpen = false, edit
   const baselineRef = useRef('');
   const activeRef = useRef(null);
   const draftBaselineRef = useRef(undefined);
+  const editingChangeRef = useRef(onEditingChange);
+  useLayoutEffect(() => { editingChangeRef.current = onEditingChange; }, [onEditingChange]);
   const session = useEditingSession();
   const register = session?.register;
   const discard = useCallback((restoreFocus = true) => {
     setEditing(false);
+    editingChangeRef.current?.(false);
     setMessage(null);
     activeRef.current = null;
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
@@ -99,7 +102,7 @@ const EditableCard = ({ title, description, canEdit, initiallyOpen = false, edit
   }, [discard, onSaved]);
 
   return (
-    <section aria-labelledby={titleId} className={`${styles.card} ${editing ? styles.editing : ''} ${creation ? styles.creation : ''} ${className}`} ref={containerRef}
+    <section id={id} aria-labelledby={titleId} className={`${styles.card} ${editing ? styles.editing : ''} ${creation ? styles.creation : ''} ${className}`} ref={containerRef}
       onChangeCapture={() => {
         if (!trackDraft && activeRef.current) activeRef.current.dirty = serializeFields(containerRef.current) !== baselineRef.current;
       }}>
@@ -110,7 +113,7 @@ const EditableCard = ({ title, description, canEdit, initiallyOpen = false, edit
         </div>
         {editing && <span className={styles.label}>{editingLabel}</span>}
         {canEdit && !editing && <button className={styles.edit} ref={triggerRef} type='button' onClick={() => {
-          const open = () => { setMessage(null); setEditing(true); };
+          const open = () => { setMessage(null); setEditing(true); editingChangeRef.current?.(true); };
           if (session) session.request(open); else open();
         }}><svg aria-hidden='true' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d={creation ? 'M12 5v14M5 12h14' : 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'} /></svg>{editLabel}</button>}
       </div>

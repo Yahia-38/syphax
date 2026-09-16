@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { getUserPermissions } from '../../../lib/access.js';
 import {
   CASH_PAYMENT_FORM_PERMISSIONS,
-  buildCashRemaindersHref,
   listCashJournalFilterOptions,
   listCashPayments,
   listCashRemainders,
@@ -18,7 +17,9 @@ import {
 import { requirePermission } from '../../../lib/sessions.js';
 import CashJournal from './cash-journal.js';
 import CashRemainders from './cash-remainders.js';
-import CashWithdrawalPreview from './cash-withdrawal-preview.js';
+import CashWorkspace from './cash-workspace.js';
+import { readCashView, formatCashSignedAmount } from '../../../lib/cash-navigation.js';
+import styles from './cash.module.css';
 
 export const metadata = {
   title: 'Caisse | Syphax',
@@ -27,6 +28,7 @@ export const metadata = {
 const CashPage = async ({ searchParams }) => {
   const session = await requirePermission('cash.read');
   const resolvedSearchParams = await searchParams;
+  const view = readCashView(resolvedSearchParams.vue);
   const listState = readCashJournalState(resolvedSearchParams);
   const remainderState = readCashRemaindersState(resolvedSearchParams);
   const permissions = await getUserPermissions(session.userId);
@@ -53,41 +55,25 @@ const CashPage = async ({ searchParams }) => {
   const canCreatePayment = CASH_PAYMENT_FORM_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
-  const buildRemainderHref = ({ page, query }) => buildCashRemaindersHref({
-    ...journal,
-    journalPage: journal.page,
-    journalQuery: journal.query,
-    page,
-    query,
-  });
-
+  const cashRegister = remainders.cashRegister ?? trackedBalance.cashRegister;
   return (
-    <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
-      <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-        <div>
-          <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
-            Caisse
-          </h1>
-          <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Consultez les encaissements, les retraits et le solde suivi.
-          </p>
-        </div>
-        {withdrawalPreview && (
-          <CashWithdrawalPreview
-            {...withdrawalPreview}
-            initialConfirmationKey={randomUUID()}
-          />
-        )}
+    <main className={styles.page}>
+      <header className={styles.hero}>
+        <div><p className={styles.eyebrow}>Gestion des espèces</p><h1>Caisse</h1><p>Suivez les mouvements et encaissez les remises des livreurs.</p></div>
+        {cashRegister && <p className={styles.registerBadge}>{cashRegister.name} · {cashRegister.code} · DZD</p>}
+      </header>
+      <CashWorkspace canCreatePayment={canCreatePayment} withdrawalPreview={withdrawalPreview} initialWithdrawalKey={randomUUID()}
+        balanceContent={<div className={styles.balanceRead}>
+          <p className={styles.balanceValue}>{trackedBalance.error ? 'Non calculable' : formatCashSignedAmount(trackedBalance.balanceInCentimes)}</p>
+          {trackedBalance.cashRegister && <p>{trackedBalance.cashRegister.name} · {trackedBalance.cashRegister.code}</p>}
+          <p className={styles.scope}>Fonds initial + tous les encaissements − tous les retraits. Les filtres n’affectent pas ce solde ; il ne constitue pas un comptage physique du tiroir.</p>
+          {trackedBalance.error && <p className={styles.error} role='alert'>{trackedBalance.error}</p>}
+          {withdrawalPreview?.error && withdrawalPreview.error !== trackedBalance.error && <p className={styles.error} role='alert'>Retrait indisponible : {withdrawalPreview.error}</p>}
+        </div>}>
+      <div hidden={view !== 'journal'}>
+        <CashJournal {...journal} {...options} canReadDeliverers={canReadDeliverers} canReadTours={canReadTours} remainderState={remainders} />
       </div>
-
-      <CashJournal
-        {...journal}
-        {...options}
-        canReadDeliverers={canReadDeliverers}
-        canReadTours={canReadTours}
-        remainderState={remainders}
-        trackedBalance={trackedBalance}
-      />
+      <div hidden={view !== 'restes'}>
       <CashRemainders
         {...remainders}
         canCreatePayment={canCreatePayment}
@@ -95,16 +81,9 @@ const CashPage = async ({ searchParams }) => {
         canReadTours={canReadTours}
         initialConfirmationKey={randomUUID()}
         journalState={journal}
-        nextHref={buildRemainderHref({
-          page: remainders.page + 1,
-          query: remainders.query,
-        })}
-        previousHref={buildRemainderHref({
-          page: remainders.page - 1,
-          query: remainders.query,
-        })}
-        resetHref={buildRemainderHref({ page: 1, query: '' })}
       />
+      </div>
+      </CashWorkspace>
     </main>
   );
 };

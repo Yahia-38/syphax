@@ -21,6 +21,7 @@ const CashPaymentForm = ({
   state,
   tourId,
   tourReference,
+  onCancel, onConfirmedSubmit,
 }) => {
   const [amount, setAmount] = useState(state.values?.amount ?? '');
   const [note, setNote] = useState(state.values?.note ?? '');
@@ -51,7 +52,7 @@ const CashPaymentForm = ({
       action={formAction}
       onSubmit={(event) => {
         if (
-          !event.nativeEvent.submitter
+          pending || !event.nativeEvent.submitter
           || calculation.remainingAfterPaymentInCentimes === null
         ) {
           event.preventDefault();
@@ -59,6 +60,7 @@ const CashPaymentForm = ({
         }
 
         requestConfirmation(event);
+        if (!event.defaultPrevented && onConfirmedSubmit?.(new FormData(event.currentTarget)) === false) event.preventDefault();
       }}
     >
       <div className='rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-sm text-amber-950'>
@@ -116,7 +118,7 @@ const CashPaymentForm = ({
         </div>
       </div>
 
-      <p className='mt-4 text-sm text-slate-600'>Reste avant : {formatReceptionMoney(remainingDueInCentimes)} · Montant saisi : {Number.isSafeInteger(calculation.amountInCentimes) ? formatReceptionMoney(calculation.amountInCentimes) : 'À renseigner'}</p>
+      <p className='mt-4 text-sm text-slate-600'>Reste avant : {Number.isSafeInteger(remainingDueInCentimes) ? formatReceptionMoney(remainingDueInCentimes) : 'Non calculable'} · Montant saisi : {Number.isSafeInteger(calculation.amountInCentimes) ? formatReceptionMoney(calculation.amountInCentimes) : 'À renseigner'}</p>
       <div className='mt-5 rounded-xl border border-amber-200 bg-amber-100 px-4 py-4'>
         <p className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
           Prévisualisation · reste après versement
@@ -158,13 +160,13 @@ const CashPaymentForm = ({
           La confirmation enregistre l’argent effectivement reçu. Le versement
           sera conservé sans modification ni suppression.
         </p>
-        <TourFormActions pending={pending}><button
+        <TourFormActions pending={pending}>{onCancel && <button type='button' disabled={pending} onClick={onCancel} className='rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold'>Annuler</button>}<button
           className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
           disabled={pending
             || calculation.remainingAfterPaymentInCentimes === null}
           type='submit'
         >
-          {pending ? 'Enregistrement…' : 'Enregistrer le versement'}
+          {pending ? 'Enregistrement…' : onCancel ? 'Vérifier l’encaissement' : 'Enregistrer le versement'}
         </button></TourFormActions>
       </div>
 
@@ -185,6 +187,8 @@ const CashPaymentForm = ({
           {[
             ['Livreur', `${deliverer.code} — ${deliverer.name}`],
             ['Tournée', tourReference],
+            ['Note', note || 'Aucune note'],
+            ['Affectations', '1 tournée'],
             ['Caisse', `${cashRegister.name} (${cashRegister.code})`],
             [
               'Montant reçu',

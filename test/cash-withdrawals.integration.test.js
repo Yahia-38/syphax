@@ -6,7 +6,7 @@ import { ObjectId } from 'mongodb';
 
 const sourceUri =
   process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/syphax';
-const testDatabaseName = `syphax_cash_withdrawals_${process.pid}_${randomUUID().replaceAll('-', '')}`;
+const testDatabaseName = `syphax_cw_${process.pid}_${randomUUID().replaceAll('-', '')}`;
 const testUri = new URL(sourceUri);
 
 testUri.pathname = `/${testDatabaseName}`;

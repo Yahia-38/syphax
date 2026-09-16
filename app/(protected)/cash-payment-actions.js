@@ -231,13 +231,14 @@ export const recordTourPayment = async (previousState, formData) => {
     return {
       confirmationKey,
       errors: {
-        form: 'L’enregistrement du versement est momentanément indisponible.',
+        form: 'La réponse du serveur n’a pas permis de déterminer le résultat du versement. Il peut avoir été enregistré.',
       },
       message: null,
       paymentReference: null,
       revision,
       stale: false,
       succeeded: false,
+      uncertain: true,
       tourId,
       values,
     };

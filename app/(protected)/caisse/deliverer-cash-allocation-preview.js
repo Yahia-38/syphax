@@ -3,11 +3,16 @@
 import { useMemo, useRef, useState, useTransition } from 'react';
 
 import { calculateDelivererCashAllocationPreview } from '../../../lib/cash-payment-calculations.js';
-import { formatReceptionMoney } from '../../../lib/receptions.js';
+import { formatReceptionMoney as formatKnownMoney } from '../../../lib/receptions.js';
 import { recordDelivererPayment } from '../cash-payment-actions.js';
 import ConfirmationDialog, {
   useFormConfirmation,
 } from '../confirmation-dialog.js';
+
+import { useCashFormLifecycle } from './cash-form-context.js';
+import styles from './cash.module.css';
+
+const formatReceptionMoney = (value) => Number.isSafeInteger(value) && value >= 0 ? formatKnownMoney(value) : 'Non calculable';
 
 const ALLOCATIONS_PER_PAGE = 5;
 const REQUEST_FIELD_NAMES = Object.freeze([
@@ -55,6 +60,7 @@ const DelivererCashAllocationPreview = ({
   onClose,
   onResolved,
   remainder,
+  onPending, onDraftChange,
 }) => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -62,6 +68,7 @@ const DelivererCashAllocationPreview = ({
   const [page, setPage] = useState(1);
   const [actionState, setActionState] = useState(null);
   const [frozenRequest, setFrozenRequest] = useState(null);
+  const [frozenProjection, setFrozenProjection] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [transitionPending, startTransition] = useTransition();
   const submissionInFlightRef = useRef(false);
@@ -77,11 +84,12 @@ const DelivererCashAllocationPreview = ({
       blockingAnomalies: remainder.blockingAnomalies,
       tours: remainder.tours,
     }), [amount, remainder.blockingAnomalies, remainder.tours]);
-  const preview = actionState?.stale && actionState.summary
-    ? actionState.summary
-    : calculatedPreview;
   const pending = submitting || transitionPending;
   const uncertain = Boolean(actionState?.uncertain && frozenRequest);
+  const destination = (pending || uncertain) && frozenProjection ? frozenProjection.cashRegister : cashRegister;
+  const preview = (pending || uncertain) && frozenProjection ? frozenProjection.preview : actionState?.stale && actionState.summary
+    ? actionState.summary
+    : calculatedPreview;
   const previewIsComplete = Boolean(
     cashRegister
     && !preview.blocked
@@ -92,6 +100,7 @@ const DelivererCashAllocationPreview = ({
     && Array.isArray(preview.allocations)
     && preview.allocations.length > 0,
   );
+  const formRef = useCashFormLifecycle({ onPending, onDraftChange, pending, uncertain, values: { amount, note }, result: actionState });
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
   const filteredAllocations = preview.allocations.filter((allocation) =>
     !normalizedQuery
@@ -121,6 +130,8 @@ const DelivererCashAllocationPreview = ({
     }
 
     submissionInFlightRef.current = true;
+    onPending(true);
+    if (!uncertain) setFrozenProjection({ cashRegister, preview: JSON.parse(request.expectedSummary) });
     setFrozenRequest(request);
     setSubmitting(true);
 
@@ -136,7 +147,6 @@ const DelivererCashAllocationPreview = ({
             nextConfirmationKey: result.nextConfirmationKey,
             paymentReference: result.payment.reference,
           });
-          onClose();
           return;
         }
 
@@ -171,33 +181,7 @@ const DelivererCashAllocationPreview = ({
   };
 
   return (
-    <div
-      aria-labelledby='deliverer-payment-preview-title'
-      aria-modal='true'
-      className='fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4'
-      role='dialog'
-    >
-      <div className='max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl'>
-        <div className='flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6'>
-          <div>
-            <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
-              Encaissement multi-tournées
-            </p>
-            <h2 className='mt-1 text-xl font-semibold text-slate-950' id='deliverer-payment-preview-title'>
-              Encaisser le livreur
-            </h2>
-          </div>
-          <button
-            aria-label='Fermer la fenêtre d’encaissement'
-            className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
-            disabled={pending || uncertain}
-            onClick={onClose}
-            type='button'
-          >
-            Fermer
-          </button>
-        </div>
-
+    <div className={styles.allocationForm}>
         <dl className='grid gap-px bg-slate-200 sm:grid-cols-3'>
           <div className='min-w-0 bg-white px-5 py-4 sm:px-6'>
             <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
@@ -212,8 +196,8 @@ const DelivererCashAllocationPreview = ({
               Caisse destinataire
             </dt>
             <dd className='mt-1 break-words text-sm font-semibold text-slate-950'>
-              {cashRegister
-                ? `${cashRegister.name} (${cashRegister.code}, DZD)`
+              {destination
+                ? `${destination.name} (${destination.code}, DZD)`
                 : 'Caisse indisponible'}
             </dd>
           </div>
@@ -231,10 +215,12 @@ const DelivererCashAllocationPreview = ({
 
         <form
           action={submitPayment}
+          ref={formRef}
           className='p-5 sm:p-6'
           onSubmit={(event) => {
-            if (!previewIsComplete || pending || uncertain) {
+            if (!previewIsComplete || pending || uncertain || submissionInFlightRef.current) {
               event.preventDefault();
+              requestAnimationFrame(() => formRef.current?.querySelector('[aria-invalid="true"]')?.focus());
               return;
             }
 
@@ -251,7 +237,7 @@ const DelivererCashAllocationPreview = ({
                   ? 'deliverer-payment-error'
                   : undefined}
                 aria-invalid={Boolean(preview.error || actionState?.errors?.amount)}
-                autoFocus
+                data-autofocus
                 className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-100 disabled:bg-slate-100'
                 disabled={pending || uncertain}
                 id='deliverer-payment-amount'
@@ -289,7 +275,7 @@ const DelivererCashAllocationPreview = ({
                 value={note}
               />
               {actionState?.errors?.note && (
-                <p className='mt-2 text-sm font-medium text-red-700' id='deliverer-payment-note-error' role='alert'>
+                <p className='mt-2 text-sm font-medium text-red-700' id='deliverer-payment-note-error' role='alert' tabIndex={-1}>
                   {actionState.errors.note}
                 </p>
               )}
@@ -311,7 +297,7 @@ const DelivererCashAllocationPreview = ({
           )}
 
           {(preview.error || actionState?.errors?.amount) && (
-            <p className='mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800' id='deliverer-payment-error' role='alert'>
+            <p className='mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800' id='deliverer-payment-error' role='alert' tabIndex={-1}>
               {actionState?.errors?.amount ?? preview.error}
             </p>
           )}
@@ -323,7 +309,7 @@ const DelivererCashAllocationPreview = ({
           )}
 
           {actionState?.stale && (
-            <div className='mt-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950' role='alert'>
+            <div className='mt-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950' role='alert' tabIndex={-1}>
               <p className='font-semibold'>Aucun versement n’a été enregistré.</p>
               <p className='mt-1 leading-6'>
                 {actionState.errors.form} Le récapitulatif ci-dessous a été actualisé. Vérifiez-le puis confirmez-le explicitement à nouveau.
@@ -332,13 +318,13 @@ const DelivererCashAllocationPreview = ({
           )}
 
           {actionState?.errors?.form && !actionState.stale && !uncertain && (
-            <p className='mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800' role='alert'>
+            <p className='mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800' role='alert' tabIndex={-1}>
               {actionState.errors.form}
             </p>
           )}
 
           {uncertain && (
-            <aside className='mt-5 rounded-xl border border-blue-300 bg-blue-50 px-4 py-4 text-sm text-blue-950' role='alert'>
+            <aside className='mt-5 rounded-xl border border-blue-300 bg-blue-50 px-4 py-4 text-sm text-blue-950' role='alert' tabIndex={-1}>
               <h3 className='font-semibold'>Résultat du versement à vérifier</h3>
               <p className='mt-1 leading-6'>
                 {actionState.errors.form} Le montant, la répartition et la clé de cette demande sont verrouillés jusqu’à sa résolution.
@@ -364,7 +350,7 @@ const DelivererCashAllocationPreview = ({
                   La recherche et la pagination modifient uniquement l’affichage ; la confirmation porte toujours sur toutes les affectations.
                 </p>
                 <div className='mt-3'>
-                  <label className='sr-only' htmlFor='deliverer-payment-allocation-search'>
+                  <label className='mb-1 block text-sm font-medium text-slate-700' htmlFor='deliverer-payment-allocation-search'>
                     Rechercher une tournée dans la répartition
                   </label>
                   <input
@@ -396,7 +382,7 @@ const DelivererCashAllocationPreview = ({
                   </div>
                   {allocation.expenseDeclarationStatus === 'MISSING' && (
                     <p className='mt-2 text-xs font-semibold text-blue-700'>
-                      Frais non encore déclarés.
+                      Frais non déclarés : cet encaissement réduit le maximum encore déclarable.
                     </p>
                   )}
                   {allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' && (
@@ -404,11 +390,12 @@ const DelivererCashAllocationPreview = ({
                       Absence historique de déclaration de frais.
                     </p>
                   )}
-                  <dl className='mt-3 grid gap-px overflow-hidden rounded-lg bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
+                  <dl className='mt-3 grid gap-px overflow-hidden rounded-lg bg-slate-200 sm:grid-cols-2 lg:grid-cols-3'>
                     {[
                       ['Ventes brutes', allocation.grossSalesInCentimes],
                       ['Frais', allocation.expenseDeclarationStatus === 'DECLARED' ? allocation.totalExpensesInCentimes : null],
                       ['Net à remettre', allocation.netDueInCentimes],
+                      ['Reste avant', allocation.remainingBeforePaymentInCentimes],
                       ['Affecté', allocation.allocatedAmountInCentimes],
                       ['Reste après', allocation.remainingAfterPaymentInCentimes],
                     ].map(([label, value]) => (
@@ -418,7 +405,7 @@ const DelivererCashAllocationPreview = ({
                         </dt>
                         <dd className='mt-1 text-xs font-semibold text-slate-900'>
                           {value === null
-                            ? 'Non déclarés'
+                            ? (label === 'Frais' ? (allocation.expenseDeclarationStatus === 'HISTORICAL_MISSING' ? 'Absence historique' : 'Non déclarés') : 'Non calculable')
                             : formatReceptionMoney(value)}
                         </dd>
                       </div>
@@ -506,17 +493,20 @@ const DelivererCashAllocationPreview = ({
             <p className='text-sm font-medium text-amber-900' role={pending ? 'status' : undefined}>
               {pending
                 ? 'Enregistrement du versement et actualisation des soldes…'
-                : 'La confirmation enregistrera une seule ligne de journal et toutes les affectations affichées.'}
+                : 'Une seule écriture de journal pour la répartition complète, sur toutes les pages.'}
             </p>
+            <div className={styles.formActions}>
+            <button type='button' disabled={pending || uncertain} onClick={onClose}>Annuler</button>
             {!uncertain && (
               <button
                 className='rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50'
                 disabled={!previewIsComplete || pending}
                 type='submit'
               >
-                {pending ? 'Enregistrement…' : 'Confirmer le versement'}
+                {pending ? 'Enregistrement…' : 'Vérifier l’encaissement'}
               </button>
             )}
+            </div>
           </div>
 
           <ConfirmationDialog
@@ -535,7 +525,7 @@ const DelivererCashAllocationPreview = ({
             <dl className='grid gap-2 rounded-xl bg-slate-50 p-4 sm:grid-cols-2'>
               {[
                 ['Livreur', `${remainder.deliverer.code} — ${remainder.deliverer.name || 'Nom non renseigné'}`],
-                ['Caisse', cashRegister ? `${cashRegister.name} (${cashRegister.code}, DZD)` : 'Indisponible'],
+                ['Caisse', destination ? `${destination.name} (${destination.code}, DZD)` : 'Indisponible'],
                 ['Montant reçu', preview.amountInCentimes === null ? 'Non calculable' : formatReceptionMoney(preview.amountInCentimes)],
                 ['Reste total prévu', preview.totalRemainingAfterPaymentInCentimes === null ? 'Non calculable' : formatReceptionMoney(preview.totalRemainingAfterPaymentInCentimes)],
                 ['Note', note || 'Aucune note'],
@@ -553,7 +543,6 @@ const DelivererCashAllocationPreview = ({
             </dl>
           </ConfirmationDialog>
         </form>
-      </div>
     </div>
   );
 };
