@@ -1,12 +1,14 @@
 import Link from 'next/link';
 
-import { getUserPermissions } from '../../../lib/access.js';
+import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
 import {
   listDeliverers,
+  DELIVERERS_PER_PAGE,
   readDelivererListState,
 } from '../../../lib/deliverers.js';
 import { requirePermission } from '../../../lib/sessions.js';
 import DelivererList from './deliverer-list.js';
+import styles from './deliverer-list.module.css';
 
 export const metadata = {
   title: 'Livreurs | Syphax',
@@ -19,36 +21,48 @@ const DeliverersPage = async ({ searchParams }) => {
     getUserPermissions(session.userId),
   ]);
   const listState = readDelivererListState(resolvedSearchParams);
-  const result = await listDeliverers({
-    ...listState,
-    userId: session.userId,
-  });
+  let result;
+  try {
+    result = await listDeliverers({ ...listState, userId: session.userId });
+  } catch (error) {
+    if (error instanceof PermissionDeniedError) throw error;
+    console.error('Impossible de charger la liste des livreurs.', error);
+    result = { ...listState, pageSize: DELIVERERS_PER_PAGE, readError: true };
+  }
   const canCreateDeliverer = permissions.includes('deliverers.create');
 
   return (
-    <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
-      <div className='flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between'>
-        <div>
-          <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
-            Livreurs
-          </h1>
-          <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Consultez les personnes suivies pour préparer la distribution.
-          </p>
-        </div>
+    <div className={styles.surface}>
+      <main className={styles.page}>
+        <header className={styles.hero}>
+          <div>
+            <p className={styles.eyebrow}>Distribution</p>
+            <h1>
+              Livreurs
+            </h1>
+            <p className={styles.subtitle}>
+              Retrouvez un livreur, ses coordonnées et ses tournées.
+            </p>
+          </div>
 
-        {canCreateDeliverer && (
-          <Link
-            className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href='/livreurs/nouveau'
-          >
-            Nouveau livreur
-          </Link>
-        )}
-      </div>
+          {canCreateDeliverer && (
+            <Link
+              className={styles.createAction}
+              href='/livreurs/nouveau'
+            >
+              <span aria-hidden='true'>＋</span>Nouveau livreur
+            </Link>
+          )}
+        </header>
 
-      <DelivererList {...result} />
-    </main>
+        <DelivererList
+          {...result}
+          canCreateDeliverer={canCreateDeliverer}
+          canReadTours={permissions.includes('tours.read')}
+          canUpdateDeliverer={permissions.includes('deliverers.update')}
+        />
+      </main>
+    </div>
   );
 };
 

@@ -1,228 +1,112 @@
 import Link from 'next/link';
 
 import { buildDelivererListHref } from '../../../lib/deliverers.js';
+import DelivererDirectory from './deliverer-directory.js';
+import DelivererIcon from './deliverer-icon.js';
+import styles from './deliverer-list.module.css';
 
 const PaginationLink = ({ children, disabled, href }) => disabled ? (
-  <span
-    aria-disabled='true'
-    className='cursor-not-allowed rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-400 opacity-60'
-  >
-    {children}
-  </span>
-) : (
-  <Link
-    className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-    href={href}
-  >
-    {children}
-  </Link>
-);
+  <span aria-disabled='true' className={styles.disabled}>{children}</span>
+) : <Link href={href}>{children}</Link>;
 
 const DelivererList = ({
-  deliverers,
-  page,
-  pageSize,
-  query,
-  status,
-  totalItems,
-  totalPages,
+  deliverers = [], page, pageSize, query, status, totalItems, totalPages,
+  readError = false, canCreateDeliverer, canReadTours, canUpdateDeliverer,
 }) => {
+  const returnHref = buildDelivererListHref({ page, query, status });
+  const allHref = buildDelivererListHref({ query, status: 'all' });
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + deliverers.length - 1;
-  const searching = Boolean(query);
-  const filtering = status !== 'active';
-  const returnHref = buildDelivererListHref({ page, query, status });
-  const getDelivererHref = (delivererId) => {
-    const parameters = new URLSearchParams({ section: 'tournees', retour: returnHref });
-
-    return `/livreurs/${delivererId}?${parameters.toString()}`;
+  const detailHref = (id, section, editing = false) => {
+    const parameters = new URLSearchParams({ retour: returnHref });
+    if (section) parameters.set('section', section);
+    if (editing) parameters.set('modifier', '1');
+    return `/livreurs/${id}?${parameters.toString()}`;
   };
 
   return (
-    <section
-      aria-labelledby='deliverer-list-title'
-      className='mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <h2 className='sr-only' id='deliverer-list-title'>
-        Liste des livreurs
-      </h2>
-
-      <form
-        action='/livreurs'
-        className='flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row'
-        method='get'
-        role='search'
-      >
-        <div className='flex-1'>
-          <label className='sr-only' htmlFor='deliverer-search'>
-            Rechercher un livreur
-          </label>
-          <input
-            className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-            defaultValue={query}
-            id='deliverer-search'
-            maxLength={100}
-            name='q'
-            placeholder='Rechercher par code ou nom'
-            type='search'
-          />
-        </div>
-        <div>
-          <label className='sr-only' htmlFor='deliverer-status-filter'>
-            Filtrer par statut
-          </label>
-          <select
-            className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 sm:w-44'
-            defaultValue={status}
-            id='deliverer-status-filter'
-            name='statut'
-          >
-            <option value='active'>Actifs</option>
-            <option value='disabled'>Désactivés</option>
-            <option value='all'>Tous</option>
-          </select>
-        </div>
-        <button
-          className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-          type='submit'
-        >
-          Rechercher
-        </button>
-        {(searching || filtering) && (
-          <Link
-            className='inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href='/livreurs'
-          >
-            Réinitialiser
-          </Link>
-        )}
-      </form>
-
-      <div className='flex min-h-12 items-center border-b border-slate-200 px-4 py-3 sm:px-6'>
-        <p className='text-sm text-slate-500'>
-          {totalItems > 0
-            ? `${firstItem}–${lastItem} sur ${totalItems} livreurs`
-            : '0 livreur'}
-        </p>
+    <DelivererDirectory returnHref={returnHref} appliedQuery={query} announcement={readError ? 'Résultats indisponibles.' : `${totalItems} résultat${totalItems > 1 ? 's' : ''}.`}>
+      <h2 className='sr-only' id='deliverer-list-title'>Répertoire des livreurs</h2>
+      <div className={styles.toolbar}>
+        <form action='/livreurs' className={styles.search} method='get' role='search' key={returnHref}>
+          <input name='statut' type='hidden' value={status} />
+          <div>
+            <label htmlFor='deliverer-search'>Rechercher un livreur</label>
+            <div className={styles.searchField}>
+              <DelivererIcon name='search' />
+              <input defaultValue={query} id='deliverer-search' maxLength={100} name='q' placeholder='Code ou nom du livreur' type='search' />
+              <kbd aria-hidden='true'>/</kbd>
+            </div>
+          </div>
+          <button className={styles.primary} type='submit'>Rechercher</button>
+        </form>
+        <p className={styles.hint}>Répertoire de distribution<br />Coordonnées et accès aux fiches</p>
       </div>
-
-      {deliverers.length > 0 ? (
-        <>
-          <table className='w-full table-fixed divide-y divide-slate-200'>
-            <caption className='sr-only'>Liste des livreurs</caption>
-            <thead>
-              <tr>
-                <th
-                  className='w-[24%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[20%] sm:px-6'
-                  scope='col'
-                >
-                  Code
-                </th>
-                <th
-                  className='w-[32%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
-                  scope='col'
-                >
-                  Nom
-                </th>
-                <th
-                  className='w-[28%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:w-[32%] sm:px-6'
-                  scope='col'
-                >
-                  Téléphone
-                </th>
-                <th
-                  className='w-[16%] bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-6'
-                  scope='col'
-                >
-                  Statut
-                </th>
-              </tr>
-            </thead>
-            <tbody className='divide-y divide-slate-100 bg-white'>
-              {deliverers.map((deliverer) => (
-                <tr className='relative cursor-pointer hover:bg-slate-50 focus-within:bg-slate-50' key={deliverer.id}>
-                  <td className='break-all px-4 py-3 font-mono text-[13px] font-semibold text-slate-900 sm:px-6'>
-                    <Link
-                      className='text-blue-800 after:absolute after:inset-0 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-                      href={getDelivererHref(deliverer.id)}
-                    >
-                      {deliverer.code}
-                    </Link>
-                  </td>
-                  <td className='break-words px-4 py-3 text-sm text-slate-700 sm:px-6'>
-                    {deliverer.name}
-                  </td>
-                  <td className='break-words px-4 py-3 text-sm text-slate-600 sm:px-6'>
-                    {deliverer.phone || 'Non renseigné'}
-                  </td>
-                  <td className='px-4 py-3 sm:px-6'>
-                    <span
-                      className={deliverer.active
-                        ? 'inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800'
-                        : 'inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700'}
-                    >
-                      {deliverer.active ? 'Actif' : 'Désactivé'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <nav
-            aria-label='Pagination des livreurs'
-            className='flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-3 sm:px-6'
-          >
-            <PaginationLink
-              disabled={page === 1}
-              href={buildDelivererListHref({
-                page: page - 1,
-                query,
-                status,
-              })}
-            >
-              Précédent
-            </PaginationLink>
-            <p className='text-sm font-medium text-slate-600'>
-              Page {page} sur {totalPages}
-            </p>
-            <PaginationLink
-              disabled={page === totalPages}
-              href={buildDelivererListHref({
-                page: page + 1,
-                query,
-                status,
-              })}
-            >
-              Suivant
-            </PaginationLink>
-          </nav>
-        </>
-      ) : (
-        <div className='px-6 py-14 text-center'>
-          <h3 className='font-semibold text-slate-900'>
-            {searching || filtering
-              ? 'Aucun résultat'
-              : 'Aucun livreur actif'}
-          </h3>
-          <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
-            {searching
-              ? `Aucun code ou nom ne correspond à « ${query} » avec ce statut.`
-              : filtering
-                ? 'Aucun livreur ne correspond à ce statut.'
-                : 'Les livreurs actifs apparaîtront ici.'}
+      <div className={styles.statusLine}>
+        <nav className={styles.filters} aria-label='Filtrer les livreurs par statut'>
+          {[['active', 'Actifs'], ['disabled', 'Désactivés'], ['all', 'Tous']].map(([value, label]) => (
+            <Link aria-current={status === value ? 'true' : undefined} href={buildDelivererListHref({ query, status: value })} key={value}>{label}</Link>
+          ))}
+        </nav>
+        <div className={styles.selection}>
+          <p className={styles.resultCount} id='deliverer-result-count' tabIndex={-1}>
+            {readError ? 'Résultats indisponibles' : <><strong>{totalItems}</strong> résultat{totalItems > 1 ? 's' : ''}</>}
+            {query && <> pour « {query} »</>}
           </p>
-          {(searching || filtering) && (
-            <Link
-              className='mt-5 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/livreurs'
-            >
-              Voir les livreurs actifs
-            </Link>
-          )}
+          {(query || status !== 'active') && <Link href='/livreurs'>Réinitialiser</Link>}
         </div>
-      )}
-    </section>
+      </div>
+      <div className={styles.results}>
+        {readError ? (
+          <div className={styles.errorArea}>
+            <div className={styles.errorNotice} role='alert'><h3>Impossible de charger les livreurs</h3><p>Vos critères sont conservés. Réessayez pour afficher les résultats.</p></div>
+            <a className={styles.button} href={returnHref} data-retry>Réessayer</a>
+          </div>
+        ) : deliverers.length > 0 ? (
+          <>
+            <table className={styles.table}>
+              <caption className='sr-only'>Livreurs correspondant à la recherche et au statut sélectionnés</caption>
+              <thead><tr><th scope='col'>Livreur</th><th scope='col'>Téléphone</th><th scope='col'>Statut</th><th scope='col'>Accès</th></tr></thead>
+              <tbody>{deliverers.map((deliverer) => (
+                <tr key={deliverer.id}>
+                  <td>
+                    <div className={styles.person}>
+                      <span className={`${styles.avatar} ${!deliverer.active ? styles.inactiveAvatar : ''}`} aria-hidden='true'>{(deliverer.name || '').trim().split(/\s+/u).slice(0, 2).map((part) => Array.from(part)[0]).join('').toLocaleUpperCase('fr')}</span>
+                      <div><Link className={styles.name} href={detailHref(deliverer.id)}>{deliverer.name || 'Nom non renseigné'}</Link><code>{deliverer.code || 'Code non renseigné'}</code></div>
+                    </div>
+                  </td>
+                  <td>{deliverer.phone ? <span className={styles.phone}>{deliverer.phone}</span> : <><span className={styles.missing}>Non renseigné</span>{canUpdateDeliverer && <Link className={styles.editPhone} aria-label={`Renseigner le téléphone de ${deliverer.name}`} href={detailHref(deliverer.id, 'identification', true)}>Renseigner</Link>}</>}</td>
+                  <td><span className={deliverer.active ? styles.active : styles.inactive}>{deliverer.active ? 'Actif' : 'Désactivé'}</span></td>
+                  <td><div className={styles.actions}>
+                    {canReadTours && <Link aria-label={`Voir les tournées de ${deliverer.name}`} href={detailHref(deliverer.id, 'tournees')}>Tournées</Link>}
+                    <Link className={styles.button} aria-label={`Ouvrir la fiche de ${deliverer.name}`} href={detailHref(deliverer.id)}>Ouvrir <DelivererIcon name='arrow' /></Link>
+                  </div></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <div className={styles.footer}>
+              <p>{firstItem}–{lastItem} sur {totalItems} livreurs</p>
+              <nav className={styles.pagination} aria-label='Pagination des livreurs'>
+                <PaginationLink disabled={page === 1} href={buildDelivererListHref({ page: page - 1, query, status })}><span aria-hidden='true'>←</span> Précédent</PaginationLink>
+                <p>Page {page} / {totalPages}</p>
+                <PaginationLink disabled={page === totalPages} href={buildDelivererListHref({ page: page + 1, query, status })}>Suivant <span aria-hidden='true'>→</span></PaginationLink>
+              </nav>
+            </div>
+          </>
+        ) : (
+          <div className={styles.empty}>
+            <span className={styles.emptyIcon} aria-hidden='true'><DelivererIcon name='people' /></span>
+            <h3>{query ? 'Aucun résultat pour cette recherche' : status === 'active' ? 'Aucun livreur actif' : status === 'disabled' ? 'Aucun livreur désactivé' : 'Aucun livreur à afficher'}</h3>
+            <p>{query ? `Aucun code ou nom ne correspond à « ${query} » avec ce statut.` : status === 'active' ? 'Les livreurs actifs apparaîtront ici. Vous pouvez consulter tous les statuts.' : status === 'disabled' ? 'Aucun livreur ne correspond au statut Désactivé.' : 'Le répertoire ne contient aucun livreur.'}</p>
+            <div className={styles.emptyActions}>
+              {query ? <Link className={styles.button} href='/livreurs'>Réinitialiser la recherche</Link> : status !== 'all' && <Link className={styles.button} href={allHref}>Voir tous les livreurs</Link>}
+              {canCreateDeliverer && <Link className={`${styles.button} ${styles.primary}`} href='/livreurs/nouveau'>Nouveau livreur</Link>}
+            </div>
+          </div>
+        )}
+      </div>
+      <p className={styles.caption}>{status === 'disabled' ? 'Un livreur désactivé reste consultable avec son historique. Il ne peut plus recevoir de nouvelle tournée.' : status === 'all' ? 'Actif ou désactivé décrit le statut du livreur. Les tournées et les informations détaillées se consultent dans sa fiche.' : 'Les livreurs actifs sont affichés par défaut. Les coordonnées se modifient dans la fiche du livreur.'}</p>
+    </DelivererDirectory>
   );
 };
 
