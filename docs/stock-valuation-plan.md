@@ -2,10 +2,10 @@
 
 Date: 2026-09-17.
 
-Status: phase 1 implemented on 2026-09-17. The user selected moving weighted
-average cost. Reception/tour integration, product display, historical migration,
-and permission grants remain planned. The valuation foundation is not yet
-connected to application operations.
+Status: phases 1 and 2 implemented on 2026-09-17. The user selected moving
+weighted average cost. New receptions now update valuation within their stock
+transaction. Tour integration, product display, historical migration, and
+permission grants remain planned. Existing unvalued history requires migration.
 
 ## Objective and scope
 
@@ -225,6 +225,62 @@ node --env-file-if-exists=.env.local --test --experimental-test-isolation=none -
 Before writing application code, read the relevant installed Next.js guides
 under `node_modules/next/dist/docs/`. Use arrow functions and single quotes
 wherever possible, following the repository instructions.
+
+### Phase 2 implementation
+
+- `lib/reception-stock-valuations.js`: internal transactional reception writer.
+  It reads the previous physical movements and ledger under the reception's
+  existing product locks, reconciles the current balance, and adds each
+  reception line's exact purchase amount and base-unit quantity in source order.
+  Complete balances receive one immutable ledger entry per physical movement.
+  Current balances and their revision/last-entry pointers update together.
+- `lib/reception-records.js`: installs valuation indexes alongside existing
+  reception/stock indexes before the transaction, then writes valuation before
+  inserting the reception and physical movements in the same transaction.
+  Duplicate submission handling remains authoritative; retries cannot apply
+  quantity or value twice. Valuation validation errors return a form line error.
+- A product with no valuation, movements, ledger, or previous reception can
+  initialize at zero before its first receipt. Missing valuation for existing
+  history, including net-zero history or receptions lacking stock movements,
+  remains `UNVALUED`, with a null value. New quantities follow physical stock,
+  and reception amounts remain in their source records for later migration.
+- A valid stored balance whose history no longer reconciles becomes `UNVALUED`
+  on the next reception. This includes loadings/returns without valuation while
+  tour integration remains pending. Its previous ledger entries and revision
+  pointer are preserved; new receipt ledger entries await historical replay.
+  Unknown value never becomes zero or a partial known total. Malformed stored
+  records, incompatible physical units, negative physical quantities, and
+  numeric overflow reject the entire reception transaction.
+- Existing `receptions.create` authorization still governs writes. No valuation
+  fields are added to reception responses, and no new permission is introduced.
+  Earlier reception dates remain reporting dates: valuation applies when the
+  operation is recorded and does not rewrite prior loaded/returned costs.
+
+Verification completed on 2026-09-17: 15 new reception valuation integration
+tests, 16 reception action/access integration tests, six valuation persistence
+integration tests, and 27 calculation/record tests passed (64 targeted tests).
+Coverage includes packaging conversion, repeated product lines, zero amounts,
+concurrent suppliers sharing a product, duplicate submissions, original ledger
+preservation, unknown histories, invalid units/balances, numeric overflow, and
+rollback of valuation after ledger or physical movement failures. ESLint passed
+on all four changed/new JavaScript files. Each integration process used and
+removed its own temporary database; no application data or permissions were
+changed during verification.
+
+Run each integration command in its own process:
+
+```bash
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/reception-stock-valuations.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/reception-actions.authorization.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuations.integration.test.js
+node --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuation-calculations.test.js test/stock-valuation-records.test.js
+./node_modules/.bin/eslint lib/reception-records.js lib/reception-stock-valuations.js test/reception-stock-valuations.integration.test.js test/reception-actions.authorization.integration.test.js
+```
+
+Phase 3 adds assigned loading costs, authorized previews/digests, and warehouse
+value transfers. Until loading and counting integration and historical migration
+are complete, only a fully reconciled valuation reader may describe stock value
+as complete; a stored status alone does not establish completeness.
 
 ## Targeted verification and acceptance criteria
 

@@ -142,6 +142,8 @@ test('refuse un appel direct sans receptions.create', async () => {
   );
   assert.equal(await database.collection('receptions').countDocuments({}), 0);
   assert.equal(await database.collection('stockMovements').countDocuments({}), 0);
+  assert.equal(await database.collection('stockValuations').countDocuments({}), 0);
+  assert.equal(await database.collection('stockValuationEntries').countDocuments({}), 0);
 });
 
 test('refuse la lecture d’une réception sans receptions.read', async () => {
@@ -473,7 +475,7 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
   });
 });
 
-test('crée un mouvement physique par ligne sans dépendre des coûts', async () => {
+test('crée les mouvements et valorisations sans exiger une permission de lecture des coûts', async () => {
   const { token, userId } = await createUserSession(
     'reception-plusieurs-lignes',
     ['receptions.create'],
@@ -536,6 +538,17 @@ test('crée un mouvement physique par ligne sans dépendre des coûts', async ()
   }).sort({ quantityDeltaInBaseUnits: 1 }).toArray();
 
   assert.deepEqual(result.errors, {});
+  assert.equal(result.valueInCentimes, undefined);
+  assert.equal(result.averageUnitCostInCentimes, undefined);
+  const valuations = await database.collection('stockValuations').find({
+    productId: { $in: [firstProductId, secondProductId] },
+  }).sort({ valueInCentimes: 1 }).toArray();
+  assert.deepEqual(valuations.map(({ status, quantityInBaseUnits, valueInCentimes }) => ({
+    status, quantityInBaseUnits, valueInCentimes,
+  })), [
+    { status: 'COMPLETE', quantityInBaseUnits: 4, valueInCentimes: 4_000 },
+    { status: 'COMPLETE', quantityInBaseUnits: 7, valueInCentimes: 7_050 },
+  ]);
   assert.deepEqual(
     reception.lines.map(({ amountInCentimes }) => amountInCentimes),
     [4_000, 7_050],
@@ -629,6 +642,12 @@ test('annule la réception et les mouvements si une écriture échoue', async ()
     assert.equal(await database.collection('stockMovements').countDocuments({
       recordedBy: userId,
     }), 0);
+    assert.equal(await database.collection('stockValuations').countDocuments({
+      productId: { $in: [firstProductId, secondProductId] },
+    }), 0);
+    assert.equal(await database.collection('stockValuationEntries').countDocuments({
+      recordedBy: userId,
+    }), 0);
     assert.equal(await database.collection('products').countDocuments({
       _id: { $in: [firstProductId, secondProductId] },
       stockReferenceVersion: { $exists: true },
@@ -706,6 +725,13 @@ test('rend une même soumission concurrente idempotente et refuse un autre conte
     submissionKey,
   }), 1);
   assert.equal(await database.collection('stockMovements').countDocuments({
+    sourceReceptionId: reception._id,
+  }), 1);
+  const valuation = await database.collection('stockValuations').findOne({ productId });
+  assert.equal(valuation.quantityInBaseUnits, 8);
+  assert.equal(valuation.valueInCentimes, 8_000);
+  assert.equal(valuation.revision, 1);
+  assert.equal(await database.collection('stockValuationEntries').countDocuments({
     sourceReceptionId: reception._id,
   }), 1);
   assert.equal(
