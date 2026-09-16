@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
 
 import ConfirmationDialog, {
   useFormConfirmation,
@@ -17,9 +17,9 @@ const INITIAL_STATE = {
   succeeded: false,
 };
 
-const TourClosingConfirmation = ({ preview, tourId }) => {
+const TourClosingConfirmation = ({ preview, tourId, embedded = false }) => {
   const closeCurrentTour = closeTour.bind(null, tourId);
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     closeCurrentTour,
     INITIAL_STATE,
   );
@@ -30,10 +30,11 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
     restoreTriggerFocus,
   } = useFormConfirmation();
 
+  useTourDraft({});
   if (preview.errors?.form) {
     return (
-      <section className='mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm sm:p-6'>
-        <p className='font-semibold text-red-800' role='alert'>
+      <section className={embedded ? 'tour-embedded p-5' : 'mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'}>
+        <p className='font-semibold text-red-800' role='alert' tabIndex={-1}>
           {preview.errors.form}
         </p>
       </section>
@@ -45,10 +46,10 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
     : 'Cette tournée est soldée. Aucun versement supplémentaire n’est nécessaire.';
   return (
     <section
-      aria-labelledby='tour-closing-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-slate-300 bg-slate-50 shadow-sm'
+      aria-labelledby={embedded ? undefined : 'tour-closing-title'} aria-label={embedded ? 'Clôture opérationnelle' : undefined}
+      className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}
     >
-      <div className='p-5 sm:p-6'>
+      {!embedded && <div className='p-5 sm:p-6'>
         <p className='text-xs font-semibold uppercase tracking-wide text-slate-600'>
           État opérationnel
         </p>
@@ -59,26 +60,7 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
           La clôture conserve le comptage et les versements. Elle ne crée aucun
           encaissement et n’empêche pas de régler ultérieurement un reste dû.
         </p>
-      </div>
-
-      <dl className='grid gap-px border-t border-slate-300 bg-slate-300 sm:grid-cols-2 lg:grid-cols-5'>
-        {[
-          ['Ventes brutes', preview.grossSalesInCentimes],
-          ['Frais déclarés', preview.totalExpensesInCentimes],
-          ['Net à remettre', preview.netDueInCentimes],
-          ['Total encaissé', preview.amountPaidInCentimes],
-          ['Reste à payer', preview.remainingDueInCentimes],
-        ].map(([label, value]) => (
-          <div className='bg-white px-5 py-4 sm:px-6' key={label}>
-            <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-              {label}
-            </dt>
-            <dd className='mt-1 text-xl font-bold tabular-nums text-slate-950'>
-              {formatReceptionMoney(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      </div>}
 
       <form
         action={formAction}
@@ -90,7 +72,7 @@ const TourClosingConfirmation = ({ preview, tourId }) => {
         </p>
 
         {state.errors.form && (
-          <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert'>
+          <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>
             {state.errors.form}
           </p>
         )}

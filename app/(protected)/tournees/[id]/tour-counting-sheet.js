@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+
+import { useEffect, useMemo, useState } from 'react';
 
 import ConfirmationDialog, {
   useFormConfirmation,
@@ -29,9 +31,10 @@ const TourCountingSheet = ({
   initialConfirmationKey,
   sheet,
   tourId,
+  embedded = false,
 }) => {
   const countCurrentTour = countTour.bind(null, tourId);
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     countCurrentTour,
     INITIAL_STATE,
   );
@@ -41,7 +44,7 @@ const TourCountingSheet = ({
     requestConfirmation,
     restoreTriggerFocus,
   } = useFormConfirmation();
-  const [opened, setOpened] = useState(Boolean(sheet?.recorded));
+  const [opened, setOpened] = useState(embedded);
   const [returnedQuantities, setReturnedQuantities] = useState(() =>
     Object.fromEntries((sheet?.lines ?? EMPTY_LINES).map((line) => [
       line.id,
@@ -49,6 +52,13 @@ const TourCountingSheet = ({
         ? String(line.returnedQuantityInBaseUnits)
         : '',
     ])));
+  useTourDraft(returnedQuantities);
+  const [focusLineId, setFocusLineId] = useState(null);
+  useEffect(() => {
+    if (!focusLineId) return;
+    document.getElementById(`returned-quantity-${focusLineId.id}`)?.focus();
+
+  }, [focusLineId]);
   const [query, setQuery] = useState('');
   const [unit, setUnit] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,10 +102,10 @@ const TourCountingSheet = ({
 
   return (
     <section
-      aria-labelledby='tour-counting-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-violet-200 bg-violet-50 shadow-sm'
+      aria-labelledby={embedded ? undefined : 'tour-counting-title'} aria-label={embedded ? 'Comptage et retours' : undefined}
+      className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}
     >
-      <div className='flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
+      {!embedded && <div className='flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
         <div>
           <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
             {sheet?.recorded ? 'Retour de tournée enregistré' : 'Retour de tournée'}
@@ -121,12 +131,12 @@ const TourCountingSheet = ({
               ? 'Afficher le comptage'
               : 'Préparer le comptage'}
         </button>
-      </div>
+      </div>}
 
       {opened && (
         <div className='border-t border-violet-200'>
           {sheet?.errors?.form ? (
-            <p className='m-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:m-6' role='alert'>
+            <p className='m-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:m-6' role='alert' tabIndex={-1}>
               {sheet.errors.form}
             </p>
           ) : (
@@ -149,6 +159,16 @@ const TourCountingSheet = ({
                 </p>
               </div>
 
+              {!sheet?.recorded && <div className='flex flex-wrap items-center justify-between gap-3 px-5 py-3'>
+                <p className='text-sm font-semibold text-violet-800'>{summary.knownAmountLineCount} / {lines.length} lignes complètes</p>
+                <button type='button' disabled={pending || summary.complete} className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold' onClick={() => {
+                  const next = summary.calculations.find((line) => !Number.isSafeInteger(line.amountDueInCentimes));
+                  if (!next) return;
+                  setQuery(''); setUnit('ALL');
+                  setCurrentPage(Math.floor(lines.findIndex((line) => line.id === next.id) / LINES_PER_PAGE) + 1);
+                  setFocusLineId({ id: next.id });
+                }}>Prochaine ligne à compléter</button>
+              </div>}
               <div className='grid gap-4 border-b border-violet-200 bg-white/70 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-6' role='search'>
                 <div>
                   <label className='sr-only' htmlFor='counting-search'>
@@ -204,7 +224,7 @@ const TourCountingSheet = ({
                     const errorId = `returned-quantity-error-${line.id}`;
 
                     return (
-                      <article className='p-5 sm:p-6' key={line.id}>
+                      <article className='tour-counting-line p-4' key={line.id}>
                         <div className='min-w-0'>
                           <p className='break-all font-mono text-sm font-semibold text-violet-700'>
                             {line.productCode}
@@ -217,7 +237,7 @@ const TourCountingSheet = ({
                           </p>
                         </div>
 
-                        <div className='mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
+                        <div className='tour-counting-quantities mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
                           <div className='rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3'>
                             <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>
                               Quantité chargée
@@ -237,6 +257,8 @@ const TourCountingSheet = ({
                                 aria-invalid={Boolean(calculation?.error)}
                                 className='min-w-0 w-full rounded-lg border border-slate-300 px-3 py-2 text-base font-semibold tabular-nums text-slate-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-100'
                                 id={inputId}
+                                data-autofocus
+                                disabled={pending}
                                 inputMode='numeric'
                                 onChange={(event) => setReturnedQuantities(
                                   (currentValues) => ({
@@ -270,7 +292,7 @@ const TourCountingSheet = ({
 
                           <div className='rounded-xl border border-blue-100 bg-blue-50 px-4 py-3'>
                             <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-                              Prix unitaire TTC historique
+                              Prix TTC historique :
                             </p>
                             {calculation?.priceAvailable ? (
                               <p className='mt-1 text-lg font-bold tabular-nums text-blue-950'>
@@ -287,7 +309,7 @@ const TourCountingSheet = ({
 
                           <div className='rounded-xl border border-violet-200 bg-violet-100 px-4 py-3'>
                             <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
-                              {sheet?.recorded ? 'Montant dû' : 'Montant dû prévu'}
+                              {sheet?.recorded ? 'Ventes TTC' : 'Ventes TTC prévues'}
                             </p>
                             <p className='mt-1 text-lg font-bold tabular-nums text-violet-950'>
                               {Number.isSafeInteger(
@@ -302,15 +324,10 @@ const TourCountingSheet = ({
                         </div>
 
                         {calculation?.error ? (
-                          <p className='mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800' id={errorId} role='alert'>
+                          <p className='mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800' id={errorId} role='alert' tabIndex={-1}>
                             {calculation.error}
                           </p>
-                        ) : !calculation?.inputComplete ? (
-                          <p className='mt-3 text-sm font-medium text-amber-800'>
-                            Retour non renseigné — saisissez 0 si aucun produit
-                            n’a été restitué.
-                          </p>
-                        ) : !calculation.priceAvailable ? (
+                        ) : calculation?.inputComplete && !calculation.priceAvailable ? (
                           <p className='mt-3 text-sm font-medium text-amber-800'>
                             Les quantités sont prévisualisées, mais le montant
                             reste non calculable sans prix historique.
@@ -360,7 +377,7 @@ const TourCountingSheet = ({
                     {summary.complete
                       ? sheet?.recorded
                         ? 'Total dû enregistré pour la tournée'
-                        : 'Total prévu pour la tournée'
+                        : 'Prévisualisation · ventes brutes'
                       : 'Prévisualisation incomplète'}
                   </p>
                   {summary.complete ? (
@@ -374,7 +391,7 @@ const TourCountingSheet = ({
                   ) : Number.isSafeInteger(summary.knownSubtotalInCentimes) ? (
                     <>
                       <p className='mt-2 text-sm font-medium text-slate-600'>
-                        Sous-total connu ({summary.knownAmountLineCount} sur{' '}
+                        Sous-total partiel connu ({summary.knownAmountLineCount} sur{' '}
                         {lines.length} ligne{lines.length > 1 ? 's' : ''})
                       </p>
                       <p className='mt-1 text-2xl font-bold tabular-nums text-violet-950'>
@@ -394,7 +411,7 @@ const TourCountingSheet = ({
                     </p>
                   )}
                   {summary.subtotalOverflow && (
-                    <p className='mt-3 text-sm font-medium text-red-800' role='alert'>
+                    <p className='mt-3 text-sm font-medium text-red-800' role='alert' tabIndex={-1}>
                       Le sous-total dépasse la limite numérique autorisée.
                     </p>
                   )}
@@ -446,7 +463,7 @@ const TourCountingSheet = ({
                         tone='violet'
                       >
                         <p>
-                          Vous allez enregistrer définitivement le comptage de{' '}
+                          Tournée {sheet?.tourReference} · {sheet?.deliverer?.code} — {sheet?.deliverer?.name}. Vous allez enregistrer définitivement le comptage de{' '}
                           <strong className='text-slate-950'>
                             {lines.length} ligne{lines.length > 1 ? 's' : ''}
                           </strong>.
@@ -473,7 +490,7 @@ const TourCountingSheet = ({
                   </p>
                 )}
                 {state.errors.form && (
-                  <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert'>
+                  <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>
                     {state.errors.form}
                   </p>
                 )}

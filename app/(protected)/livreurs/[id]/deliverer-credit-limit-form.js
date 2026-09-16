@@ -1,344 +1,92 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useRef, useState } from 'react';
 
-import {
-  formatReceptionMoney,
-  parseReceptionAmountInCentimes,
-} from '../../../../lib/receptions.js';
-import ConfirmationDialog, {
-  useFormConfirmation,
-} from '../../confirmation-dialog.js';
+import { formatReceptionMoney, parseReceptionAmountInCentimes } from '../../../../lib/receptions.js';
+import ConfirmationDialog from '../../confirmation-dialog.js';
+import EditableCard, { EditingButtons, useInlineSave } from '../../components/editable-card.js';
 import { updateDelivererCreditLimit } from './actions.js';
+import styles from './deliverer-detail.module.css';
 
-const INITIAL_STATE = {
-  errors: {},
-  message: null,
-  revision: 0,
-  stale: false,
-  succeeded: false,
-  values: { amount: '' },
-};
+const formatAmountInput = (value) => Number.isSafeInteger(value) && value >= 0
+  ? `${Math.floor(value / 100)}${value % 100 ? `.${String(value % 100).padStart(2, '0')}` : ''}` : '';
+const formatLimit = (value) => Number.isSafeInteger(value) ? formatReceptionMoney(value) : 'Non configurée';
+const formatDate = (value) => value ? new Intl.DateTimeFormat('fr-DZ', {
+  dateStyle: 'long', timeStyle: 'short', hourCycle: 'h23', timeZone: 'Africa/Algiers',
+}).format(new Date(value)) : 'Date indisponible';
 
-const MAX_CREDIT_LIMIT_IN_DINARS = '90071992547409.91';
-
-const formatAmountInput = (amountInCentimes) => {
-  if (!Number.isSafeInteger(amountInCentimes) || amountInCentimes < 0) {
-    return '';
-  }
-
-  const dinars = Math.floor(amountInCentimes / 100);
-  const centimes = amountInCentimes % 100;
-
-  return centimes === 0
-    ? String(dinars)
-    : `${dinars}.${String(centimes).padStart(2, '0')}`;
-};
-
-const formatCreditLimit = (amountInCentimes) =>
-  Number.isSafeInteger(amountInCentimes)
-    ? formatReceptionMoney(amountInCentimes)
-    : 'Non configurée';
-
-const formatExposureAmount = (amountInCentimes) =>
-  Number.isSafeInteger(amountInCentimes)
-    ? formatReceptionMoney(amountInCentimes)
-    : 'Non calculable';
-
-const formatDate = (value) => value
-  ? new Intl.DateTimeFormat('fr-DZ', {
-      dateStyle: 'long',
-      hourCycle: 'h23',
-      timeStyle: 'short',
-      timeZone: 'Africa/Algiers',
-    }).format(new Date(value))
-  : 'Date indisponible';
-
-const DelivererCreditLimitForm = ({
-  canUpdate,
-  creditLimit,
-  delivererId,
-  exposure,
-}) => {
-  const currentAmount = formatAmountInput(creditLimit.amountInCentimes);
-  const [amount, setAmount] = useState(currentAmount);
-  const [isEditing, setIsEditing] = useState(false);
-  const {
-    confirmSubmission,
-    dialogRef,
-    requestConfirmation,
-    restoreTriggerFocus,
-  } = useFormConfirmation();
-  const updateCreditLimit = updateDelivererCreditLimit.bind(
-    null,
-    delivererId,
-  );
-  const runUpdate = async (previousState, formData) => {
-    const nextState = await updateCreditLimit(previousState, formData);
-
-    setAmount(nextState.values.amount);
-    setIsEditing(!nextState.succeeded);
-
-    return nextState;
-  };
-  const [state, formAction, pending] = useActionState(
-    runUpdate,
-    INITIAL_STATE,
-  );
-  const proposedAmountInCentimes = parseReceptionAmountInCentimes(amount);
-
+const CreditLimitEditor = ({ creditLimit, delivererId, onCancel, onSuccess, onPending }) => {
+  const [amount, setAmount] = useState(formatAmountInput(creditLimit.amountInCentimes));
+  // This baseline is deliberately stable across server revalidation. A conflict
+  // requires an explicit reread and another confirmation before any retry.
+  const [baseline, setBaseline] = useState(creditLimit);
+  const [reviewedRevision, setReviewedRevision] = useState(0);
+  const dialogRef = useRef(null);
+  const { state, pending, formRef, save } = useInlineSave({
+    action: updateDelivererCreditLimit.bind(null, delivererId),
+    initialState: { errors: {}, revision: 0, values: { amount } },
+    onSuccess, onPending,
+    failureMessage: 'La modification de la limite est momentanément indisponible.',
+  });
+  const stale = state.stale && reviewedRevision !== state.revision;
+  const proposed = parseReceptionAmountInCentimes(amount);
   return (
-    <section
-      aria-labelledby='deliverer-credit-limit-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-    >
-      <div className='flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6'>
-        <div>
-          <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-            Paramètre financier
-          </p>
-          <h2
-            className='mt-1 text-xl font-semibold text-slate-950'
-            id='deliverer-credit-limit-title'
-          >
-            Limite de crédit
-          </h2>
-          <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Seuil d’alerte appliqué à l’engagement actuel de ce livreur.
-          </p>
-        </div>
-        {canUpdate && !isEditing && (
-          <button
-            aria-label='Modifier la limite de crédit'
-            className='inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-blue-700 transition hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={() => {
-              setAmount(currentAmount);
-              setIsEditing(true);
-            }}
-            title='Modifier la limite de crédit'
-            type='button'
-          >
-            <svg
-              aria-hidden='true'
-              fill='none'
-              height='18'
-              stroke='currentColor'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-              strokeWidth='2'
-              viewBox='0 0 24 24'
-              width='18'
-            >
-              <path d='M12 20h9' />
-              <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      <div className='p-5 sm:p-6'>
-        {isEditing ? (
-          <form action={formAction} onSubmit={requestConfirmation}>
-            <input
-              name='creditLimitExpectedVersion'
-              type='hidden'
-              value={creditLimit.version}
-            />
-            {state.errors.form && (
-              <p
-                className='mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-                role='alert'
-              >
-                {state.errors.form}
-              </p>
-            )}
-            <label
-              className='text-sm font-semibold text-slate-800'
-              htmlFor='deliverer-credit-limit'
-            >
-              Limite en dinars algériens
-            </label>
-            <div className='mt-2 flex max-w-md items-stretch rounded-lg shadow-sm'>
-              <input
-                aria-describedby={state.errors.amount
-                  ? 'deliverer-credit-limit-error deliverer-credit-limit-help'
-                  : 'deliverer-credit-limit-help'}
-                aria-invalid={Boolean(state.errors.amount)}
-                autoFocus
-                className='min-w-0 flex-1 rounded-l-lg border border-r-0 border-slate-300 bg-white px-3 py-2.5 text-right text-lg font-semibold tabular-nums text-slate-950 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 aria-invalid:border-red-500 aria-invalid:focus:border-red-600 aria-invalid:focus:ring-red-100'
-                id='deliverer-credit-limit'
-                inputMode='decimal'
-                max={MAX_CREDIT_LIMIT_IN_DINARS}
-                min='0'
-                name='creditLimitAmount'
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder='Ex. 150000,00'
-                required
-                step='0.01'
-                type='number'
-                value={amount}
-              />
-              <span className='inline-flex items-center rounded-r-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-700'>
-                DA
-              </span>
-            </div>
-            <p
-              className='mt-2 text-xs leading-5 text-slate-500'
-              id='deliverer-credit-limit-help'
-            >
-              Zéro signifie qu’aucun crédit n’est autorisé.
-            </p>
-            {state.errors.amount && (
-              <p
-                className='mt-1.5 text-sm text-red-700'
-                id='deliverer-credit-limit-error'
-              >
-                {state.errors.amount}
-              </p>
-            )}
-
-            <div className='mt-4 flex flex-wrap gap-3'>
-              <button
-                className='rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                type='submit'
-              >
-                {pending ? 'Enregistrement…' : 'Enregistrer'}
-              </button>
-              <button
-                className='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
-                disabled={pending}
-                onClick={() => {
-                  setAmount(currentAmount);
-                  setIsEditing(false);
-                }}
-                type='button'
-              >
-                Annuler
-              </button>
-            </div>
-
-            <ConfirmationDialog
-              confirmLabel='Confirmer la limite'
-              dialogRef={dialogRef}
-              onClose={restoreTriggerFocus}
-              onConfirm={confirmSubmission}
-              pending={pending}
-              pendingLabel='Enregistrement…'
-              title='Confirmer la limite de crédit ?'
-              tone='blue'
-            >
-              <p>
-                La limite passera de <strong className='text-slate-950'>
-                  {formatCreditLimit(creditLimit.amountInCentimes)}
-                </strong> à <strong className='text-slate-950'>
-                  {proposedAmountInCentimes === null
-                    ? 'Montant invalide'
-                    : formatCreditLimit(proposedAmountInCentimes)}
-                </strong>.
-              </p>
-              <p>
-                Une modification effective sera conservée dans l’historique.
-              </p>
-            </ConfirmationDialog>
-          </form>
-        ) : (
-          <div className='rounded-xl border border-blue-100 bg-blue-50 p-5'>
-            <p className='text-xs font-bold uppercase tracking-wide text-blue-700'>
-              Limite configurée
-            </p>
-            <p className={`mt-2 text-3xl font-bold tabular-nums ${creditLimit.configured ? 'text-blue-950' : 'text-slate-500'}`}>
-              {formatCreditLimit(creditLimit.amountInCentimes)}
-            </p>
-            {creditLimit.configured && (
-              <p className='mt-3 text-xs leading-5 text-blue-800'>
-                Dernière modification le {formatDate(creditLimit.updatedAt)} ·{' '}
-                {creditLimit.updatedBy ?? 'Compte indisponible'}
-              </p>
-            )}
+    <form className={styles.editForm} ref={formRef} aria-busy={pending} onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending && !stale) dialogRef.current?.showModal();
+    }}>
+      {state.errors.form && <p className={styles.error} role='alert' tabIndex={-1}>{state.errors.form}</p>}
+      {stale && <div className={styles.attention} role='alert'>
+        <p>Un autre utilisateur a modifié la limite. Votre proposition est conservée. Relisez la valeur actuelle, puis confirmez à nouveau.</p>
+        <button className={styles.secondary} type='button' onClick={() => {
+          setBaseline(creditLimit);
+          setReviewedRevision(state.revision);
+          formRef.current?.querySelector('[name="creditLimitAmount"]')?.focus();
+        }}>Relire la limite actuelle</button>
+      </div>}
+      <fieldset disabled={pending || stale}>
+        <input name='creditLimitExpectedVersion' type='hidden' value={baseline.version} />
+        <div className={styles.formField}>
+          <label htmlFor='deliverer-credit-limit'>Limite en dinars algériens</label>
+          <div className={styles.priceInput}>
+            <input id='deliverer-credit-limit' name='creditLimitAmount' inputMode='decimal' type='number'
+              min='0' max='90071992547409.91' step='0.01' required value={amount}
+              onChange={(event) => setAmount(event.target.value)} aria-invalid={Boolean(state.errors.amount)}
+              aria-describedby={`deliverer-credit-limit-help${state.errors.amount ? ' deliverer-credit-limit-error' : ''}`} />
+            <span>DA</span>
           </div>
-        )}
-      </div>
-
-      {exposure && (
-        <div className='border-t border-slate-200'>
-          <dl className='grid gap-px bg-slate-200 md:grid-cols-3'>
-            {[
-              [
-                'Reste dû des tournées comptées',
-                exposure.countedRemainderInCentimes,
-              ],
-              [
-                'Valeur chargée non encore comptée',
-                exposure.loadedValueInCentimes,
-              ],
-              ['Engagement total', exposure.engagementInCentimes],
-            ].map(([label, value]) => (
-              <div className='bg-white px-5 py-5 sm:px-6' key={label}>
-                <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                  {label}
-                </dt>
-                <dd className={`mt-2 text-xl font-bold tabular-nums ${Number.isSafeInteger(value) ? 'text-slate-950' : 'text-red-700'}`}>
-                  {formatExposureAmount(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          {!exposure.reliable ? (
-            <div
-              className='border-t border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900 sm:px-6'
-              role='alert'
-            >
-              <p className='font-semibold'>Engagement non calculable</p>
-              <p className='mt-1.5 leading-6'>
-                Données manquantes ou invalides : {exposure.anomalies.map(
-                  (anomaly) => `${anomaly.tourReference} — ${anomaly.label}`,
-                ).join(' ; ')}.
-              </p>
-            </div>
-          ) : exposure.comparison?.status === 'EXCEEDED' ? (
-            <p
-              className='border-t border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold leading-6 text-red-900 sm:px-6'
-              role='alert'
-            >
-              Limite de crédit dépassée de{' '}
-              {formatCreditLimit(exposure.comparison.amountInCentimes)}. Les
-              opérations restent autorisées.
-            </p>
-          ) : exposure.comparison?.status === 'REACHED' ? (
-            <p
-              className='border-t border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold leading-6 text-amber-900 sm:px-6'
-              role='status'
-            >
-              Limite de crédit atteinte.
-            </p>
-          ) : exposure.comparison?.status === 'BELOW' ? (
-            <p
-              className='border-t border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold leading-6 text-emerald-900 sm:px-6'
-              role='status'
-            >
-              {formatCreditLimit(exposure.comparison.amountInCentimes)} avant
-              d’atteindre le seuil.
-            </p>
-          ) : null}
+          <small>Valeur relue : {formatLimit(baseline.amountInCentimes)}.</small>
+          <small id='deliverer-credit-limit-help'>Zéro est une limite configurée à 0 DA. Le seuil reste indicatif et ne bloque pas les opérations.</small>
+          {state.errors.amount && <p className={styles.fieldError} id='deliverer-credit-limit-error'>{state.errors.amount}</p>}
         </div>
-      )}
-
-      <p className='border-t border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900 sm:px-6'>
-        Seuil indicatif : un dépassement déclenche une alerte sans bloquer les
-        opérations.
-      </p>
-      {state.message && !isEditing && (
-        <p
-          className='border-t border-emerald-200 bg-emerald-50 px-5 py-3.5 text-sm font-semibold text-emerald-800 sm:px-6'
-          role='status'
-        >
-          {state.message}
-        </p>
-      )}
-    </section>
+      </fieldset>
+      <EditingButtons pending={pending} onCancel={onCancel} />
+      <ConfirmationDialog confirmType='button' confirmLabel='Confirmer la limite' dialogRef={dialogRef}
+        confirmDisabled={stale || proposed === null} pending={pending} pendingLabel='Enregistrement…'
+        onClose={() => formRef.current?.querySelector('button[type="submit"]')?.focus()} title='Confirmer la limite de crédit ?' onConfirm={() => {
+          if (pending || stale) return;
+          const data = new FormData(formRef.current);
+          dialogRef.current?.close();
+          save(data);
+        }}>
+        <p>La limite passera de <strong>{formatLimit(baseline.amountInCentimes)}</strong> à <strong>{proposed === null ? 'Montant invalide' : formatLimit(proposed)}</strong>.</p>
+        <p>Un dépassement alerte sans bloquer les opérations. Toute modification effective est historisée.</p>
+      </ConfirmationDialog>
+    </form>
   );
 };
+
+const DelivererCreditLimitForm = ({ canUpdate, creditLimit, delivererId }) => (
+  <EditableCard title='Limite configurée' description='Seuil d’alerte appliqué à l’engagement du livreur.'
+    canEdit={canUpdate} editLabel={creditLimit.configured ? 'Modifier' : 'Configurer'}
+    formComponent={CreditLimitEditor} formProps={{ creditLimit, delivererId }}>
+    <div className={styles.creditValue}>
+      <p className={styles.eyebrow}>Seuil indicatif</p>
+      <p className={styles.bigNumber}>{formatLimit(creditLimit.amountInCentimes)}</p>
+      {creditLimit.configured && <small>Modifiée le {formatDate(creditLimit.updatedAt)} · {creditLimit.updatedBy ?? 'Compte indisponible'}</small>}
+    </div>
+    <p className={styles.footnote}>Un dépassement déclenche une alerte. Il ne bloque pas les opérations.</p>
+  </EditableCard>
+);
 
 export default DelivererCreditLimitForm;

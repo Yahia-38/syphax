@@ -252,17 +252,15 @@ test('autorise la modification et détermine sa traçabilité depuis la session'
   formData.set('updatedAt', '2000-01-01T00:00:00.000Z');
   const startedAt = new Date();
 
-  await assert.rejects(
-    callWithSession(token, () =>
-      updateDeliverer(
-        delivererId.toString(),
-        '/livreurs?q=action&page=2',
-        { revision: 0 },
-        formData,
-      )),
-    (error) => typeof error?.digest === 'string'
-      && error.digest.startsWith('NEXT_REDIRECT;'),
-  );
+  const result = await callWithSession(token, () => updateDeliverer(
+    delivererId.toString(),
+    '/livreurs?q=action&page=2',
+    { revision: 0 },
+    formData,
+  ));
+  assert.equal(result.message, 'L’identification du livreur a été mise à jour.');
+  assert.equal(result.revision, 1);
+  assert.deepEqual(result.errors, {});
 
   const updated = await database.collection('deliverers').findOne({
     _id: delivererId,
@@ -618,4 +616,14 @@ test('refuse un changement de statut sans permission et n’écrit rien', async 
 
   assert.equal(unchanged.active, true);
   assert.equal(unchanged.statusHistory, undefined);
+});
+
+
+test('le changement de statut conserve la section et les filtres avec un retour validé', async () => {
+  const { token, userId } = await createUserSession('statut-contexte', ['deliverers.status.update']);
+  const delivererId = new ObjectId();
+  await database.collection('deliverers').insertOne({ _id: delivererId, code: 'LIV-CONTEXTE', name: 'Contexte', createdBy: userId });
+  const context = `/livreurs/${delivererId}?retour=%2Flivreurs%3Fq%3DAtlas%26page%3D2&section=identification&tourneeRecherche=TRN&tourneeDate=2026-09-14&tourneePage=3`;
+  await assert.rejects(callWithSession(token, () => deactivateDeliverer(delivererId.toString(), context, { revision: 0 })),
+    (error) => error.digest?.includes(context));
 });

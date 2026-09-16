@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { calculateLoadedLineValue } from '../../../../lib/tour-counting-calculations.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import TourReservationReleaseButton from './tour-reservation-release-button.js';
 
@@ -11,17 +12,7 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const calculateLoadedValue = (line) => {
-  const amountInCentimes = line.salePriceAtLoading?.amountInCentimes;
-  const valueInCentimes = line.quantityInBaseUnits * amountInCentimes;
-
-  return Number.isSafeInteger(amountInCentimes)
-    && amountInCentimes >= 0
-    && Number.isSafeInteger(valueInCentimes)
-    && valueInCentimes >= 0
-    ? valueInCentimes
-    : null;
-};
+const calculateLoadedValue = (line) => calculateLoadedLineValue(line).valueInCentimes;
 
 const formatPriceSourceDate = (value) => value
   ? new Intl.DateTimeFormat('fr-DZ', {
@@ -38,6 +29,8 @@ const TourProductList = ({
   lines,
   loaded,
   tourId,
+  tourReference,
+  delivererName,
 }) => {
   const [query, setQuery] = useState('');
   const [quantityMode, setQuantityMode] = useState('ALL');
@@ -86,7 +79,7 @@ const TourProductList = ({
   return (
     <section
       aria-labelledby='tour-products-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
     >
       <div className='border-b border-slate-200 p-5 sm:p-6'>
         <h2 className='text-lg font-semibold text-slate-900' id='tour-products-title'>
@@ -238,6 +231,8 @@ const TourProductList = ({
                       quantity={formatQuantity(line.quantityInBaseUnits)}
                       reservationId={line.id}
                       tourId={tourId}
+                      tourReference={tourReference}
+                      delivererName={delivererName}
                       unit={line.baseUnit}
                     />
                   )}

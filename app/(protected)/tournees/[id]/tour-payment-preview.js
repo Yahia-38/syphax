@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useTourActionState } from './tour-operation-context.js';
+
+import { useState } from 'react';
 
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { recordTourPayment } from '../../cash-payment-actions.js';
@@ -36,16 +38,17 @@ const TourPaymentPreview = ({
   initialConfirmationKey,
   preview,
   tourId,
+  embedded = false,
 }) => {
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     recordTourPayment,
     INITIAL_STATE,
   );
-  const [opened, setOpened] = useState(false);
+  const [opened, setOpened] = useState(embedded);
   const [query, setQuery] = useState('');
   const [author, setAuthor] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const remainingDueInCentimes = preview.remainingDueInCentimes ?? 0;
+  const remainingDueInCentimes = preview.remainingDueInCentimes;
   const payments = Array.isArray(preview.payments) ? preview.payments : [];
   const authors = [...new Set(
     payments.map((payment) => payment.receivedBy).filter(Boolean),
@@ -78,8 +81,8 @@ const TourPaymentPreview = ({
 
   if (preview.errors?.form) {
     return (
-      <section className='mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm sm:p-6'>
-        <p className='font-semibold text-red-800' role='alert'>
+      <section className={embedded ? 'tour-embedded p-5' : 'mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'}>
+        <p className='font-semibold text-red-800' role='alert' tabIndex={-1}>
           {preview.errors.form}
         </p>
       </section>
@@ -88,10 +91,10 @@ const TourPaymentPreview = ({
 
   return (
     <section
-      aria-labelledby='tour-payment-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm'
+      aria-labelledby={embedded ? undefined : 'tour-payment-title'} aria-label={embedded ? 'Versements en espèces' : undefined}
+      className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}
     >
-      <div className='flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
+      {!embedded && <div className='flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
         <div>
           <p className='text-xs font-semibold uppercase tracking-wide text-amber-700'>
             Encaissement de cette tournée
@@ -128,32 +131,7 @@ const TourPaymentPreview = ({
             {opened ? 'Masquer le formulaire' : 'Encaisser'}
           </button>
         )}
-      </div>
-
-      <dl className='grid gap-px border-t border-amber-200 bg-amber-200 sm:grid-cols-2 lg:grid-cols-5'>
-        {[
-          ['Ventes brutes', preview.grossSalesInCentimes],
-          ['Frais déclarés', preview.expenseDeclarationStatus === 'DECLARED'
-            ? preview.totalExpensesInCentimes
-            : null],
-          ['Net à remettre', preview.netDueInCentimes],
-          ['Encaissé', preview.amountPaidInCentimes],
-          ['Reste à payer', remainingDueInCentimes],
-        ].map(([label, value]) => (
-          <div className='bg-white/80 px-5 py-4 sm:px-6' key={label}>
-            <dt className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
-              {label}
-            </dt>
-            <dd className='mt-1 text-xl font-bold tabular-nums text-slate-950'>
-              {value === null
-                ? preview.expenseDeclarationStatus === 'HISTORICAL_MISSING'
-                  ? 'Absence historique'
-                  : 'Non déclarés'
-                : formatReceptionMoney(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      </div>}
 
       {payments.length === 0 && (
         <p className='border-t border-amber-200 bg-white/70 px-5 py-4 text-sm font-medium text-slate-700 sm:px-6'>
@@ -162,7 +140,7 @@ const TourPaymentPreview = ({
       )}
 
       {preview.errors?.cashRegister && !nothingToCollect && (
-        <p className='border-t border-amber-200 bg-white/70 px-5 py-4 text-sm font-medium text-red-700 sm:px-6' role='alert'>
+        <p className='border-t border-amber-200 bg-white/70 px-5 py-4 text-sm font-medium text-red-700 sm:px-6' role='alert' tabIndex={-1}>
           {preview.errors.cashRegister}
         </p>
       )}
@@ -173,6 +151,8 @@ const TourPaymentPreview = ({
         </p>
       )}
 
+      {embedded && <p className='px-5 pt-4 text-sm font-semibold'>{preview.tourReference} · {preview.deliverer.code} — {preview.deliverer.name}</p>}
+      {preview.expenseDeclarationStatus === 'MISSING' && embedded && <p className='px-5 pt-2 text-sm text-amber-800'>Frais non déclarés : ce versement peut réduire le maximum déclarable.</p>}
       {opened
         && !nothingToCollect
         && canCreatePayment
@@ -184,7 +164,6 @@ const TourPaymentPreview = ({
             deliverer={preview.deliverer}
             formAction={formAction}
             idPrefix='tour-payment'
-            key={confirmationKey}
             pending={pending}
             remainingDueInCentimes={remainingDueInCentimes}
             state={state}

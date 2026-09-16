@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useId, useRef, useState } from 'react';
+import { startTransition, useActionState, useEffect, useId, useRef, useState } from 'react';
+
+import { useEditingSession } from '../../components/editing-session.js';
 
 import { createTour } from './actions.js';
 
@@ -16,6 +18,9 @@ const TourCreateButton = ({
   initialPlannedDate,
   returnHref,
 }) => {
+  const session = useEditingSession();
+  const lockedRef = useRef(false);
+  const unregisterRef = useRef(null);
   const dialogRef = useRef(null);
   const triggerRef = useRef(null);
   const titleId = useId();
@@ -26,15 +31,65 @@ const TourCreateButton = ({
     returnHref,
   );
   const [state, formAction, pending] = useActionState(
-    createTourWithContext,
+    async (previousState, formData) => {
+      try {
+        return await createTourWithContext(previousState, formData);
+      } catch (error) {
+        if (error?.digest?.startsWith('NEXT_REDIRECT;')) throw error;
+        return {
+          errors: { form: 'La création de la tournée est momentanément indisponible. Réessayez.' },
+          revision: previousState.revision + 1,
+          values: { plannedDate: formData.get('plannedDate'), creationKey: formData.get('creationKey') },
+        };
+      }
+    },
     INITIAL_STATE,
   );
+
+  useEffect(() => {
+    if (!pending && state.revision > 0) {
+      lockedRef.current = false;
+      unregisterRef.current?.();
+      unregisterRef.current = null;
+      requestAnimationFrame(() => dialogRef.current?.querySelector('[aria-invalid="true"], [role="alert"]')?.focus());
+    }
+  }, [pending, state.revision]);
+  useEffect(() => () => unregisterRef.current?.(), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const guardCancel = (event) => { if (lockedRef.current) event.preventDefault(); };
+    // Some browsers emit a non-cancelable dialog cancel event for Escape.
+    const guardEscape = (event) => {
+      if (dialog?.open && lockedRef.current && event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    dialog?.addEventListener('cancel', guardCancel);
+    document.addEventListener('keydown', guardEscape, true);
+    return () => {
+      dialog?.removeEventListener('cancel', guardCancel);
+      document.removeEventListener('keydown', guardEscape, true);
+    };
+  }, []);
+  const open = () => {
+    const proceed = () => dialogRef.current?.showModal();
+    if (session) session.request(proceed); else proceed();
+  };
+  const protectSubmission = (event) => {
+    event.preventDefault();
+    if (lockedRef.current) return;
+    const data = new FormData(event.currentTarget);
+    lockedRef.current = true;
+    unregisterRef.current = session?.register({ dirty: false, pending: true, discard: () => {} });
+    startTransition(() => formAction(data));
+  };
 
   return (
     <>
       <button
         className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-        onClick={() => dialogRef.current?.showModal()}
+        onClick={open}
         ref={triggerRef}
         type='button'
       >
@@ -47,7 +102,7 @@ const TourCreateButton = ({
         onClose={() => triggerRef.current?.focus()}
         ref={dialogRef}
       >
-        <form action={formAction} className='p-6'>
+        <form className='p-6' onSubmit={protectSubmission} aria-busy={pending}>
           <input name='creationKey' type='hidden' value={activeCreationKey} />
           <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
             Nouvelle tournée
@@ -75,6 +130,7 @@ const TourCreateButton = ({
                 : undefined}
               aria-invalid={Boolean(state.errors.plannedDate)}
               className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+              disabled={pending}
               defaultValue={state.values.plannedDate ?? initialPlannedDate}
               id='tour-planned-date'
               name='plannedDate'
@@ -95,6 +151,7 @@ const TourCreateButton = ({
             <p
               className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
               role='alert'
+              tabIndex={-1}
             >
               {state.errors.delivererId ?? state.errors.form}
             </p>

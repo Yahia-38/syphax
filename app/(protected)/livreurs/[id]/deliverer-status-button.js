@@ -1,12 +1,17 @@
 'use client';
 
-import { useActionState, useId, useRef } from 'react';
+import { startTransition, useActionState, useEffect, useId, useRef } from 'react';
+
+import { useEditingSession } from '../../components/editing-session.js';
 
 import { deactivateDeliverer, reactivateDeliverer } from './actions.js';
 
 const INITIAL_STATE = { error: null, revision: 0 };
 
 const DelivererStatusButton = ({ deliverer, returnHref }) => {
+  const session = useEditingSession();
+  const lockedRef = useRef(false);
+  const unregisterRef = useRef(null);
   const dialogRef = useRef(null);
   const triggerRef = useRef(null);
   const titleId = useId();
@@ -19,10 +24,56 @@ const DelivererStatusButton = ({ deliverer, returnHref }) => {
     returnHref,
   );
   const [state, formAction, pending] = useActionState(
-    statusActionWithContext,
+    async (previousState) => {
+      try {
+        return await statusActionWithContext(previousState);
+      } catch (error) {
+        if (error?.digest?.startsWith('NEXT_REDIRECT;')) throw error;
+        return { error: 'Le changement de statut est momentanément indisponible. Réessayez.', revision: previousState.revision + 1 };
+      }
+    },
     INITIAL_STATE,
   );
   const actionLabel = deliverer.active ? 'Désactiver' : 'Réactiver';
+
+  useEffect(() => {
+    if (!pending && state.revision > 0) {
+      lockedRef.current = false;
+      unregisterRef.current?.();
+      unregisterRef.current = null;
+      requestAnimationFrame(() => dialogRef.current?.querySelector('[aria-invalid="true"], [role="alert"]')?.focus());
+    }
+  }, [pending, state.revision]);
+  useEffect(() => () => unregisterRef.current?.(), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const guardCancel = (event) => { if (lockedRef.current) event.preventDefault(); };
+    // Some browsers emit a non-cancelable dialog cancel event for Escape.
+    const guardEscape = (event) => {
+      if (dialog?.open && lockedRef.current && event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    dialog?.addEventListener('cancel', guardCancel);
+    document.addEventListener('keydown', guardEscape, true);
+    return () => {
+      dialog?.removeEventListener('cancel', guardCancel);
+      document.removeEventListener('keydown', guardEscape, true);
+    };
+  }, []);
+  const open = () => {
+    const proceed = () => dialogRef.current?.showModal();
+    if (session) session.request(proceed); else proceed();
+  };
+  const protectSubmission = (event) => {
+    event.preventDefault();
+    if (lockedRef.current) return;
+    const data = new FormData(event.currentTarget);
+    lockedRef.current = true;
+    unregisterRef.current = session?.register({ dirty: false, pending: true, discard: () => {} });
+    startTransition(() => formAction(data));
+  };
 
   return (
     <>
@@ -30,7 +81,7 @@ const DelivererStatusButton = ({ deliverer, returnHref }) => {
         className={deliverer.active
           ? 'rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-800 transition hover:border-amber-400 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700'
           : 'rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700'}
-        onClick={() => dialogRef.current?.showModal()}
+        onClick={open}
         ref={triggerRef}
         type='button'
       >
@@ -43,7 +94,7 @@ const DelivererStatusButton = ({ deliverer, returnHref }) => {
         onClose={() => triggerRef.current?.focus()}
         ref={dialogRef}
       >
-        <form action={formAction} className='p-6'>
+        <form className='p-6' onSubmit={protectSubmission} aria-busy={pending}>
           <div className={deliverer.active
             ? 'flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-xl text-amber-800'
             : 'flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-800'}
@@ -63,6 +114,7 @@ const DelivererStatusButton = ({ deliverer, returnHref }) => {
             <p
               className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
               role='alert'
+              tabIndex={-1}
             >
               {state.error}
             </p>

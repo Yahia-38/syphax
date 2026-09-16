@@ -49,6 +49,11 @@ de la navigation générale, sans changer son apparence. Le formulaire inscrit
 son brouillon et son état en cours via `register`.
 
 La session compare les valeurs nommées du formulaire à leur état à l’ouverture.
+`EditingSessionProvider protectNavigation` étend cette protection aux liens
+internes de la navigation générale, avec les libellés d’édition habituels. La
+fiche livreur l’utilise pour l’identification et la limite de crédit. Les dialogues
+de création de tournée et de statut inscrivent également leur requête en cours
+dans la session pour empêcher une navigation pendant l’enregistrement.
 Un retour à cet état ne déclenche aucune confirmation. `EditingLink` utilise
 `Link.onNavigate` pour les liens internes de la zone ; `session.request(callback)`
 protège l’ouverture d’un autre bloc. Le dialogue applicatif permet de poursuivre
@@ -64,3 +69,17 @@ soumission pilotée ; le comportement historique par défaut reste `submit`.
 La validation du prix a été déplacée à l’identique dans `lib/product-pricing.js`,
 module sans accès aux données, réexporté par `lib/products.js`. Le formulaire et
 le service utilisent ainsi les mêmes règles de centimes et décimales.
+
+La fiche tournée utilise `EditingSessionProvider operation protectNavigation`
+avec les libellés « Continuer la saisie » / « Abandonner ». `EditableCard trackDraft`
+permet au formulaire de signaler `onDraftChange(JSON.stringify(values))` : les
+retours sont comparés sur toutes les lignes stables, même hors filtre ou page ;
+les frais incluent les ajouts et retraits. Les filtres ne constituent pas un
+brouillon métier. L’annulation de carte passe aussi par la session.
+
+`tour-operation-card.js` adapte les formulaires spécialisés sans changer leurs
+Server Actions. Il verrouille immédiatement la soumission finale, conserve les
+clés à la relecture, reporte le résultat serveur à la carte et propose une
+relecture après erreur. La relecture conserve les champs et n’envoie aucune
+écriture ; l’utilisateur doit ouvrir et valider une nouvelle confirmation.
+Les déclarations et comptages définitifs restent en lecture seule.

@@ -1,5 +1,7 @@
 'use client';
 
+import { useTourDraft } from './tournees/[id]/tour-operation-context.js';
+
 import { useMemo, useState } from 'react';
 
 import { calculateCashPaymentPreview } from '../../lib/cash-payment-calculations.js';
@@ -28,6 +30,7 @@ const CashPaymentForm = ({
     requestConfirmation,
     restoreTriggerFocus,
   } = useFormConfirmation();
+  useTourDraft({ amount, note });
   const calculation = useMemo(() => calculateCashPaymentPreview({
     amount,
     remainingDueInCentimes,
@@ -73,6 +76,7 @@ const CashPaymentForm = ({
             aria-invalid={Boolean(amountError)}
             autoFocus
             className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-100'
+            disabled={pending}
             id={amountId}
             inputMode='decimal'
             name='amount'
@@ -82,7 +86,7 @@ const CashPaymentForm = ({
             value={amount}
           />
           {amountError && (
-            <p className='mt-2 text-sm font-medium text-red-700' id={amountErrorId} role='alert'>
+            <p className='mt-2 text-sm font-medium text-red-700' id={amountErrorId} role='alert' tabIndex={-1}>
               {amountError}
             </p>
           )}
@@ -96,6 +100,7 @@ const CashPaymentForm = ({
             aria-describedby={serverNoteError ? noteErrorId : undefined}
             aria-invalid={Boolean(serverNoteError)}
             className='mt-2 min-h-24 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none transition focus:border-amber-600 focus:ring-2 focus:ring-amber-100'
+            disabled={pending}
             id={noteId}
             maxLength={500}
             name='note'
@@ -104,16 +109,17 @@ const CashPaymentForm = ({
             value={note}
           />
           {serverNoteError && (
-            <p className='mt-2 text-sm font-medium text-red-700' id={noteErrorId} role='alert'>
+            <p className='mt-2 text-sm font-medium text-red-700' id={noteErrorId} role='alert' tabIndex={-1}>
               {serverNoteError}
             </p>
           )}
         </div>
       </div>
 
+      <p className='mt-4 text-sm text-slate-600'>Reste avant : {formatReceptionMoney(remainingDueInCentimes)} · Montant saisi : {Number.isSafeInteger(calculation.amountInCentimes) ? formatReceptionMoney(calculation.amountInCentimes) : 'À renseigner'}</p>
       <div className='mt-5 rounded-xl border border-amber-200 bg-amber-100 px-4 py-4'>
         <p className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
-          Reste prévu pour cette tournée après ce versement
+          Prévisualisation · reste après versement
         </p>
         {calculation.remainingAfterPaymentInCentimes === null ? (
           <p className='mt-1 text-sm font-medium text-slate-600'>
@@ -129,7 +135,7 @@ const CashPaymentForm = ({
       </div>
 
       {state.errors.form && (
-        <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert'>
+        <p className='mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>
           {state.errors.form}
         </p>
       )}
@@ -158,12 +164,12 @@ const CashPaymentForm = ({
             || calculation.remainingAfterPaymentInCentimes === null}
           type='submit'
         >
-          {pending ? 'Enregistrement…' : 'Confirmer le versement'}
+          {pending ? 'Enregistrement…' : 'Enregistrer le versement'}
         </button>
       </div>
 
       <ConfirmationDialog
-        confirmLabel='Confirmer le versement'
+        confirmLabel='Enregistrer le versement'
         dialogRef={dialogRef}
         onClose={restoreTriggerFocus}
         onConfirm={confirmSubmission}

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
@@ -42,13 +41,15 @@ import {
   getTourById,
   validateTourReturnHref,
 } from '../../../../lib/tours.js';
-import TourProductForm from './tour-product-form.js';
+import TourDetail from './tour-detail.js';
+import TourOperationCard from './tour-operation-card.js';
+import { EditingLink } from '../../components/editing-session.js';
+import { readTourView } from '../../../../lib/tour-detail-navigation.js';
+import { formatReceptionMoney } from '../../../../lib/receptions.js';
+import styles from './tour-detail.module.css';
 import TourProductList from './tour-product-list.js';
 import TourCountingSheet from './tour-counting-sheet.js';
 import TourExpensePreview from './tour-expense-preview.js';
-import TourClosingConfirmation from './tour-closing-confirmation.js';
-import TourCancellationConfirmation from './tour-cancellation-confirmation.js';
-import TourLoadingConfirmation from './tour-loading-confirmation.js';
 import TourPaymentPreview from './tour-payment-preview.js';
 
 export const metadata = {
@@ -102,7 +103,7 @@ const TourPage = async ({ params, searchParams }) => {
   const canDeclareTourExpenses = TOUR_EXPENSE_FORM_PERMISSIONS.every(
     (permission) => permissions.includes(permission),
   );
-  const products = canAddTourProducts
+  const products = canAddTourProducts && tour.status === TOUR_STATUS_PREPARATION
     ? await listProducts({ includePackagings: true, onlyUsable: true })
     : [];
   const loadingPreview = canLoadTour
@@ -138,168 +139,88 @@ const TourPage = async ({ params, searchParams }) => {
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
 
-  return (
-    <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
-      {canReadDeliverer && (
-        <Link
-          className='inline-flex items-center gap-2 rounded-lg text-sm font-medium text-blue-700 transition hover:text-blue-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700'
-          href={returnHref}
-        >
-          <span aria-hidden='true'>←</span>
-          Retour à la fiche livreur
-        </Link>
-      )}
+  const counted = [TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status);
+  const preparation = tour.status === TOUR_STATUS_PREPARATION;
+  const cancelled = tour.status === TOUR_STATUS_CANCELLED;
+  const financial = paymentPreview && !paymentPreview.errors?.form ? paymentPreview : null;
+  const money = (value) => Number.isSafeInteger(value) && value >= 0 ? formatReceptionMoney(value) : 'Non calculable';
+  const expenseState = financial?.expenseDeclarationStatus ?? expensePreview?.declarationStatus;
+  const remaining = financial?.remainingDueInCentimes;
+  const canPay = canCreateCashPayment && Number.isSafeInteger(remaining) && remaining > 0 && Boolean(financial?.cashRegister);
+  const canDeclare = canDeclareTourExpenses && expensePreview && !expensePreview.errors?.form && !expensePreview.declaration && expensePreview.declarationStatus !== 'HISTORICAL_MISSING' && !cancelled;
+  const canCount = countingSheet && !countingSheet.recorded && !countingSheet.errors?.form && tour.status === TOUR_STATUS_LOADED;
+  const priority = canCount
+    ? { target: 'comptage', view: 'operations', label: canConfirmCounting ? 'Saisir les retours' : 'Prévisualiser les retours' }
+    : canDeclare ? { target: 'frais', view: 'operations', label: 'Déclarer les frais' }
+    : canPay ? { target: 'versements', view: 'operations', label: 'Encaisser' } : null;
+  const countingProps = { canConfirm: canConfirmCounting, initialConfirmationKey: randomUUID(), sheet: countingSheet ? { ...countingSheet, tourReference: tour.reference, deliverer: { code: tour.delivererCode, name: tour.delivererName } } : null, tourId: tour.id };
+  const expenseProps = { canDeclareExpenses: canDeclareTourExpenses, initialConfirmationKey: randomUUID(), preview: expensePreview, tourId: tour.id };
+  const paymentProps = { canCreatePayment: canCreateCashPayment, initialConfirmationKey: randomUUID(), preview: paymentPreview, tourId: tour.id };
+  const trace = [
+    ['Créée par', tour.createdBy ?? 'Compte indisponible'], ['Créée le', formatTourCreatedAt(tour.createdAt)],
+    ...(!preparation && !cancelled ? [['Chargée par', tour.loadedBy ?? 'Compte indisponible'], ['Chargée le', formatTourCreatedAt(tour.loadedAt)]] : []),
+    ...(counted ? [['Comptée par', tour.countedBy ?? 'Compte indisponible'], ['Comptée le', formatTourCreatedAt(tour.countedAt)]] : []),
+    ...(expensePreview?.declaration ? [['Frais déclarés par', expensePreview.declaration.declaredBy ?? 'Compte indisponible'], ['Frais déclarés le', formatTourCreatedAt(expensePreview.declaration.declaredAt)]] : []),
+    ...(tour.status === TOUR_STATUS_CLOSED ? [['Terminée par', tour.closedBy ?? 'Compte indisponible'], ['Terminée le', formatTourCreatedAt(tour.closedAt)]] : []),
+    ...(cancelled ? [['Annulée par', tour.cancelledBy ?? 'Compte indisponible'], ['Annulée le', formatTourCreatedAt(tour.cancelledAt)], ['Motif d’annulation', tour.cancellationReason]] : []),
+  ];
 
-      <header className={`${canReadDeliverer ? 'mt-6' : ''} rounded-2xl border border-slate-200 bg-white shadow-sm`}>
-        <div className='flex flex-col gap-5 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6'>
-          <div className='min-w-0'>
-            <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-              Fiche de tournée
-            </p>
-            <h1 className='mt-2 break-all font-mono text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl'>
-              {tour.reference}
-            </h1>
-          </div>
-          <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${tour.status === TOUR_STATUS_CANCELLED ? 'bg-red-100 text-red-800' : tour.status === TOUR_STATUS_CLOSED ? 'bg-slate-200 text-slate-800' : tour.status === TOUR_STATUS_COUNTED ? 'bg-violet-100 text-violet-800' : tour.status === TOUR_STATUS_LOADED ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
-            {formatTourStatus(tour.status)}
-          </span>
-        </div>
-
-        <dl className='grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-3'>
-          {[
-            ['Référence', tour.reference],
-            ['Livreur', `${tour.delivererCode} — ${tour.delivererName}`],
-            ['Date prévue', formatTourDate(tour.plannedDate)],
-            ['Statut', formatTourStatus(tour.status)],
-            ['Créée par', tour.createdBy ?? 'Compte indisponible'],
-            ['Créée le', formatTourCreatedAt(tour.createdAt)],
-            ...([TOUR_STATUS_LOADED, TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED]
-              .includes(tour.status)
-              ? [
-                  ['Chargée par', tour.loadedBy ?? 'Compte indisponible'],
-                  ['Chargée le', formatTourCreatedAt(tour.loadedAt)],
-                ]
-              : []),
-            ...([TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status)
-              ? [
-                  ['Comptée par', tour.countedBy ?? 'Compte indisponible'],
-                  ['Comptée le', formatTourCreatedAt(tour.countedAt)],
-                ]
-              : []),
-            ...(tour.status === TOUR_STATUS_CLOSED
-              ? [
-                  ['Terminée par', tour.closedBy ?? 'Compte indisponible'],
-                  ['Terminée le', formatTourCreatedAt(tour.closedAt)],
-                ]
-              : []),
-            ...(tour.status === TOUR_STATUS_CANCELLED
-              ? [
-                  ['Annulée par', tour.cancelledBy ?? 'Compte indisponible'],
-                  ['Annulée le', formatTourCreatedAt(tour.cancelledAt)],
-                  ['Motif d’annulation', tour.cancellationReason],
-                ]
-              : []),
-          ].map(([label, value]) => (
-            <div className='min-w-0 bg-white px-5 py-4 sm:px-6' key={label}>
-              <dt className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                {label}
-              </dt>
-              <dd className='mt-1 break-words text-sm font-semibold text-slate-900'>
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </header>
-
-      {cancellationPreview && (
-        <TourCancellationConfirmation
-          preview={cancellationPreview}
-          tourId={tour.id}
-        />
-      )}
-
-      {canLoadTour
-        && tour.status === TOUR_STATUS_PREPARATION
-        && tour.lines.length > 0 && (
-        <TourLoadingConfirmation
-          preview={loadingPreview}
-          tourId={tour.id}
-        />
-      )}
-
-      {canAddTourProducts && tour.status === TOUR_STATUS_PREPARATION && (
-        <TourProductForm
-          existingProductIds={tour.lines.map((line) => line.productId)}
-          initialAdditionKey={randomUUID()}
-          products={products}
-          tourId={tour.id}
-        />
-      )}
-
-      {countingSheet && (
-        <TourCountingSheet
-          canConfirm={canConfirmCounting}
-          initialConfirmationKey={randomUUID()}
-          sheet={countingSheet}
-          tourId={tour.id}
-        />
-      )}
-
-      {paymentPreview && (
-        <TourPaymentPreview
-          canCreatePayment={canCreateCashPayment}
-          initialConfirmationKey={randomUUID()}
-          preview={paymentPreview}
-          tourId={tour.id}
-        />
-      )}
-
-      {expensePreview && (
-        <TourExpensePreview
-          canDeclareExpenses={canDeclareTourExpenses}
-          initialConfirmationKey={randomUUID()}
-          preview={expensePreview}
-          tourId={tour.id}
-        />
-      )}
-
-      {closurePreview && (
-        <TourClosingConfirmation
-          preview={closurePreview}
-          tourId={tour.id}
-        />
-      )}
-
-      {tour.lines.length > 0 ? (
-        <TourProductList
-          canReadPricing={canReadPricing}
-          canRelease={canReleaseTourProducts
-            && tour.status === TOUR_STATUS_PREPARATION}
-          cancelled={tour.status === TOUR_STATUS_CANCELLED}
-          lines={tour.lines}
-          loaded={[
-            TOUR_STATUS_LOADED,
-            TOUR_STATUS_COUNTED,
-            TOUR_STATUS_CLOSED,
-          ].includes(tour.status)}
-          tourId={tour.id}
-        />
-      ) : (
-        <section
-          aria-labelledby='tour-products-title'
-          className='mt-8 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm'
-        >
-          <h2 className='font-semibold text-slate-900' id='tour-products-title'>
-            Aucun produit ajouté à cette tournée
-          </h2>
-          <p className='mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600'>
-            La tournée ne contient encore aucune réservation de stock.
-          </p>
-        </section>
-      )}
-    </main>
-  );
+  return <TourDetail tourId={tour.id} returnHref={returnHref} defaultView={readTourView(query.vue, tour.status)} priority={priority}
+    header={<header>
+      {canReadDeliverer && <EditingLink className={styles.back} href={returnHref}>← Retour à la fiche livreur</EditingLink>}
+      <h1>{tour.reference}<span className={styles.badge}>{formatTourStatus(tour.status)}</span></h1>
+      <p>{tour.delivererCode} — {tour.delivererName} · Prévue le {formatTourDate(tour.plannedDate)}</p>
+    </header>}
+    shortcuts={[
+      { label: 'Chargement', state: cancelled ? 'Annulée' : preparation ? 'En préparation' : 'Confirmé', target: 'chargement', view: 'produits' },
+      { label: 'Comptage', state: counted ? 'Enregistré' : tour.status === TOUR_STATUS_LOADED ? 'À saisir' : cancelled ? 'Non réalisé' : 'Après chargement', target: 'comptage', view: 'operations' },
+      { label: 'Frais', state: expenseState === 'DECLARED' ? 'Déclarés' : expenseState === 'HISTORICAL_MISSING' ? 'Absence historique' : counted ? expenseState === 'MISSING' ? 'À déclarer' : 'Selon vos droits' : cancelled ? 'Non déclarés' : 'Après comptage', target: 'frais', view: 'operations' },
+      { label: 'Versements', state: Number.isSafeInteger(remaining) ? remaining === 0 ? 'Soldée' : 'Reste à encaisser' : counted ? 'Selon vos droits' : 'Après comptage', target: 'versements', view: 'operations' },
+    ]}
+    financial={<aside className={styles.financial} aria-label='Situation financière de cette tournée'>
+      <h2>Reste à payer</h2>
+      <p className={styles.due}>{!counted ? 'Disponible après comptage' : !canReadCash ? 'Lecture de caisse requise' : money(remaining)}</p>
+      {financial && <dl>{[
+        ['Ventes brutes', money(financial.grossSalesInCentimes)],
+        ['Frais déclarés', expenseState === 'DECLARED' ? money(financial.totalExpensesInCentimes) : expenseState === 'HISTORICAL_MISSING' ? 'Absence historique' : 'Non déclarés'],
+        ['Net à remettre', money(financial.netDueInCentimes)], ['Total encaissé', money(financial.amountPaidInCentimes)],
+      ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
+      <p>Montants enregistrés de cette tournée uniquement. Le solde global du livreur et le tiroir-caisse sont distincts.</p>
+    </aside>}
+    operations={<>
+      <TourOperationCard id='comptage' kind='counting' title='Comptage & retours'
+        summary={counted ? 'Comptage définitif · lecture seule' : `${tour.lines.length} références · retours physiques en unités de base`}
+        canEdit={Boolean(canCount)} editLabel={canConfirmCounting ? 'Saisir les retours' : 'Prévisualiser les retours'} operationProps={countingProps}>
+        {countingSheet?.recorded ? <details className={styles.read}><summary>Ventes brutes : {money(countingSheet.totalDueInCentimes)} · Voir le comptage</summary><TourCountingSheet {...countingProps} embedded /></details>
+          : <p className={styles.read}>{cancelled ? 'Tournée annulée · aucune saisie possible.' : preparation ? 'Confirmez le chargement pour saisir les retours.' : !canPrepareCounting ? 'La lecture du comptage nécessite les droits de préparation et de prix.' : countingSheet?.errors?.form ?? 'Saisissez chaque retour, y compris zéro. Le comptage enregistré sera définitif.'}</p>}
+      </TourOperationCard>
+      <TourOperationCard id='frais' kind='expenses' title='Frais de tournée' summary={cancelled ? 'Tournée annulée · lecture seule' : counted && !expenseState ? 'Lecture selon vos droits' : expenseState === 'DECLARED' ? 'Déclaration définitive · lecture seule' : expenseState === 'HISTORICAL_MISSING' ? 'Absence historique' : 'À déclarer · choix explicite avec ou sans frais'}
+        canEdit={Boolean(canDeclare)} editLabel='Déclarer les frais' operationProps={expenseProps}>
+        {expensePreview && (expensePreview.declaration || expensePreview.declarationStatus === 'HISTORICAL_MISSING' || expensePreview.errors?.form) ? <TourExpensePreview {...expenseProps} canDeclareExpenses={false} embedded /> : <p className={styles.read}>{!counted ? 'Disponible après comptage.' : canReadTourExpenses ? 'Non déclarés. Les encaissements restent possibles ; la déclaration est nécessaire pour clôturer.' : 'Les motifs détaillés nécessitent les droits de lecture des frais.'}</p>}
+      </TourOperationCard>
+      <TourOperationCard id='versements' kind='payment' title='Versements en espèces' summary={Number.isSafeInteger(remaining) && remaining === 0 ? 'Soldée · aucun reste à encaisser' : 'Enregistrer le montant réellement reçu'}
+        canEdit={canPay} editLabel='Encaisser' operationProps={paymentProps}>
+        {paymentPreview ? <TourPaymentPreview {...paymentProps} canCreatePayment={false} embedded /> : <p className={styles.read}>{!counted ? 'Disponible après comptage.' : 'La lecture des versements nécessite le droit de caisse.'}</p>}
+      </TourOperationCard>
+      <TourOperationCard id='cloture' kind='closing' title='Clôture opérationnelle' summary={tour.status === TOUR_STATUS_CLOSED ? 'Tournée terminée' : 'Comptage définitif et déclaration de frais requis'}
+        canEdit={Boolean(closurePreview && !closurePreview.errors?.form && !closurePreview.errors?.expenses && closurePreview.digest)} editLabel='Terminer la tournée' operationProps={{ preview: closurePreview, tourId: tour.id }}>
+        <p className={styles.read}>{tour.status === TOUR_STATUS_CLOSED ? 'Les versements restent possibles tant qu’un reste fiable est dû.' : cancelled ? 'Tournée annulée.' : !counted ? 'Le comptage doit être enregistré.' : expenseState === 'MISSING' ? 'Déclarez les frais, y compris explicitement « Aucun frais ».' : !canCloseTour ? 'Le droit de clôture est nécessaire.' : closurePreview?.errors?.form ?? 'La clôture est possible avec un reste à payer. Elle ne crée aucun encaissement.'}</p>
+      </TourOperationCard>
+    </>}
+    products={<>
+      <TourOperationCard id='chargement' kind='loading' title='Chargement' summary={cancelled ? 'Tournée annulée' : preparation ? 'Réservations · le stock physique reste disponible jusqu’au chargement' : 'Chargement confirmé · prix historiques figés'}
+        canEdit={Boolean(loadingPreview)} editLabel='Vérifier le chargement' operationProps={{ preview: loadingPreview, tourId: tour.id }}>
+        <p className={styles.read}>{preparation ? `${tour.lines.length} références réservées. Le chargement complet vérifie les quantités et les prix avant la sortie de stock.` : 'Les produits chargés ne sont plus modifiables. Leur valeur est distincte des ventes et du reste à payer.'}</p>
+      </TourOperationCard>
+      {canAddTourProducts && preparation && <TourOperationCard id='ajout-produit' kind='product' title='Réserver un produit' summary='Quantité directe ou conversion depuis un conditionnement'
+        canEdit editLabel='Ajouter un produit' operationProps={{ existingProductIds: tour.lines.map((line) => line.productId), initialAdditionKey: randomUUID(), products, tourId: tour.id }} />}
+      {tour.lines.length > 0 ? <TourProductList canReadPricing={canReadPricing} canRelease={canReleaseTourProducts && preparation} cancelled={cancelled} lines={tour.lines} loaded={!preparation && !cancelled} tourId={tour.id} tourReference={tour.reference} delivererName={tour.delivererName} />
+        : <p className={styles.trace}>Aucun produit réservé dans cette tournée.</p>}
+      {(cancellationPreview || cancelled) && <TourOperationCard id='annulation' kind='cancellation' title='Annulation de la tournée' summary={cancelled ? 'Tournée annulée · réservations libérées' : 'Libérer toutes les réservations avec un motif obligatoire'}
+        canEdit={Boolean(cancellationPreview)} editLabel='Annuler la tournée' operationProps={{ preview: cancellationPreview, tourId: tour.id }} />}
+    </>}
+    history={<section className={styles.trace}><h2>Traçabilité</h2><dl>{trace.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Indisponible'}</dd></div>)}</dl></section>}
+  />;
 };
 
 export default TourPage;

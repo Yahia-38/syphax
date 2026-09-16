@@ -1,0 +1,86 @@
+.page { max-width: 1240px; margin: auto; padding: 30px 28px 64px; color: #1a2940; font-size: 15px; }
+.hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.hero h1 { font-size: 27px; font-weight: 700; letter-spacing: -.7px; overflow-wrap: anywhere; }
+.hero p { color: #65758b; margin-top: 8px; }
+.back { display: inline-flex; color: #3154b6; font-weight: 600; margin-bottom: 18px; }
+.badge { display: inline-flex; border: 1px solid #dce4f1; border-radius: 30px; padding: 4px 10px; font-size: 12px; color: #52658a; background: #f1f5fb; margin-left: 12px; vertical-align: middle; }
+.primary { background: #3154d6; color: white; padding: 11px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.tabs { display: flex; gap: 26px; border-bottom: 1px solid #dce4ee; margin: 24px 0; flex-wrap: wrap; }
+.tabs a { padding: 12px 0; color: #65758b; font-weight: 600; border-bottom: 3px solid transparent; }
+.tabs a[aria-current] { color: #3154d6; border-color: #3154d6; }
+.shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
+.shortcuts button { display: grid; gap: 4px; text-align: left; background: white; border: 1px solid #e1e7ef; padding: 13px 16px; border-radius: 10px; cursor: pointer; }
+.shortcuts small { color: #65758b; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; gap: 22px; }
+.operations { display: grid; gap: 20px; min-width: 0; }
+.operation { min-width: 0; scroll-margin-top: 24px; }
+.card > div:first-child h2 { font-size: 16px; }
+.card > div:first-child p { font-size: 14px; line-height: 1.5; }
+.card > div:first-child button { font-size: 14px; }
+.operation[data-operation='counting'] .card { border-top: 3px solid #b5a4da; }
+.operation[data-operation='expenses'] .card { border-top: 3px solid #dec391; }
+.operation[data-operation='payment'] .card { border-top: 3px solid #9bcab4; }
+.operation[data-operation='cancellation'] .card > div:first-child button { color: #a7314f; }
+.read { padding: 18px 22px; color: #65758b; line-height: 1.6; }
+.read strong { color: #1a2940; }
+.financial { background: white; border: 1px solid #e1e7ef; border-radius: 12px; }
+.financial h2 { font-size: 15px; font-weight: 650; padding: 18px 20px 0; }
+.due { margin: 9px 20px 18px; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: #82591a; overflow-wrap: anywhere; }
+.financial dl { padding: 0 20px 12px; }
+.financial dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #edf0f5; font-size: 14px; }
+.financial dt { color: #65758b; }
+.financial dd { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.financial > p:last-child { border-top: 1px solid #edf0f5; padding: 14px 20px; font-size: 12px; line-height: 1.6; color: #65758b; }
+.trace { padding: 22px; background: white; border: 1px solid #e1e7ef; border-radius: 12px; }
+.trace h2 { font-size: 18px; font-weight: 650; margin-bottom: 14px; }
+.trace dl { display: grid; gap: 16px; }
+.trace dt { color: #65758b; font-size: 14px; }
+.trace dd { font-weight: 600; margin-top: 3px; overflow-wrap: anywhere; }
+.form { min-width: 0; }
+.cancelRow { padding: 15px 22px; display: flex; justify-content: space-between; gap: 10px; align-items: center; border-top: 1px solid #edf0f5; background: #fafcff; border-radius: 0 0 12px 12px; }
+.cancelRow small { color: #65758b; }
+.cancelRow button { border: 1px solid #dce4ee; padding: 8px 12px; border-radius: 8px; background: white; cursor: pointer; }
+.cancelRow button:disabled { opacity: .5; cursor: wait; }
+.page button:focus-visible, .page a:focus-visible, .page summary:focus-visible { outline: 3px solid #6a86ee; outline-offset: 3px; }
+.page :global(.tour-embedded) { background: white; border-radius: 0 0 12px 12px; }
+.page :global(.tour-embedded) dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.page :global(.tour-embedded) dl dd { font-size: 18px; }
+.page :global(.tour-embedded) button[type='submit'] { background: #3154d6; }
+.page :global(.tour-embedded) > div:has(> form) { flex-direction: column; align-items: stretch; }
+.page :global(.tour-counting-line) { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 3fr); gap: 12px; align-items: center; }
+.page :global(.tour-counting-quantities) { margin-top: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.page :global(.tour-counting-quantities) > div { padding: 0; border: 0; background: transparent; border-radius: 0; }
+.page :global(.tour-counting-quantities) > div:nth-child(4) { grid-column: 1 / -1; grid-row: 2; }
+.page :global(.tour-counting-quantities) > div:nth-child(4) p { display: inline; font-size: 12px; }
+.page :global(.tour-counting-quantities) p { font-size: 14px; }
+.page :global(.tour-counting-quantities) label { font-size: 11px; }
+.page :global(.tour-counting-line) > p { grid-column: 1 / -1; }
+.page :global(.tour-expense-line) { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 12px; padding: 0; border: 0; background: white; }
+.page :global(.tour-expense-line) > div { display: contents; }
+.page :global(.tour-expense-line) h4 { display: none; }
+.page :global(.tour-expense-line) > div:first-child > button { grid-column: 3; grid-row: 1; align-self: start; margin-top: 25px; }
+.page :global(.tour-expense-line) > div:nth-child(2) > div:first-child { grid-column: 1; grid-row: 1; }
+.page :global(.tour-expense-line) > div:nth-child(2) > div:nth-child(2) { grid-column: 2; grid-row: 1; }
+.page :global(.tour-counting-quantities) > div:nth-child(4) p:first-child { margin-right: 4px; font-weight: 500; text-transform: none; }
+@media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr) 250px; } .page :global(.tour-counting-line) { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .page { padding: 22px 16px 48px; }
+  .hero h1 { font-size: 23px; }
+  .primary { width: 100%; }
+  .tabs { gap: 16px; font-size: 14px; }
+  .shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .financial { grid-row: 1; }
+  .financial dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 15px; }
+  .financial dl > div { display: block; }
+  .financial dd { text-align: left; margin-top: 5px; }
+  .due { font-size: 25px; }
+  .page :global(.tour-counting-quantities) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page :global(.tour-counting-quantities) > div:nth-child(4) { grid-row: 3; }
+  .read { padding: 16px; }
+  .page :global(.tour-expense-line) { grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; }
+  .page :global(.tour-expense-line) > div:first-child > button { padding: 8px 2px; }
+  .page :global(.tour-expense-line) label { font-size: 12px; }
+
+}
+@media (prefers-reduced-motion: reduce) { .page * { transition: none !important; scroll-behavior: auto !important; } }

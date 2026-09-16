@@ -8,7 +8,7 @@ import ConfirmationDialog from '../confirmation-dialog.js';
 
 const EditingContext = createContext(null);
 
-export const EditingSessionProvider = ({ children, creation = false }) => {
+export const EditingSessionProvider = ({ children, creation = false, protectNavigation = false, operation = false }) => {
   const sessionRef = useRef(null);
   const dialogRef = useRef(null);
   const destinationRef = useRef(null);
@@ -40,7 +40,7 @@ export const EditingSessionProvider = ({ children, creation = false }) => {
   }, []);
 
   useEffect(() => {
-    if (!creation) return;
+    if (!creation && !protectNavigation) return;
     // Include the existing application navbar, outside this provider's subtree.
     const onClick = (event) => {
       const link = event.target.closest?.('a[href]');
@@ -54,7 +54,7 @@ export const EditingSessionProvider = ({ children, creation = false }) => {
     };
     document.addEventListener('click', onClick, true);
     return () => document.removeEventListener('click', onClick, true);
-  }, [creation, request, router]);
+  }, [creation, protectNavigation, request, router]);
 
   useEffect(() => {
     const previous = historyRef.current;
@@ -76,7 +76,7 @@ export const EditingSessionProvider = ({ children, creation = false }) => {
       }
       const session = sessionRef.current;
       if (!session?.dirty && !session?.pending) return;
-      if (window.location.pathname !== pathname) return;
+      if (!operation && window.location.pathname !== pathname) return;
       const destination = `${window.location.pathname}${window.location.search}`;
       const targetIndex = event.state?.syphaxEditingIndex;
       // Only traverse entries belonging to this editing zone; older external
@@ -93,17 +93,30 @@ export const EditingSessionProvider = ({ children, creation = false }) => {
     };
     window.addEventListener('popstate', onPopState, true);
     return () => window.removeEventListener('popstate', onPopState, true);
-  }, [pathname, request]);
+  }, [operation, pathname, request]);
+
+  useEffect(() => {
+    if (!operation) return;
+    const onBeforeUnload = (event) => {
+      if (!sessionRef.current?.dirty && !sessionRef.current?.pending) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [operation]);
 
   return (
     <EditingContext.Provider value={{ register, request, router }}>
       {children}
       <ConfirmationDialog
-        cancelLabel={creation ? 'Continuer la saisie' : 'Continuer la modification'}
-        confirmLabel={creation ? 'Quitter sans créer' : 'Quitter sans enregistrer'}
+        cancelLabel={operation ? 'Continuer la saisie' : creation ? 'Continuer la saisie' : 'Continuer la modification'}
+        confirmLabel={operation ? 'Abandonner' : creation ? 'Quitter sans créer' : 'Quitter sans enregistrer'}
         confirmType='button'
         dialogRef={dialogRef}
         onClose={() => {
+          // A queued close event can arrive after the dialog was opened again.
+          if (dialogRef.current?.open) return;
           destinationRef.current = null;
           triggerRef.current?.focus();
         }}
@@ -115,7 +128,7 @@ export const EditingSessionProvider = ({ children, creation = false }) => {
           dialogRef.current?.close();
           proceed?.();
         }}
-        title={creation ? 'Abandonner la création ?' : 'Quitter la modification ?'}
+        title={operation ? 'Abandonner la saisie ?' : creation ? 'Abandonner la création ?' : 'Quitter la modification ?'}
       >
         <p>{creation ? 'Les informations saisies ne sont pas enregistrées. Aucun produit ne sera créé.' : 'Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.'}</p>
       </ConfirmationDialog>

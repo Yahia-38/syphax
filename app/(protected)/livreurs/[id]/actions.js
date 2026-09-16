@@ -25,6 +25,10 @@ const readTextField = (formData, name) => {
 };
 
 const buildDelivererHref = (delivererId, returnHref) => {
+  if (typeof returnHref === 'string' && returnHref.startsWith(`/livreurs/${delivererId}?`)) {
+    return validateTourReturnHref(returnHref, delivererId);
+  }
+
   const parameters = new URLSearchParams({
     retour: validateDelivererListHref(returnHref),
   });
@@ -191,7 +195,7 @@ export const updateDeliverer = async (
 
   revalidatePath('/livreurs');
   revalidatePath(`/livreurs/${delivererId}`);
-  redirect(buildDelivererHref(delivererId, returnHref));
+  return { errors: {}, revision, values, message: 'L’identification du livreur a été mise à jour.' };
 };
 
 export const updateDelivererCreditLimit = async (

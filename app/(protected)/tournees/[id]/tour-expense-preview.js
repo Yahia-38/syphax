@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useRef, useState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+
+import { useRef, useState } from 'react';
 
 import ConfirmationDialog, {
   useFormConfirmation,
@@ -70,9 +72,10 @@ const TourExpensePreview = ({
   initialConfirmationKey,
   preview,
   tourId,
+  embedded = false,
 }) => {
   const declareCurrentExpenses = declareTourExpenses.bind(null, tourId);
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     declareCurrentExpenses,
     INITIAL_STATE,
   );
@@ -95,6 +98,7 @@ const TourExpensePreview = ({
     grossSalesInCentimes: preview.grossSalesInCentimes,
     totalPaidInCentimes: preview.totalPaidInCentimes,
   });
+  useTourDraft({ choice, expenses });
   const declaration = preview.declaration;
   const confirmationKey = state.confirmationKey ?? initialConfirmationKey;
   const normalizedLineQuery = lineQuery.trim().toLocaleLowerCase('fr');
@@ -116,8 +120,8 @@ const TourExpensePreview = ({
 
   if (preview.errors?.form) {
     return (
-      <section className='mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm sm:p-6'>
-        <p className='font-semibold text-red-800' role='alert'>
+      <section className={embedded ? 'tour-embedded p-5' : 'mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'}>
+        <p className='font-semibold text-red-800' role='alert' tabIndex={-1}>
           {preview.errors.form}
         </p>
       </section>
@@ -128,6 +132,7 @@ const TourExpensePreview = ({
     const id = nextLineIdRef.current;
     nextLineIdRef.current += 1;
     setExpenses((current) => [...current, createExpenseLine(id)]);
+    requestAnimationFrame(() => document.getElementById(`expense-${id}-reason`)?.focus());
   };
 
   const updateExpense = (id, field, value) => {
@@ -174,10 +179,10 @@ const TourExpensePreview = ({
 
   return (
     <section
-      aria-labelledby='tour-expenses-title'
-      className='mt-8 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 shadow-sm'
+      aria-labelledby={embedded ? undefined : 'tour-expenses-title'} aria-label={embedded ? 'Frais de tournée' : undefined}
+      className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}
     >
-      <div className='p-5 sm:p-6'>
+      {!embedded && <div className='p-5 sm:p-6'>
         <p className='text-xs font-semibold uppercase tracking-wide text-amber-800'>
           Situation financière
         </p>
@@ -188,11 +193,11 @@ const TourExpensePreview = ({
           Les frais diminuent le net à remettre sans modifier les ventes
           brutes, le stock, les retours ni le solde de caisse.
         </p>
-      </div>
+      </div>}
 
       {declaration ? (
         <>
-          <FinancialSummary values={summaryValues} />
+          <p className='px-5 pt-4 font-semibold tabular-nums'>{declaration.choice === TOUR_EXPENSE_CHOICE_NONE ? 'Aucun frais' : formatReceptionMoney(declaration.totalExpensesInCentimes)}</p>
           <div className='border-t border-amber-200 bg-white p-5 sm:p-6'>
             <div className='rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950'>
               <p className='font-semibold'>
@@ -284,13 +289,7 @@ const TourExpensePreview = ({
         </>
       ) : preview.declarationStatus === 'HISTORICAL_MISSING' ? (
         <>
-          <FinancialSummary values={[
-            ['Ventes brutes', preview.grossSalesInCentimes],
-            ['Frais', 0],
-            ['Net historique', preview.netDueInCentimes],
-            ['Total encaissé', preview.totalPaidInCentimes],
-            ['Reste à payer', preview.remainingDueInCentimes],
-          ]} />
+          <p className='px-5 pt-4 font-semibold'>Absence historique</p>
           <p className='border-t border-amber-200 bg-white px-5 py-5 text-sm leading-6 text-amber-950 sm:px-6'>
             Cette tournée a été clôturée avant l’introduction des déclarations
             de frais. Aucune déclaration rétroactive n’a été créée ; ses
@@ -322,6 +321,8 @@ const TourExpensePreview = ({
 
             if (!calculation.complete) {
               event.preventDefault();
+              const form = event.currentTarget;
+              requestAnimationFrame(() => form?.querySelector('[aria-invalid="true"], [role="alert"]')?.focus());
               return;
             }
 
@@ -334,7 +335,7 @@ const TourExpensePreview = ({
             Les encaissements restent possibles avant cette déclaration.
           </p>
 
-          <fieldset disabled={pending}>
+          <fieldset disabled={pending} aria-invalid={previewAttempted && Boolean(calculation.choiceError)} aria-describedby={previewAttempted && calculation.choiceError ? 'expense-choice-error' : undefined}>
             <legend className='text-sm font-semibold text-slate-900'>
               Frais pour cette tournée
             </legend>
@@ -362,7 +363,7 @@ const TourExpensePreview = ({
           </fieldset>
 
           {previewAttempted && calculation.choiceError && (
-            <p className='mt-3 text-sm font-semibold text-red-700' role='alert'>
+            <p id='expense-choice-error' className='mt-3 text-sm font-semibold text-red-700' role='alert' tabIndex={-1}>
               {calculation.choiceError}
             </p>
           )}
@@ -392,7 +393,7 @@ const TourExpensePreview = ({
                     : null;
 
                   return (
-                    <article className='rounded-xl border border-slate-200 bg-slate-50 p-4' key={line.id}>
+                    <article className='tour-expense-line rounded-xl border border-slate-200 bg-slate-50 p-4' key={line.id}>
                       <div className='flex items-center justify-between gap-3'>
                         <h4 className='font-semibold text-slate-900'>
                           Frais {index + 1}
@@ -434,7 +435,7 @@ const TourExpensePreview = ({
                             value={expense.reason}
                           />
                           {reasonError && (
-                            <p className='mt-1.5 text-sm font-medium text-red-700' id={`${line.id}-reason-error`} role='alert'>
+                            <p className='mt-1.5 text-sm font-medium text-red-700' id={`${line.id}-reason-error`} role='alert' tabIndex={-1}>
                               {reasonError}
                             </p>
                           )}
@@ -465,7 +466,7 @@ const TourExpensePreview = ({
                             value={expense.amount}
                           />
                           {amountError && (
-                            <p className='mt-1.5 text-sm font-medium text-red-700' id={`${line.id}-amount-error`} role='alert'>
+                            <p className='mt-1.5 text-sm font-medium text-red-700' id={`${line.id}-amount-error`} role='alert' tabIndex={-1}>
                               {amountError}
                             </p>
                           )}
@@ -479,17 +480,18 @@ const TourExpensePreview = ({
           )}
 
           {calculation.financialError && (
-            <p className='mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800' role='alert'>
+            <p className='mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800' role='alert' tabIndex={-1}>
               {calculation.financialError}
             </p>
           )}
 
-          <div className='mt-6 overflow-hidden rounded-xl border border-slate-200'>
+          <p className='mt-5 text-sm font-semibold text-blue-800'>Prévisualisation</p>
+          <div className='mt-2 overflow-hidden rounded-xl border border-slate-200'>
             <FinancialSummary values={summaryValues} />
           </div>
 
           {state.errors.form && (
-            <p className='mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800' role='alert'>
+            <p className='mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800' role='alert' tabIndex={-1}>
               {state.errors.form}
               {state.stale
                 ? ' Les montants affichés ont été actualisés ; vérifiez-les puis confirmez à nouveau.'
@@ -512,7 +514,7 @@ const TourExpensePreview = ({
               disabled={pending}
               type='submit'
             >
-              {pending ? 'Enregistrement…' : 'Enregistrer la déclaration'}
+              {pending ? 'Enregistrement…' : 'Vérifier la déclaration'}
             </button>
           </div>
 
@@ -542,6 +544,7 @@ const TourExpensePreview = ({
                 </div>
               ))}
             </dl>
+            <p className='font-semibold'>{choice === TOUR_EXPENSE_CHOICE_NONE ? 'Aucun frais : déclaration explicite à zéro.' : `${expenses.length} lignes de frais déclarées.`}</p>
             <p className='font-semibold text-amber-900'>
               Cette déclaration est définitive et ne pourra être ni modifiée ni supprimée dans cet incrément.
             </p>

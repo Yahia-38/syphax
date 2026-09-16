@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+
+import { useMemo, useState } from 'react';
 
 import ConfirmationDialog, {
   useFormConfirmation,
@@ -22,9 +24,9 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const TourLoadingConfirmation = ({ preview, tourId }) => {
+const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
   const loadCurrentTour = loadTour.bind(null, tourId);
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     loadCurrentTour,
     INITIAL_STATE,
   );
@@ -34,6 +36,7 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
     requestConfirmation,
     restoreTriggerFocus,
   } = useFormConfirmation();
+  useTourDraft({});
   const [query, setQuery] = useState('');
   const [unit, setUnit] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,18 +68,18 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
   const unavailable = Boolean(preview?.errors?.form || !preview?.digest);
 
   return (
-    <section className='mt-8 overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 shadow-sm'>
-      <div className='p-5 sm:p-6'>
+    <section className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}>
+      {!embedded && <div className='p-5 sm:p-6'>
         <h2 className='font-semibold text-slate-900'>Chargement complet</h2>
         <p className='mt-1 max-w-3xl text-sm leading-6 text-slate-700'>
           Vérifiez les quantités et les prix de vente TTC avant de confirmer.
           La valeur présentée décrit les marchandises chargées ; elle ne
           constitue ni une vente définitive, ni une dette, ni un encaissement.
         </p>
-      </div>
+      </div>}
 
       {preview?.errors?.form ? (
-        <p className='mx-5 mb-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:mx-6 sm:mb-6' role='alert'>
+        <p className='mx-5 mb-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:mx-6 sm:mb-6' role='alert' tabIndex={-1}>
           {preview.errors.form}
         </p>
       ) : (
@@ -257,7 +260,7 @@ const TourLoadingConfirmation = ({ preview, tourId }) => {
       )}
 
       {state.errors.form && (
-        <p className='mx-5 mb-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:mx-6 sm:mb-6' role='alert'>
+        <p className='mx-5 mb-5 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800 sm:mx-6 sm:mb-6' role='alert' tabIndex={-1}>
           {state.errors.form}
         </p>
       )}

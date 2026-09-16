@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+
+import { useMemo, useState } from 'react';
 
 import { addTourProduct } from './actions.js';
 
@@ -37,6 +39,7 @@ const TourProductForm = ({
   initialAdditionKey,
   products,
   tourId,
+  embedded = false,
 }) => {
   const addProductToTour = addTourProduct.bind(null, tourId);
   const [additionKey, setAdditionKey] = useState(initialAdditionKey);
@@ -63,10 +66,11 @@ const TourProductForm = ({
 
     return nextState;
   };
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     runProductAdd,
     INITIAL_STATE,
   );
+  useTourDraft({ productId, quantityMode, directQuantity, packagingId, packagingCount });
   const existingProducts = useMemo(
     () => new Set(existingProductIds),
     [existingProductIds],
@@ -119,10 +123,10 @@ const TourProductForm = ({
 
   return (
     <section
-      aria-labelledby='add-tour-product-title'
-      className='mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'
+      aria-labelledby={embedded ? undefined : 'add-tour-product-title'} aria-label={embedded ? 'Réserver un produit' : undefined}
+      className={embedded ? 'tour-embedded' : 'mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm'}
     >
-      <div className='border-b border-slate-200 p-5 sm:p-6'>
+      {!embedded && <div className='border-b border-slate-200 p-5 sm:p-6'>
         <h2
           className='text-lg font-semibold text-slate-900'
           id='add-tour-product-title'
@@ -132,7 +136,7 @@ const TourProductForm = ({
         <p className='mt-1 text-sm leading-6 text-slate-600'>
           La quantité est réservée immédiatement sans créer de mouvement de stock.
         </p>
-      </div>
+      </div>}
 
       <form action={formAction} className='space-y-6 p-5 sm:p-6'>
         <input name='additionKey' type='hidden' value={additionKey} />
@@ -141,7 +145,7 @@ const TourProductForm = ({
         {state.errors.form && (
           <p
             className='rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-            role='alert'
+            role='alert' tabIndex={-1}
           >
             {state.errors.form}
           </p>
@@ -433,7 +437,7 @@ const TourProductForm = ({
               : formatQuantity(safeTotalQuantity)} {lowerBaseUnit}
           </p>
           {state.errors.quantity && (
-            <p className='mt-2 text-sm text-red-700' role='alert'>
+            <p className='mt-2 text-sm text-red-700' role='alert' tabIndex={-1}>
               {state.errors.quantity}
             </p>
           )}

@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useMemo, useState } from 'react';
+import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+
+import { useMemo, useState } from 'react';
 
 import ConfirmationDialog, {
   useFormConfirmation,
@@ -23,9 +25,9 @@ const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
   maximumFractionDigits: 0,
 }).format(quantity);
 
-const TourCancellationConfirmation = ({ preview, tourId }) => {
+const TourCancellationConfirmation = ({ preview, tourId, embedded = false }) => {
   const cancelSelectedTour = cancelCurrentTour.bind(null, tourId);
-  const [state, formAction, pending] = useActionState(
+  const [state, formAction, pending] = useTourActionState(
     cancelSelectedTour,
     INITIAL_STATE,
   );
@@ -36,6 +38,7 @@ const TourCancellationConfirmation = ({ preview, tourId }) => {
     restoreTriggerFocus,
   } = useFormConfirmation();
   const [reason, setReason] = useState('');
+  useTourDraft({ reason });
   const [query, setQuery] = useState('');
   const [unit, setUnit] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -67,17 +70,39 @@ const TourCancellationConfirmation = ({ preview, tourId }) => {
   const unavailable = Boolean(preview?.errors?.form || !preview?.digest);
 
   return (
-    <section className='mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm sm:p-6'>
+    <section className={embedded ? 'tour-embedded p-5' : 'mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'}>
       <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
-        <div>
+        {!embedded && <div>
           <h2 className='font-semibold text-slate-900'>Annulation</h2>
           <p className='mt-1 max-w-3xl text-sm leading-6 text-slate-700'>
             Annulez cette tournée en préparation et libérez toutes ses
             réservations actives sans modifier le stock physique.
           </p>
-        </div>
+        </div>}
 
-        <form action={formAction} onSubmit={requestConfirmation}>
+        <form action={formAction} className='w-full' onSubmit={requestConfirmation}>
+            <div>
+              <label
+                className='font-semibold text-slate-900'
+                htmlFor='cancellation-reason'
+              >
+                Motif d’annulation
+              </label>
+              <textarea
+                aria-invalid={Boolean(state.errors.reason)} aria-describedby={state.errors.reason ? 'cancellation-reason-error' : undefined} disabled={pending} className='mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100'
+                id='cancellation-reason'
+                maxLength={500}
+                name='cancellationReason'
+                onChange={(event) => setReason(event.target.value)}
+                placeholder='Expliquez pourquoi cette tournée est annulée'
+                required
+                rows={3}
+                value={reason}
+              />
+            </div>
+
+          {state.errors.reason && <p id='cancellation-reason-error' role='alert' tabIndex={-1}>{state.errors.reason}</p>}
+
           <input
             name='cancellationDigest'
             type='hidden'
@@ -213,36 +238,18 @@ const TourCancellationConfirmation = ({ preview, tourId }) => {
               </p>
             )}
 
-            <div>
-              <label
-                className='font-semibold text-slate-900'
-                htmlFor='cancellation-reason'
-              >
-                Motif d’annulation
-              </label>
-              <textarea
-                className='mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100'
-                id='cancellation-reason'
-                maxLength={500}
-                name='cancellationReason'
-                onChange={(event) => setReason(event.target.value)}
-                placeholder='Expliquez pourquoi cette tournée est annulée'
-                required
-                rows={3}
-                value={reason}
-              />
-            </div>
+            <p className='whitespace-pre-wrap'><strong>Motif :</strong> {reason}</p>
           </ConfirmationDialog>
         </form>
       </div>
 
       {preview?.errors?.form && (
-        <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert'>
+        <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>
           {preview.errors.form}
         </p>
       )}
       {(state.errors.form || state.errors.reason) && (
-        <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert'>
+        <p className='mt-4 rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-800' role='alert' tabIndex={-1}>
           {state.errors.form ?? state.errors.reason}
         </p>
       )}
