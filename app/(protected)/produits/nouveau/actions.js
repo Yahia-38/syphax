@@ -18,13 +18,15 @@ export const createProduct = async (previousState, formData) => {
     baseUnit: readTextField(formData, 'baseUnit'),
     label: readTextField(formData, 'label'),
     quantity: readTextField(formData, 'quantity'),
+    usage: readTextField(formData, 'usage'),
   };
   const packagingFlag = readTextField(formData, 'withPackaging');
   values.withPackaging = packagingFlag === 'true'
-    || (packagingFlag !== 'false' && Boolean(values.label.trim() || values.quantity.trim()));
+    || (packagingFlag !== 'false' && Boolean(values.label.trim() || values.quantity.trim() || values.usage.trim()));
   if (!values.withPackaging) {
     values.label = '';
     values.quantity = '';
+    values.usage = '';
   }
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
@@ -46,6 +48,7 @@ export const createProduct = async (previousState, formData) => {
       packaging: values.withPackaging ? {
         label: values.label,
         quantity: values.quantity,
+        usage: values.usage,
       } : undefined,
       createdBy: session.userId,
     });

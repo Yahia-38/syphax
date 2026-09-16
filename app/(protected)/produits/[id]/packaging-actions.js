@@ -23,6 +23,7 @@ export const addProductPackaging = async (
   const values = {
     label: readTextField(formData, 'label'),
     quantity: readTextField(formData, 'quantity'),
+    usage: readTextField(formData, 'usage'),
   };
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
@@ -55,7 +56,7 @@ export const addProductPackaging = async (
       errors: {},
       message: `Le conditionnement ${result.packaging.label} a été ajouté.`,
       revision,
-      values: { label: '', quantity: '' },
+      values: { label: '', quantity: '', usage: '' },
     };
   } catch (error) {
     console.error('Échec de l’ajout du conditionnement :', error);

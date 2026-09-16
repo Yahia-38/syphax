@@ -33,7 +33,7 @@ const DelivererList = ({
   const filtering = status !== 'active';
   const returnHref = buildDelivererListHref({ page, query, status });
   const getDelivererHref = (delivererId) => {
-    const parameters = new URLSearchParams({ retour: returnHref });
+    const parameters = new URLSearchParams({ section: 'tournees', retour: returnHref });
 
     return `/livreurs/${delivererId}?${parameters.toString()}`;
   };
@@ -140,10 +140,10 @@ const DelivererList = ({
             </thead>
             <tbody className='divide-y divide-slate-100 bg-white'>
               {deliverers.map((deliverer) => (
-                <tr className='hover:bg-slate-50' key={deliverer.id}>
+                <tr className='relative cursor-pointer hover:bg-slate-50 focus-within:bg-slate-50' key={deliverer.id}>
                   <td className='break-all px-4 py-3 font-mono text-[13px] font-semibold text-slate-900 sm:px-6'>
                     <Link
-                      className='text-blue-800 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+                      className='text-blue-800 after:absolute after:inset-0 hover:text-blue-950 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
                       href={getDelivererHref(deliverer.id)}
                     >
                       {deliverer.code}

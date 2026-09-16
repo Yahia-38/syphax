@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { getPackagingUsageLabel, PACKAGING_USAGES } from '../../../../lib/product-packaging.js';
 
 import { EditingButtons, useInlineSave } from '../../components/editable-card.js';
 import { EditingLink, useEditingSession } from '../../components/editing-session.js';
@@ -9,7 +10,7 @@ import ProductFields, { PRODUCT_INPUT_CLASS } from '../product-fields.js';
 import { createProduct } from './actions.js';
 import styles from './product-form.module.css';
 
-const EMPTY_VALUES = { code: '', designation: '', baseUnit: '', label: '', quantity: '', withPackaging: false };
+const EMPTY_VALUES = { code: '', designation: '', baseUnit: '', label: '', quantity: '', usage: '', withPackaging: false };
 const INITIAL_STATE = { errors: {}, message: null, revision: 0, values: EMPTY_VALUES };
 const pluralUnit = (baseUnits, code) => {
   const label = baseUnits.find((unit) => unit.code === code)?.label;
@@ -48,6 +49,7 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
   if (!values.withPackaging || clearedPackagingRevision === state.revision) {
     delete errors.label;
     delete errors.quantity;
+    delete errors.usage;
   }
   const fieldErrors = Object.entries(errors).filter(([name]) => name !== 'form');
   useLayoutEffect(() => register(activeRef.current), [register]);
@@ -58,7 +60,7 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
     setValues(next);
   };
   const togglePackaging = (enabled) => {
-    const next = { ...valuesRef.current, withPackaging: enabled, ...(!enabled ? { label: '', quantity: '' } : {}) };
+    const next = { ...valuesRef.current, withPackaging: enabled, ...(!enabled ? { label: '', quantity: '', usage: '' } : {}) };
     valuesRef.current = next;
     activeRef.current.dirty = Object.entries(next).some(([key, entry]) => entry !== EMPTY_VALUES[key]);
     setValues(next);
@@ -118,6 +120,16 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
                       {errors[name] && <p className='mt-2 text-sm text-red-700' id={`packaging-${name}-error`}>{errors[name]}</p>}
                     </div>
                   ))}
+                  <div>
+                    <label className='block text-sm font-medium text-slate-700' htmlFor='packaging-usage'>Usage <span className={styles.required}>(obligatoire)</span></label>
+                    <select aria-describedby={errors.usage ? 'packaging-usage-error' : undefined} aria-invalid={Boolean(errors.usage)}
+                      className={PRODUCT_INPUT_CLASS} id='packaging-usage' name='usage' required value={values.usage}
+                      onChange={(event) => change('usage', event.target.value)}>
+                      <option value=''>Sélectionnez un usage</option>
+                      {PACKAGING_USAGES.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
+                    </select>
+                    {errors.usage && <p className='mt-2 text-sm text-red-700' id='packaging-usage-error'>{errors.usage}</p>}
+                  </div>
                 </div>
                 <ConversionPreview text={conversionText(baseUnits, values)} />
               </div>
@@ -133,7 +145,7 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
           <h2 className={!values.designation.trim() ? styles.placeholder : ''}>{values.designation.trim() || 'Désignation du produit'}</h2>
           <div className={styles.previewMeta}><code className={!values.code.trim() ? styles.placeholder : ''}>{values.code.trim().toLocaleUpperCase('fr') || 'Code à renseigner'}</code><span>{baseUnits.find((unit) => unit.code === values.baseUnit)?.label || 'Unité à choisir'}</span></div>
           <dl className={styles.previewDetails}><div><dt>Prix de vente</dt><dd>À renseigner ensuite</dd></div><div><dt>Stock initial</dt><dd>Aucun stock ajouté</dd></div></dl>
-          {values.withPackaging && <p className={styles.conversion}>{conversionText(baseUnits, values)}</p>}
+          {values.withPackaging && <p className={styles.conversion}>{conversionText(baseUnits, values)} · {getPackagingUsageLabel(values.usage)}</p>}
         </section>
         <div className={styles.nextSteps}>
           <h3>Après la création</h3>
@@ -171,7 +183,7 @@ const ProductForm = ({ baseUnits, canReadProducts }) => {
         <section className={`${styles.card} ${styles.success}`}>
           <header className={styles.successHeader}><span><ProductIcon name='check' /></span><h1 ref={successRef} tabIndex={-1}>Produit créé</h1><p>{created.designation}</p></header>
           <div className={styles.cardBody}>
-            <dl className={styles.recap}><div><dt>Code produit</dt><dd><code>{created.code}</code></dd></div><div><dt>Unité de base</dt><dd>{baseUnits.find((unit) => unit.code === created.baseUnit)?.label}</dd></div><div><dt>Conditionnement</dt><dd>{created.packaging ? conversionText(baseUnits, { ...created, ...created.packaging }) : 'Aucun pour le moment'}</dd></div></dl>
+            <dl className={styles.recap}><div><dt>Code produit</dt><dd><code>{created.code}</code></dd></div><div><dt>Unité de base</dt><dd>{baseUnits.find((unit) => unit.code === created.baseUnit)?.label}</dd></div><div><dt>Conditionnement</dt><dd>{created.packaging ? `${conversionText(baseUnits, { ...created, ...created.packaging })} · ${getPackagingUsageLabel(created.packaging.usage)}` : 'Aucun pour le moment'}</dd></div></dl>
             <p className={styles.successNote}>Le produit a été ajouté au catalogue. Aucun stock ni prix n’a été ajouté.</p>
             {!canReadProducts && <p className={styles.successNote}>La consultation de la fiche nécessite un droit de lecture.</p>}
             <div className={styles.successActions}>

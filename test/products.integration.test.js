@@ -473,11 +473,13 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
     productId: product.product.id,
     label: '  Pack de 6  ',
     quantity: '6',
+    usage: 'SALE',
     createdBy: authorId.toString(),
   });
 
   assert.equal(result.packaging.label, 'Pack de 6');
   assert.equal(result.packaging.quantity, 6);
+  assert.equal(result.packaging.usage, 'SALE');
 
   const storedProduct = await database.collection('products').findOne({
     _id: new ObjectId(product.product.id),
@@ -487,6 +489,7 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
   assert.ok(packaging._id instanceof ObjectId);
   assert.equal(packaging.label, 'Pack de 6');
   assert.equal(packaging.quantity, 6);
+  assert.equal(packaging.usage, 'SALE');
   assert.ok(packaging.createdAt instanceof Date);
   assert.ok(packaging.createdBy.equals(authorId));
   assert.deepEqual((await getProductById(product.product.id)).packagings, [
@@ -494,6 +497,7 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
       id: packaging._id.toString(),
       label: 'Pack de 6',
       quantity: 6,
+      usage: 'SALE',
     },
   ]);
   const catalogProduct = (await listProducts({ includePackagings: true }))
@@ -506,6 +510,7 @@ test('ajoute un conditionnement à un produit avec sa traçabilité', async () =
       id: packaging._id.toString(),
       label: 'Pack de 6',
       quantity: 6,
+      usage: 'SALE',
     },
   ]);
   assert.equal('packagings' in catalogProductWithoutPackagings, false);
@@ -523,12 +528,14 @@ test('retire uniquement le conditionnement demandé', async () => {
     productId: product.product.id,
     label: 'Pack de 6',
     quantity: '6',
+    usage: 'SALE',
     createdBy: authorId.toString(),
   });
   const secondPackaging = await addProductPackaging({
     productId: product.product.id,
     label: 'Carton de 24',
     quantity: '24',
+    usage: 'RECEPTION',
     createdBy: authorId.toString(),
   });
 
@@ -544,6 +551,7 @@ test('retire uniquement le conditionnement demandé', async () => {
       id: secondPackaging.packaging.id,
       label: 'Carton de 24',
       quantity: 24,
+      usage: 'RECEPTION',
     },
   ]);
   assert.deepEqual(
@@ -555,6 +563,19 @@ test('retire uniquement le conditionnement demandé', async () => {
   );
 });
 
+test('lit les anciens conditionnements sans leur attribuer un usage', async () => {
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  await database.collection('products').insertOne({
+    _id: productId, code: 'PACK-USAGE-ANCIEN', designation: 'Produit ancien', baseUnit: 'PIECE',
+    packagings: [{ _id: packagingId, label: 'Palette', quantity: 240 }],
+  });
+  assert.equal((await getProductById(productId.toString())).packagings[0].usage, null);
+  const catalog = await listProducts({ includePackagings: true });
+  assert.equal(catalog.find(({ id }) => id === productId.toString()).packagings[0].usage, null);
+  assert.equal((await database.collection('products').findOne({ _id: productId })).packagings[0].usage, undefined);
+});
+
 test('crée un produit avec un conditionnement initial facultatif', async () => {
   const authorId = new ObjectId();
   const result = await createProduct({
@@ -564,6 +585,7 @@ test('crée un produit avec un conditionnement initial facultatif', async () => 
     packaging: {
       label: 'Carton de 24',
       quantity: '24',
+      usage: 'BOTH',
     },
     createdBy: authorId.toString(),
   });
@@ -574,6 +596,7 @@ test('crée un produit avec un conditionnement initial facultatif', async () => 
   assert.equal(storedProduct.packagings.length, 1);
   assert.equal(storedProduct.packagings[0].label, 'Carton de 24');
   assert.equal(storedProduct.packagings[0].quantity, 24);
+  assert.equal(storedProduct.packagings[0].usage, 'BOTH');
   assert.ok(storedProduct.packagings[0].createdBy.equals(authorId));
 });
 
@@ -658,7 +681,7 @@ test('modifie le prix de vente et conserve son historique complet', async () => 
 
 test('la fiche peut exclure les conditionnements de sa lecture', async () => {
   const result = await createProduct({ code: 'LECTURE-SANS-CONVERSION', designation: 'Lecture filtrée', baseUnit: 'PIECE', createdBy: new ObjectId().toString() });
-  await addProductPackaging({ productId: result.product.id, label: 'Carton secret', quantity: '12', createdBy: new ObjectId().toString() });
+  await addProductPackaging({ productId: result.product.id, label: 'Carton secret', quantity: '12', usage: 'RECEPTION', createdBy: new ObjectId().toString() });
   const filtered = await getProductById(result.product.id, { includePackagings: false });
   assert.deepEqual(filtered.packagings, []);
   assert.equal(JSON.stringify(filtered).includes('Carton secret'), false);
@@ -668,8 +691,8 @@ test('tarife un pack indépendamment du prix unitaire et des autres packs', asyn
   const authorId = new ObjectId();
   await database.collection('users').insertOne({ _id: authorId, username: 'tarif-pack' });
   const { product } = await createProduct({ code: 'PACK-PRIX', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId.toString() });
-  const { packaging: first } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', createdBy: authorId.toString() });
-  const { packaging: second } = await addProductPackaging({ productId: product.id, label: 'Pack de 12', quantity: '12', createdBy: authorId.toString() });
+  const { packaging: first } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', usage: 'SALE', createdBy: authorId.toString() });
+  const { packaging: second } = await addProductPackaging({ productId: product.id, label: 'Pack de 12', quantity: '12', usage: 'SALE', createdBy: authorId.toString() });
   await updateProductSalePrice({ productId: product.id, price: '90', updatedBy: authorId.toString() });
   for (const price of ['500', '510,50']) {
     const result = await updateProductSalePrice({ productId: product.id, packagingId: first.id, price, updatedBy: authorId.toString() });
@@ -697,7 +720,7 @@ test('tarife un pack indépendamment du prix unitaire et des autres packs', asyn
 test('refuse les tarifs de packs invalides ou appartenant à un autre produit', async () => {
   const authorId = new ObjectId().toString();
   const { product } = await createProduct({ code: 'PACK-PRIX-INVALIDE', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId });
-  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', createdBy: authorId });
+  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', usage: 'SALE', createdBy: authorId });
   const missing = await updateProductSalePrice({ productId: new ObjectId().toString(), packagingId: packaging.id, price: '500', updatedBy: authorId });
   assert.deepEqual(missing, { notFound: true });
   for (const packagingId of ['', 'invalid', new ObjectId().toString()]) {
@@ -712,7 +735,7 @@ test('refuse les tarifs de packs invalides ou appartenant à un autre produit', 
 test('conserve les changements concurrents du prix unitaire et du pack', async () => {
   const authorId = new ObjectId().toString();
   const { product } = await createProduct({ code: 'PACK-PRIX-CONCURRENT', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId });
-  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', createdBy: authorId });
+  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', usage: 'SALE', createdBy: authorId });
   const results = await Promise.all([
     updateProductSalePrice({ productId: product.id, price: '90', updatedBy: authorId }),
     ...['500', '520', '530'].map((price) => updateProductSalePrice({ productId: product.id, packagingId: packaging.id, price, updatedBy: authorId })),

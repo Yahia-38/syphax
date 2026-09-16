@@ -107,16 +107,27 @@ test('accepte uniquement les quatre codes d’unité stables', () => {
 
 test('valide et normalise un conditionnement supplémentaire', () => {
   assert.deepEqual(
-    validateProductPackaging({ label: '  Pack de 6  ', quantity: ' 6 ' }),
-    { data: { label: 'Pack de 6', quantity: 6 } },
+    validateProductPackaging({ label: '  Pack de 6  ', quantity: ' 6 ', usage: ' SALE ' }),
+    { data: { label: 'Pack de 6', quantity: 6, usage: 'SALE' } },
   );
   assert.deepEqual(
-    validateProductPackaging({ label: ' ', quantity: '1.5' }).errors,
+    validateProductPackaging({ label: ' ', quantity: '1.5', usage: 'BOTH' }).errors,
     {
       label: 'Le libellé est obligatoire.',
       quantity: 'Saisissez une quantité entière supérieure ou égale à 2.',
     },
   );
+});
+
+test('exige un usage explicite parmi réception, vente ou les deux', () => {
+  for (const usage of ['RECEPTION', 'SALE', 'BOTH']) {
+    assert.equal(validateProductPackaging({ label: 'Conditionnement', quantity: '6', usage }).data.usage, usage);
+  }
+  for (const usage of [undefined, null, '', ' ', 'ALL', 'reception', true, ['SALE']]) {
+    assert.deepEqual(validateProductPackaging({ label: 'Conditionnement', quantity: '6', usage }), {
+      errors: { usage: 'Sélectionnez un usage valide.' },
+    });
+  }
 });
 
 test('refuse le retrait avec un identifiant de conditionnement invalide', async () => {

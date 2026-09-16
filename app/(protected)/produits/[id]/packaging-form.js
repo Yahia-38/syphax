@@ -11,6 +11,7 @@ import {
 
 import { useEditingSession } from '../../components/editing-session.js';
 import EditableCard, { EditingButtons, useInlineSave } from '../../components/editable-card.js';
+import { getPackagingUsageLabel, PACKAGING_USAGES } from '../../../../lib/product-packaging.js';
 
 import {
   addProductPackaging,
@@ -24,7 +25,7 @@ const INITIAL_STATE = {
   errors: {},
   message: null,
   revision: 0,
-  values: { label: '', quantity: '' },
+  values: { label: '', quantity: '', usage: '' },
 };
 
 const REMOVE_INITIAL_STATE = {
@@ -126,7 +127,7 @@ const PackagingRemovalButton = ({ packaging, product }) => {
 
 
 const PackagingEditor = ({ productId, quantityUnitLabel, onCancel, onSuccess, onPending }) => {
-  const [values, setValues] = useState({ label: '', quantity: '' });
+  const [values, setValues] = useState({ label: '', quantity: '', usage: '' });
   const { state, pending, formRef, save } = useInlineSave({
     action: addProductPackaging.bind(null, productId), initialState: INITIAL_STATE,
     onSuccess, onPending, failureMessage: 'L’ajout du conditionnement est momentanément indisponible.',
@@ -151,6 +152,16 @@ const PackagingEditor = ({ productId, quantityUnitLabel, onCancel, onSuccess, on
             onChange={(event) => setValues((previous) => ({ ...previous, quantity: event.target.value }))} />
           {state.errors.quantity && <p className='mt-2 text-sm text-red-700' id='packaging-quantity-error'>{state.errors.quantity}</p>}
         </div>
+        <div><label className='block text-sm font-medium text-slate-700' htmlFor='packaging-usage'>Usage (obligatoire)</label>
+          <select aria-invalid={Boolean(state.errors.usage)} aria-describedby={state.errors.usage ? 'packaging-usage-error' : undefined}
+            className='mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 focus:outline-blue-600 aria-invalid:border-red-500'
+            id='packaging-usage' name='usage' required value={values.usage}
+            onChange={(event) => setValues((previous) => ({ ...previous, usage: event.target.value }))}>
+            <option value=''>Sélectionnez un usage</option>
+            {PACKAGING_USAGES.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
+          </select>
+          {state.errors.usage && <p className='mt-2 text-sm text-red-700' id='packaging-usage-error'>{state.errors.usage}</p>}
+        </div>
       </fieldset>
       <p aria-live='polite' className={styles.conversionPreview} id='packaging-preview'>{preview}</p>
       <EditingButtons pending={pending} onCancel={onCancel} />
@@ -167,6 +178,7 @@ const PackagingForm = ({
 }) => {
   const [packagingQuery, setPackagingQuery] = useState('');
   const [quantityFilter, setQuantityFilter] = useState('ALL');
+  const [usageFilter, setUsageFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const quantityUnitLabel = `${baseUnitLabel.toLocaleLowerCase('fr')}s`;
   const quantityOptions = useMemo(
@@ -185,13 +197,17 @@ const PackagingForm = ({
           .includes(normalizedPackagingQuery);
       const matchesQuantity = quantityFilter === 'ALL'
         || packaging.quantity === Number(quantityFilter);
+      const matchesUsage = usageFilter === 'ALL'
+        || (usageFilter === 'UNDEFINED'
+          ? !PACKAGING_USAGES.some(({ code }) => code === packaging.usage)
+          : packaging.usage === usageFilter);
 
-      return matchesQuery && matchesQuantity;
+      return matchesQuery && matchesQuantity && matchesUsage;
     }),
-    [normalizedPackagingQuery, packagings, quantityFilter],
+    [normalizedPackagingQuery, packagings, quantityFilter, usageFilter],
   );
   const filtersActive = Boolean(
-    normalizedPackagingQuery || quantityFilter !== 'ALL',
+    normalizedPackagingQuery || quantityFilter !== 'ALL' || usageFilter !== 'ALL',
   );
   const totalPages = Math.max(
     1,
@@ -207,12 +223,13 @@ const PackagingForm = ({
   const resetFilters = () => {
     setPackagingQuery('');
     setQuantityFilter('ALL');
+    setUsageFilter('ALL');
     setCurrentPage(1);
   };
 
   return (
     <>
-      {canCreatePackaging && <EditableCard title='Ajouter une conversion' titleIcon={<ProductIcon name='box' />} description='Définissez un libellé et sa quantité en unités de base.'
+      {canCreatePackaging && <EditableCard title='Ajouter une conversion' titleIcon={<ProductIcon name='box' />} description='Définissez un libellé, sa quantité en unités de base et son usage.'
         canEdit creation editLabel='Ajouter' editingLabel='Ajout en cours' formComponent={PackagingEditor} formProps={{ productId: product.id, quantityUnitLabel }} onSaved={resetFilters} />}
       <section className={`${styles.card} ${styles.packList}`} aria-labelledby='packagings-title'>
         <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='box' /><h2 id='packagings-title'>Conditionnements définis</h2></div><span className={styles.pill}>{packagings.length} conversions</span></div>
@@ -223,13 +240,19 @@ const PackagingForm = ({
           <select id='packaging-quantity-filter' value={quantityFilter} onChange={(event) => { setQuantityFilter(event.target.value); setCurrentPage(1); }}>
             <option value='ALL'>Toutes les conversions</option>{quantityOptions.map((quantity) => <option key={quantity} value={quantity}>{quantity} {quantityUnitLabel}</option>)}
           </select>
+          <label className='sr-only' htmlFor='packaging-usage-filter'>Filtrer par usage</label>
+          <select id='packaging-usage-filter' value={usageFilter} onChange={(event) => { setUsageFilter(event.target.value); setCurrentPage(1); }}>
+            <option value='ALL'>Tous les usages</option>
+            {PACKAGING_USAGES.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
+            <option value='UNDEFINED'>Usage à définir</option>
+          </select>
           {filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Réinitialiser</button>}
         </div>
         {paginatedPackagings.length ? <ul>{paginatedPackagings.map((packaging) => <li className={styles.packRow} key={packaging.id}>
-          <div className={styles.packLabel}><span className={styles.packIcon}><ProductIcon name='box' /></span><div><strong>{packaging.label}</strong><small>Conversion en unités de base</small></div></div>
+          <div className={styles.packLabel}><span className={styles.packIcon}><ProductIcon name='box' /></span><div><strong>{packaging.label}</strong><small>{getPackagingUsageLabel(packaging.usage)}</small></div></div>
           <p className={styles.conversion}>1 {packaging.label.toLocaleLowerCase('fr')} = <strong>{new Intl.NumberFormat('fr-DZ').format(packaging.quantity)}</strong> {quantityUnitLabel}</p>
           <div>{canDeletePackaging && <PackagingRemovalButton packaging={packaging} product={product} />}</div>
-        </li>)}</ul> : <div className={styles.empty}><ProductIcon name='box' /><h3>{packagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement défini'}</h3><p>{packagings.length ? 'Modifiez la recherche ou le filtre de conversion.' : 'Aucun pack, carton ou autre conditionnement n’est encore défini pour ce produit.'}</p>{filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Voir tous les conditionnements</button>}</div>}
+        </li>)}</ul> : <div className={styles.empty}><ProductIcon name='box' /><h3>{packagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement défini'}</h3><p>{packagings.length ? 'Modifiez la recherche ou les filtres.' : 'Aucun pack, carton ou autre conditionnement n’est encore défini pour ce produit.'}</p>{filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Voir tous les conditionnements</button>}</div>}
         <div className={styles.footer}><span>{filteredPackagings.length ? `${firstPackagingIndex + 1}–${firstPackagingIndex + paginatedPackagings.length}` : '0'} sur {filteredPackagings.length} conditionnements{filtersActive ? ` (${packagings.length} au total)` : ''}</span>
           <nav aria-label='Pagination des conditionnements' className={styles.pagination}>
             <button disabled={activePage === 1} onClick={() => setCurrentPage(activePage - 1)} type='button'>Précédent</button><span aria-live='polite'>Page {activePage} sur {totalPages}</span>
