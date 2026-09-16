@@ -186,6 +186,10 @@ test('autorise la création et détermine les métadonnées depuis le serveur', 
     'Le livreur LIV-AUTORISE a été créé avec succès.',
   );
   assert.deepEqual(result.values, { code: '', name: '', phone: '' });
+  assert.deepEqual(result.deliverer, {
+    id: deliverer._id.toString(), code: 'LIV-AUTORISE', name: 'Livreur autorisé', phone: '0550 00 00 00', active: true,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(result.deliverer)), result.deliverer);
   assert.equal(deliverer.name, 'Livreur autorisé');
   assert.equal(deliverer.phone, '0550 00 00 00');
   assert.ok(deliverer.createdBy.equals(userId));
@@ -213,6 +217,7 @@ test('conserve les valeurs soumises lorsque le code existe déjà', async () => 
     createDeliverer({ revision: 0 }, duplicateFormData));
 
   assert.equal(result.errors.code, 'Un livreur avec ce code existe déjà.');
+  assert.equal(result.deliverer, undefined);
   assert.deepEqual(result.values, {
     code: ' liv-doublon ',
     name: ' Deuxième livreur ',

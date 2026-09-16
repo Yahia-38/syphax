@@ -100,7 +100,7 @@ const DelivererList = ({
             <p>{query ? `Aucun code ou nom ne correspond à « ${query} » avec ce statut.` : status === 'active' ? 'Les livreurs actifs apparaîtront ici. Vous pouvez consulter tous les statuts.' : status === 'disabled' ? 'Aucun livreur ne correspond au statut Désactivé.' : 'Le répertoire ne contient aucun livreur.'}</p>
             <div className={styles.emptyActions}>
               {query ? <Link className={styles.button} href='/livreurs'>Réinitialiser la recherche</Link> : status !== 'all' && <Link className={styles.button} href={allHref}>Voir tous les livreurs</Link>}
-              {canCreateDeliverer && <Link className={`${styles.button} ${styles.primary}`} href='/livreurs/nouveau'>Nouveau livreur</Link>}
+              {canCreateDeliverer && <Link className={`${styles.button} ${styles.primary}`} href={`/livreurs/nouveau?${new URLSearchParams({ retour: returnHref })}`}>Nouveau livreur</Link>}
             </div>
           </div>
         )}

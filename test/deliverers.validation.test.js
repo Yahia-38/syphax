@@ -65,6 +65,7 @@ test('normalise la recherche et la page demandées', () => {
   }), {
     page: 2,
     query: 'Livreur nord',
+    status: 'active',
   });
   assert.deepEqual(readDelivererListState({
     q: ['première', 'seconde'],
@@ -72,10 +73,12 @@ test('normalise la recherche et la page demandées', () => {
   }), {
     page: 1,
     query: 'première',
+    status: 'active',
   });
   assert.deepEqual(readDelivererListState({ page: '-1' }), {
     page: 1,
     query: '',
+    status: 'active',
   });
 });
 
@@ -102,6 +105,18 @@ test('refuse une destination de retour externe ou étrangère à la liste', () =
     '/livreurs',
   );
   assert.equal(validateDelivererListHref(), '/livreurs');
+  assert.equal(validateDelivererListHref('/livreurs?q=Atlas#fiche'), '/livreurs');
+  assert.equal(validateDelivererListHref('/livreurs?statut=disabled&page=3&q=Atlas'), '/livreurs?q=Atlas&statut=disabled&page=3');
+});
+
+test('compte les points de code après normalisation et conserve les préfixes téléphoniques', () => {
+  const values = { code: '𐐨'.repeat(50), name: '😀'.repeat(150), phone: ' +213 (0) 0550 00 00 00 ' };
+  assert.deepEqual(validateDeliverer(values), { data: {
+    code: '𐐀'.repeat(50), name: values.name, phone: '+213 (0) 0550 00 00 00',
+  } });
+  assert.equal(validateDeliverer({ ...values, code: 'ß'.repeat(26) }).errors.code, 'Le code ne doit pas dépasser 50 caractères.');
+  assert.equal(validateDeliverer({ ...values, phone: '😀'.repeat(30) }).data.phone, '😀'.repeat(30));
+  assert.ok(validateDeliverer({ ...values, name: '😀'.repeat(151), phone: '😀'.repeat(31) }).errors.name);
 });
 
 test('formate la date de création dans le fuseau d’Alger', () => {

@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache.js';
 import { createDeliverer as saveDeliverer } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 
@@ -19,8 +20,9 @@ export const createDeliverer = async (previousState, formData) => {
     ? previousState.revision + 1
     : 1;
 
+  let result;
   try {
-    const result = await saveDeliverer({
+    result = await saveDeliverer({
       ...values,
       createdBy: session.userId,
     });
@@ -33,17 +35,6 @@ export const createDeliverer = async (previousState, formData) => {
         values,
       };
     }
-
-    return {
-      errors: {},
-      message: `Le livreur ${result.deliverer.code} a été créé avec succès.`,
-      revision,
-      values: {
-        code: '',
-        name: '',
-        phone: '',
-      },
-    };
   } catch (error) {
     console.error('Échec de la création du livreur :', error);
 
@@ -56,4 +47,14 @@ export const createDeliverer = async (previousState, formData) => {
       values,
     };
   }
+
+  revalidatePath('/livreurs');
+  const { id, code, name, phone, active } = result.deliverer;
+  return {
+    errors: {},
+    message: `Le livreur ${code} a été créé avec succès.`,
+    deliverer: { id, code, name, phone, active },
+    revision,
+    values: { code: '', name: '', phone: '' },
+  };
 };

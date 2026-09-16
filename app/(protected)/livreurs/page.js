@@ -5,6 +5,7 @@ import {
   listDeliverers,
   DELIVERERS_PER_PAGE,
   readDelivererListState,
+  buildDelivererListHref,
 } from '../../../lib/deliverers.js';
 import { requirePermission } from '../../../lib/sessions.js';
 import DelivererList from './deliverer-list.js';
@@ -48,7 +49,7 @@ const DeliverersPage = async ({ searchParams }) => {
           {canCreateDeliverer && (
             <Link
               className={styles.createAction}
-              href='/livreurs/nouveau'
+              href={`/livreurs/nouveau?${new URLSearchParams({ retour: buildDelivererListHref(result) })}`}
             >
               <span aria-hidden='true'>＋</span>Nouveau livreur
             </Link>

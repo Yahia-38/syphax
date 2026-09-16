@@ -8,7 +8,7 @@ import ConfirmationDialog from '../confirmation-dialog.js';
 
 const EditingContext = createContext(null);
 
-export const EditingSessionProvider = ({ children, creation = false, protectNavigation = false, operation = false, discardDescription }) => {
+export const EditingSessionProvider = ({ children, creation = false, protectNavigation = false, operation = false, protectUnload = false, discardDescription, discardTitle, discardLabel, confirmationAppearance = 'default' }) => {
   const sessionRef = useRef(null);
   const dialogRef = useRef(null);
   const destinationRef = useRef(null);
@@ -96,7 +96,7 @@ export const EditingSessionProvider = ({ children, creation = false, protectNavi
   }, [operation, pathname, request]);
 
   useEffect(() => {
-    if (!operation) return;
+    if (!operation && !protectUnload) return;
     const onBeforeUnload = (event) => {
       if (!sessionRef.current?.dirty && !sessionRef.current?.pending) return;
       event.preventDefault();
@@ -104,14 +104,16 @@ export const EditingSessionProvider = ({ children, creation = false, protectNavi
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [operation]);
+  }, [operation, protectUnload]);
 
   return (
     <EditingContext.Provider value={{ register, request, router }}>
       {children}
       <ConfirmationDialog
+        appearance={confirmationAppearance}
+        cancelAutoFocus
         cancelLabel={operation ? 'Continuer la saisie' : creation ? 'Continuer la saisie' : 'Continuer la modification'}
-        confirmLabel={operation ? 'Abandonner' : creation ? 'Quitter sans créer' : 'Quitter sans enregistrer'}
+        confirmLabel={discardLabel ?? (operation ? 'Abandonner' : creation ? 'Quitter sans créer' : 'Quitter sans enregistrer')}
         confirmType='button'
         dialogRef={dialogRef}
         onClose={() => {
@@ -128,7 +130,7 @@ export const EditingSessionProvider = ({ children, creation = false, protectNavi
           dialogRef.current?.close();
           proceed?.();
         }}
-        title={operation ? 'Abandonner la saisie ?' : creation ? 'Abandonner la création ?' : 'Quitter la modification ?'}
+        title={discardTitle ?? (operation ? 'Abandonner la saisie ?' : creation ? 'Abandonner la création ?' : 'Quitter la modification ?')}
       >
         <p>{discardDescription ?? (creation ? 'Les informations saisies ne sont pas enregistrées. Aucun produit ne sera créé.' : 'Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.')}</p>
       </ConfirmationDialog>
