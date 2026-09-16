@@ -1,6 +1,8 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useInlineSave } from '../components/editable-card.js';
+import { useEditingSession } from '../components/editing-session.js';
 
 export const EMPTY_SUPPLIER_VALUES = Object.freeze({
   name: '',
@@ -164,27 +166,38 @@ const SupplierForm = ({
   pendingLabel,
   submitLabel,
 }) => {
-  const [state, formAction, pending] = useActionState(action, {
-    errors: {},
-    message: null,
-    revision: 0,
-    values: {
-      ...EMPTY_SUPPLIER_VALUES,
-      ...initialValues,
-    },
+  const session = useEditingSession();
+  const register = session?.register;
+  const activeRef = useRef({ dirty: false, pending: false, discard: onCancel });
+  const baselineRef = useRef(JSON.stringify(Object.entries(EMPTY_SUPPLIER_VALUES).map(([name, value]) => [name, initialValues[name] ?? value])));
+  const onPending = useCallback((value) => { activeRef.current.pending = value; }, []);
+  const saved = useCallback((message) => {
+    activeRef.current.dirty = false;
+    activeRef.current.pending = false;
+    onSuccess?.(message);
+  }, [onSuccess]);
+  const { state, save, pending, formRef } = useInlineSave({
+    action,
+    initialState: { errors: {}, message: null, revision: 0, values: { ...EMPTY_SUPPLIER_VALUES, ...initialValues } },
+    onSuccess: saved, onPending,
+    failureMessage: 'La réponse à l’enregistrement n’a pas pu être confirmée. Vos informations sont conservées.',
   });
-
-  useEffect(() => {
-    if (state.message && onSuccess) {
-      onSuccess(state.message);
-    }
-  }, [onSuccess, state.message]);
+  useLayoutEffect(() => register?.(activeRef.current), [register]);
 
   return (
     <form
-      action={formAction}
+      action={save}
+      onSubmit={(event) => {
+        event.preventDefault();
+        save(new FormData(event.currentTarget));
+      }}
+      aria-busy={pending}
+      ref={formRef}
+      onChange={() => {
+        const data = new FormData(formRef.current);
+        activeRef.current.dirty = JSON.stringify(Object.keys(EMPTY_SUPPLIER_VALUES).map((name) => [name, data.get(name)])) !== baselineRef.current;
+      }}
       className='mt-5 space-y-5 border-t border-slate-200 pt-5'
-      key={state.revision}
     >
       {state.message && !onSuccess && (
         <p
@@ -199,23 +212,26 @@ const SupplierForm = ({
         <p
           className='rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
           role='alert'
+          tabIndex={-1}
         >
           {state.errors.form}
         </p>
       )}
 
+      <fieldset disabled={pending}>
       <SupplierFields
         autoFocusName={autoFocusName}
         idPrefix={idPrefix}
         state={state}
       />
 
+      </fieldset>
       <div className='flex justify-end gap-3 border-t border-slate-200 pt-5'>
         {cancelLabel && (
           <button
             className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
             disabled={pending}
-            onClick={onCancel}
+            onClick={() => session ? session.request(onCancel) : onCancel()}
             type='button'
           >
             {cancelLabel}

@@ -8,7 +8,7 @@ import ConfirmationDialog from '../confirmation-dialog.js';
 
 const EditingContext = createContext(null);
 
-export const EditingSessionProvider = ({ children, creation = false, protectNavigation = false, operation = false }) => {
+export const EditingSessionProvider = ({ children, creation = false, protectNavigation = false, operation = false, discardDescription }) => {
   const sessionRef = useRef(null);
   const dialogRef = useRef(null);
   const destinationRef = useRef(null);
@@ -130,7 +130,7 @@ export const EditingSessionProvider = ({ children, creation = false, protectNavi
         }}
         title={operation ? 'Abandonner la saisie ?' : creation ? 'Abandonner la création ?' : 'Quitter la modification ?'}
       >
-        <p>{creation ? 'Les informations saisies ne sont pas enregistrées. Aucun produit ne sera créé.' : 'Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.'}</p>
+        <p>{discardDescription ?? (creation ? 'Les informations saisies ne sont pas enregistrées. Aucun produit ne sera créé.' : 'Vos changements ne sont pas enregistrés. Vous pouvez poursuivre la modification ou abandonner le brouillon.')}</p>
       </ConfirmationDialog>
     </EditingContext.Provider>
   );

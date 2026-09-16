@@ -1,91 +1,54 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-
+import Link from 'next/link';
+import { useCallback, useRef, useState } from 'react';
+import { EditingSessionProvider } from '../components/editing-session.js';
 import ReceptionForm from './reception-form.js';
 import ReceptionList from './reception-list.js';
+import { WorkspaceHeader } from './reception-ui.js';
+import styles from './receptions.module.css';
 
 const ReceptionWorkspace = ({
-  baseUnits,
-  canCreateReception,
-  initialDate,
-  initialHistoryPage,
-  initialHistoryQuery,
-  initialHistorySupplierId,
-  initialSubmissionKey,
-  products,
-  receptions,
-  suppliers,
+  baseUnits, canCreateReception, canReadReceptions, canReadSuppliers,
+  catalogError, historyError, initialDate, initialSubmissionKey,
+  products, receptions, suppliers,
 }) => {
   const [formVisible, setFormVisible] = useState(false);
   const [notice, setNotice] = useState(null);
   const [submissionKey, setSubmissionKey] = useState(initialSubmissionKey);
+  const triggerRef = useRef(null);
 
-  const handleReceptionCreated = useCallback((message) => {
+  const closeForm = useCallback(() => {
     setFormVisible(false);
-    setNotice(message);
     setSubmissionKey(globalThis.crypto.randomUUID());
+    requestAnimationFrame(() => triggerRef.current?.focus());
   }, []);
-
-  const toggleForm = () => {
-    setNotice(null);
-    if (formVisible) {
-      setSubmissionKey(globalThis.crypto.randomUUID());
-    }
-    setFormVisible((visible) => !visible);
-  };
+  const handleReceptionCreated = useCallback((message, result) => {
+    closeForm();
+    setNotice({ message, receptionId: result.receptionId, retour: `${window.location.pathname}${window.location.search}` });
+  }, [closeForm]);
 
   return (
-    <div role='tabpanel'>
-      <div className='mt-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-        <div>
-          <h2 className='text-xl font-semibold text-slate-900'>
-            Réceptions de marchandises
-          </h2>
-          <p className='mt-1 text-sm leading-6 text-slate-600'>
-            Consultez les réceptions enregistrées et leurs quantités.
-          </p>
+    <EditingSessionProvider protectNavigation operation discardDescription='Votre préparation sera fermée. Si une tentative d’enregistrement est restée sans résultat confirmé, vérifiez l’historique avant de préparer une nouvelle réception.'>
+      <div className={styles.workspace}>
+        <WorkspaceHeader activeTab='receptions' canReadReceptions={canReadReceptions} canReadSuppliers={canReadSuppliers}>
+          {canCreateReception && !formVisible && <button className={styles.primary} ref={triggerRef} onClick={() => {
+            setNotice(null);
+            setFormVisible(true);
+          }} type='button'><span aria-hidden='true'>+</span> Nouvelle réception</button>}
+        </WorkspaceHeader>
+        {notice && <p className={styles.notice} role='status'>{notice.message}<Link href={`/receptions/${notice.receptionId}?${new URLSearchParams({ retour: notice.retour })}`}>Ouvrir la fiche</Link></p>}
+        {canCreateReception && formVisible && <ReceptionForm
+          baseUnits={baseUnits} initialDate={initialDate} onCancel={closeForm}
+          onSuccess={handleReceptionCreated} products={products}
+          submissionKey={submissionKey} suppliers={suppliers} catalogError={catalogError}
+          canReadSuppliers={canReadSuppliers}
+        />}
+        <div hidden={formVisible}>
+          <ReceptionList receptions={receptions} readError={historyError} />
         </div>
-        {canCreateReception && (
-          <button
-            aria-controls='new-reception-form'
-            aria-expanded={formVisible}
-            className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={toggleForm}
-            type='button'
-          >
-            {formVisible ? 'Fermer le formulaire' : 'Nouvelle réception'}
-          </button>
-        )}
       </div>
-
-      {canCreateReception && formVisible && (
-        <ReceptionForm
-          baseUnits={baseUnits}
-          initialDate={initialDate}
-          onSuccess={handleReceptionCreated}
-          products={products}
-          submissionKey={submissionKey}
-          suppliers={suppliers}
-        />
-      )}
-
-      {notice && (
-        <p
-          className='mt-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800'
-          role='status'
-        >
-          {notice}
-        </p>
-      )}
-
-      <ReceptionList
-        initialPage={initialHistoryPage}
-        initialQuery={initialHistoryQuery}
-        initialSupplierId={initialHistorySupplierId}
-        receptions={receptions}
-      />
-    </div>
+    </EditingSessionProvider>
   );
 };
 

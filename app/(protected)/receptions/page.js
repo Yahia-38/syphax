@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import Link from 'next/link';
-
 import { PermissionDeniedError, getUserPermissions } from '../../../lib/access.js';
 import { BASE_UNITS, listProducts } from '../../../lib/products.js';
 import { listReceptions } from '../../../lib/reception-records.js';
 import {
   formatReceptionDateInput,
   getMissingReceptionFormPermissions,
-  readReceptionHistoryState,
 } from '../../../lib/receptions.js';
 import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
@@ -23,17 +20,6 @@ const readTab = (value) => {
   const tab = Array.isArray(value) ? value[0] : value;
   return tab === 'fournisseurs' ? 'fournisseurs' : 'receptions';
 };
-
-const TabLink = ({ active, children, href }) => (
-  <Link
-    aria-selected={active}
-    className={`border-b-2 px-1 pb-3 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700 ${active ? 'border-blue-700 text-blue-700' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'}`}
-    href={href}
-    role='tab'
-  >
-    {children}
-  </Link>
-);
 
 const ReceptionsPage = async ({ searchParams }) => {
   const session = await requireSession();
@@ -57,56 +43,50 @@ const ReceptionsPage = async ({ searchParams }) => {
     : canReadReceptions
       ? 'receptions'
       : 'fournisseurs';
-  const historyState = readReceptionHistoryState(query);
   let suppliers = [];
   let products = [];
   let receptions = [];
 
+  let historyError = null;
+  let supplierError = null;
+  let catalogError = null;
+  const readSafely = async (read, onError) => {
+    try {
+      return await read();
+    } catch (error) {
+      if (error instanceof PermissionDeniedError) throw error;
+      console.error('Lecture de l’espace réceptions indisponible :', error);
+      onError();
+      return [];
+    }
+  };
+
   if (activeTab === 'fournisseurs') {
-    suppliers = await listSuppliers();
+    suppliers = await readSafely(() => listSuppliers(), () => {
+      supplierError = 'La liste des fournisseurs est momentanément indisponible.';
+    });
   } else {
     [receptions, suppliers, products] = await Promise.all([
-      listReceptions({ userId: session.userId }),
-      canCreateReception ? listSuppliers() : [],
-      canCreateReception ? listProducts({ includePackagings: true }) : [],
+      readSafely(() => listReceptions({ userId: session.userId }), () => {
+        historyError = 'L’historique est momentanément indisponible. Vos critères sont conservés.';
+      }),
+      canCreateReception ? readSafely(() => listSuppliers(), () => {
+        catalogError = 'La lecture des fournisseurs est momentanément indisponible.';
+      }) : [],
+      canCreateReception ? readSafely(() => listProducts({ includePackagings: true }), () => {
+        catalogError = 'La lecture du catalogue est momentanément indisponible.';
+      }) : [],
     ]);
     suppliers = suppliers.filter(({ active }) => active);
   }
 
   return (
-    <main className='mx-auto w-full max-w-7xl px-6 py-10 sm:py-14'>
-      <div>
-        <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
-          Réceptions
-        </h1>
-        <p className='mt-2 text-sm leading-6 text-slate-600'>
-          Gérez les fournisseurs et l’entrée des marchandises dans un même
-          parcours.
-        </p>
-      </div>
-
-      <nav
-        aria-label='Sections des réceptions'
-        className='mt-8 flex gap-7 border-b border-slate-200'
-        role='tablist'
-      >
-        {canReadReceptions && (
-          <TabLink active={activeTab === 'receptions'} href='/receptions'>
-            Réceptions
-          </TabLink>
-        )}
-        {canReadSuppliers && (
-          <TabLink
-            active={activeTab === 'fournisseurs'}
-            href='/receptions?onglet=fournisseurs'
-          >
-            Fournisseurs
-          </TabLink>
-        )}
-      </nav>
-
+    <main className='mx-auto w-full max-w-7xl px-4 py-7 sm:px-7 sm:py-8'>
       {activeTab === 'fournisseurs' ? (
         <SupplierWorkspace
+          canReadReceptions={canReadReceptions}
+          canReadSuppliers={canReadSuppliers}
+          readError={supplierError}
           canCreateSupplier={permissions.includes('suppliers.create')}
           canDeleteSupplier={permissions.includes('suppliers.delete')}
           canUpdateSupplier={permissions.includes('suppliers.update')}
@@ -114,12 +94,13 @@ const ReceptionsPage = async ({ searchParams }) => {
         />
       ) : (
         <ReceptionWorkspace
+          canReadReceptions={canReadReceptions}
+          canReadSuppliers={canReadSuppliers}
+          historyError={historyError}
+          catalogError={catalogError}
           baseUnits={BASE_UNITS}
           canCreateReception={canCreateReception}
           initialDate={formatReceptionDateInput(new Date())}
-          initialHistoryPage={historyState.page}
-          initialHistoryQuery={historyState.query}
-          initialHistorySupplierId={historyState.supplierId}
           initialSubmissionKey={randomUUID()}
           products={products}
           receptions={receptions}
