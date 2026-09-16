@@ -1,6 +1,6 @@
 'use client';
 
-import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+import { TourFormActions, useTourActionState, useTourDraft } from './tour-operation-context.js';
 
 import { useEffect, useMemo, useState } from 'react';
 
@@ -154,21 +154,11 @@ const TourCountingSheet = ({
               <div className='border-b border-violet-200 bg-white/70 p-5 sm:p-6'>
                 <p className='text-sm leading-6 text-slate-700'>
                   {sheet?.recorded
-                    ? 'Ce comptage fait foi. Il est conservé en lecture seule et ne peut plus être modifié dans cet incrément.'
+                    ? 'Ce comptage fait foi. Il est conservé en lecture seule et ne peut plus être modifié après enregistrement.'
                     : 'Saisissez chaque retour en unité de base. Les champs sont volontairement vides : saisissez explicitement 0 lorsqu’aucun article n’a été retourné.'}
                 </p>
               </div>
 
-              {!sheet?.recorded && <div className='flex flex-wrap items-center justify-between gap-3 px-5 py-3'>
-                <p className='text-sm font-semibold text-violet-800'>{summary.knownAmountLineCount} / {lines.length} lignes complètes</p>
-                <button type='button' disabled={pending || summary.complete} className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold' onClick={() => {
-                  const next = summary.calculations.find((line) => !Number.isSafeInteger(line.amountDueInCentimes));
-                  if (!next) return;
-                  setQuery(''); setUnit('ALL');
-                  setCurrentPage(Math.floor(lines.findIndex((line) => line.id === next.id) / LINES_PER_PAGE) + 1);
-                  setFocusLineId({ id: next.id });
-                }}>Prochaine ligne à compléter</button>
-              </div>}
               <div className='grid gap-4 border-b border-violet-200 bg-white/70 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-6' role='search'>
                 <div>
                   <label className='sr-only' htmlFor='counting-search'>
@@ -212,6 +202,7 @@ const TourCountingSheet = ({
 
               {paginatedLines.length > 0 ? (
                 <div className='divide-y divide-violet-100 bg-white/40'>
+                  <div className='tour-counting-columns' aria-hidden='true'><span>Produit</span><div><span>Chargé</span><span>Retourné</span><span>Vendu</span><span>Ventes TTC</span></div></div>
                   {paginatedLines.map((line) => {
                     const calculation = calculationsById.get(line.id);
                     const amountDueInCentimes = sheet?.recorded
@@ -225,102 +216,30 @@ const TourCountingSheet = ({
 
                     return (
                       <article className='tour-counting-line p-4' key={line.id}>
-                        <div className='min-w-0'>
-                          <p className='break-all font-mono text-sm font-semibold text-violet-700'>
-                            {line.productCode}
-                          </p>
-                          <h3 className='mt-1 break-words font-semibold text-slate-900'>
-                            {line.productDesignation}
-                          </h3>
-                          <p className='mt-1 text-sm text-slate-600'>
-                            Unité de base : <span className='font-semibold text-slate-800'>{line.baseUnit}</span>
+                        <div className='tour-counting-product min-w-0'>
+                          <h3 className='break-words font-semibold text-slate-900'>{line.productDesignation}</h3>
+                          <p className='mt-1 text-sm text-slate-600'>{line.productCode} · {line.baseUnit}</p>
+                          <p className='mt-1 text-xs text-slate-500'>
+                            {calculation?.priceAvailable
+                              ? `Prix TTC figé : ${formatReceptionMoney(line.salePriceAtLoading.amountInCentimes)} / ${line.baseUnit}`
+                              : 'Prix historique manquant ou inexploitable'}
                           </p>
                         </div>
-
-                        <div className='tour-counting-quantities mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
-                          <div className='rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>
-                              Quantité chargée
-                            </p>
-                            <p className='mt-1 text-lg font-bold tabular-nums text-emerald-950'>
-                              {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
-                            </p>
+                        <div className='tour-counting-quantities'>
+                          <div><p className='tour-counting-label'>Chargé</p><p className='tabular-nums'>{formatQuantity(line.quantityInBaseUnits)}</p></div>
+                          <div>
+                            <label className='tour-counting-label' htmlFor={inputId}>Retourné<span className='sr-only'> · {line.productDesignation} en {line.baseUnit}</span></label>
+                            <input
+                              aria-describedby={calculation?.error ? errorId : undefined}
+                              aria-invalid={Boolean(calculation?.error)}
+                              className='w-full rounded-lg border border-slate-300 px-3 py-2 text-base font-semibold tabular-nums text-slate-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-100'
+                              id={inputId} data-autofocus disabled={pending} inputMode='numeric'
+                              onChange={(event) => setReturnedQuantities((currentValues) => ({ ...currentValues, [line.id]: event.target.value }))}
+                              placeholder='À saisir' readOnly={sheet?.recorded} type='text' value={returnedQuantities[line.id] ?? ''}
+                            />
                           </div>
-
-                          <div className={`rounded-xl border bg-white px-4 py-3 ${calculation?.error ? 'border-red-300' : 'border-slate-200'}`}>
-                            <label className='text-xs font-semibold uppercase tracking-wide text-slate-600' htmlFor={inputId}>
-                              Quantité retournée
-                            </label>
-                            <div className='mt-2 flex items-center gap-2'>
-                              <input
-                                aria-describedby={calculation?.error ? errorId : undefined}
-                                aria-invalid={Boolean(calculation?.error)}
-                                className='min-w-0 w-full rounded-lg border border-slate-300 px-3 py-2 text-base font-semibold tabular-nums text-slate-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-100'
-                                id={inputId}
-                                data-autofocus
-                                disabled={pending}
-                                inputMode='numeric'
-                                onChange={(event) => setReturnedQuantities(
-                                  (currentValues) => ({
-                                    ...currentValues,
-                                    [line.id]: event.target.value,
-                                  }),
-                                )}
-                                placeholder='Ex. 0'
-                                readOnly={sheet?.recorded}
-                                type='text'
-                                value={returnedQuantities[line.id] ?? ''}
-                              />
-                              <span className='shrink-0 text-sm font-medium text-slate-600'>
-                                {line.baseUnit}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-slate-600'>
-                              Quantité vendue
-                            </p>
-                            <p className='mt-1 text-lg font-bold tabular-nums text-slate-900'>
-                              {Number.isSafeInteger(
-                                soldQuantityInBaseUnits,
-                              )
-                                ? `${formatQuantity(soldQuantityInBaseUnits)} ${line.baseUnit}`
-                                : 'Non calculable'}
-                            </p>
-                          </div>
-
-                          <div className='rounded-xl border border-blue-100 bg-blue-50 px-4 py-3'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-                              Prix TTC historique :
-                            </p>
-                            {calculation?.priceAvailable ? (
-                              <p className='mt-1 text-lg font-bold tabular-nums text-blue-950'>
-                                {formatReceptionMoney(
-                                  line.salePriceAtLoading.amountInCentimes,
-                                )} / {line.baseUnit}
-                              </p>
-                            ) : (
-                              <p className='mt-1 text-sm font-semibold text-amber-900'>
-                                Prix historique manquant ou inexploitable
-                              </p>
-                            )}
-                          </div>
-
-                          <div className='rounded-xl border border-violet-200 bg-violet-100 px-4 py-3'>
-                            <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
-                              {sheet?.recorded ? 'Ventes TTC' : 'Ventes TTC prévues'}
-                            </p>
-                            <p className='mt-1 text-lg font-bold tabular-nums text-violet-950'>
-                              {Number.isSafeInteger(
-                                amountDueInCentimes,
-                              )
-                                ? formatReceptionMoney(
-                                    amountDueInCentimes,
-                                  )
-                                : 'Non calculable'}
-                            </p>
-                          </div>
+                          <div><p className='tour-counting-label'>Vendu</p><p className='tabular-nums'>{Number.isSafeInteger(soldQuantityInBaseUnits) ? formatQuantity(soldQuantityInBaseUnits) : '—'}<span className='sr-only'>{!Number.isSafeInteger(soldQuantityInBaseUnits) ? 'Non calculable' : ''}</span></p></div>
+                          <div><p className='tour-counting-label'>{sheet?.recorded ? 'Ventes TTC' : 'Ventes TTC prévues'}</p><p className='font-semibold tabular-nums'>{Number.isSafeInteger(amountDueInCentimes) ? formatReceptionMoney(amountDueInCentimes) : '—'}<span className='sr-only'>{!Number.isSafeInteger(amountDueInCentimes) ? 'Non calculable' : ''}</span></p></div>
                         </div>
 
                         {calculation?.error ? (
@@ -372,6 +291,16 @@ const TourCountingSheet = ({
               </nav>
 
               <div className='border-t border-violet-200 p-5 sm:p-6'>
+              {!sheet?.recorded && <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+                <p className='text-sm font-semibold text-violet-800'>{summary.knownAmountLineCount} / {lines.length} lignes complètes</p>
+                <button type='button' disabled={pending || summary.complete} className='rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold' onClick={() => {
+                  const next = summary.calculations.find((line) => !Number.isSafeInteger(line.amountDueInCentimes));
+                  if (!next) return;
+                  setQuery(''); setUnit('ALL');
+                  setCurrentPage(Math.floor(lines.findIndex((line) => line.id === next.id) / LINES_PER_PAGE) + 1);
+                  setFocusLineId({ id: next.id });
+                }}>Prochaine ligne à compléter</button>
+              </div>}
                 <div className='rounded-xl border border-violet-200 bg-white px-4 py-4'>
                   <p className='text-xs font-semibold uppercase tracking-wide text-violet-700'>
                     {summary.complete
@@ -405,9 +334,8 @@ const TourCountingSheet = ({
                   )}
                   {!summary.complete && (
                     <p className='mt-3 text-sm leading-6 text-slate-600'>
-                      Aucun total complet n’est présenté tant qu’une ligne est
-                      vide ou invalide, qu’un prix historique manque, ou qu’une
-                      limite numérique est dépassée.
+                      Le total nécessite tous les retours et des prix historiques
+                      exploitables, dans les limites numériques autorisées.
                     </p>
                   )}
                   {summary.subtotalOverflow && (
@@ -421,7 +349,7 @@ const TourCountingSheet = ({
                   <p className='max-w-2xl text-sm leading-6 text-slate-600'>
                     {sheet?.recorded
                       ? `Comptage enregistré${sheet.countedBy ? ` par ${sheet.countedBy}` : ''}. Les retours physiques sont intégrés au stock ; aucun encaissement ou compte financier n’a été créé.`
-                      : 'La confirmation constate la restitution physique des retours et réintègre ceux-ci au stock. Le comptage ne sera plus modifiable dans cet incrément.'}
+                      : 'La confirmation constate la restitution physique des retours et réintègre ceux-ci au stock. Le comptage ne sera plus modifiable après enregistrement.'}
                   </p>
                   {!sheet?.recorded && (
                     <>
@@ -435,7 +363,7 @@ const TourCountingSheet = ({
                         type='hidden'
                         value={sheet?.digest ?? ''}
                       />
-                      {lines.map((line) => (
+                      <div hidden>{lines.map((line) => (
                         <span key={line.id}>
                           <input name='lineId' type='hidden' value={line.id} />
                           <input
@@ -444,14 +372,14 @@ const TourCountingSheet = ({
                             value={returnedQuantities[line.id] ?? ''}
                           />
                         </span>
-                      ))}
-                      <button
+                      ))}</div>
+                      <TourFormActions pending={pending}><button
                         className='inline-flex w-full items-center justify-center rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
                         disabled={pending || confirmationUnavailable}
                         type='submit'
                       >
                         {pending ? 'Enregistrement…' : 'Enregistrer le comptage'}
-                      </button>
+                      </button></TourFormActions>
                       <ConfirmationDialog
                         confirmLabel='Enregistrer définitivement'
                         dialogRef={dialogRef}

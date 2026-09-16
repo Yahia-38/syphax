@@ -1,31 +1,44 @@
-.page { max-width: 1240px; margin: auto; padding: 30px 28px 64px; color: #1a2940; font-size: 15px; }
+.page { line-height: 1.5; max-width: 1240px; margin: auto; padding: 24px 28px 64px; color: #1a2940; font-size: 15px; }
 .hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .hero h1 { font-size: 27px; font-weight: 700; letter-spacing: -.7px; overflow-wrap: anywhere; }
-.hero p { color: #65758b; margin-top: 8px; }
+.hero .meta { color: #65758b; margin-top: 8px; }
 .back { display: inline-flex; color: #3154b6; font-weight: 600; margin-bottom: 18px; }
-.badge { display: inline-flex; border: 1px solid #dce4f1; border-radius: 30px; padding: 4px 10px; font-size: 12px; color: #52658a; background: #f1f5fb; margin-left: 12px; vertical-align: middle; }
+.badge { display: inline-flex; border: 1px solid #dce4f1; border-radius: 5px; padding: 4px 8px; font-size: 12px; color: #52658a; background: #f1f5fb; margin-left: 0; vertical-align: middle; }
 .primary { background: #3154d6; color: white; padding: 11px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
 .tabs { display: flex; gap: 26px; border-bottom: 1px solid #dce4ee; margin: 24px 0; flex-wrap: wrap; }
 .tabs a { padding: 12px 0; color: #65758b; font-weight: 600; border-bottom: 3px solid transparent; }
 .tabs a[aria-current] { color: #3154d6; border-color: #3154d6; }
 .shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
-.shortcuts button { display: grid; gap: 4px; text-align: left; background: white; border: 1px solid #e1e7ef; padding: 13px 16px; border-radius: 10px; cursor: pointer; }
+.shortcuts button { display: flex; align-items: center; gap: 12px; text-align: left; background: white; border: 1px solid #e1e7ef; padding: 13px 16px; border-radius: 10px; cursor: pointer; }
 .shortcuts small { color: #65758b; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; gap: 22px; }
 .operations { display: grid; gap: 20px; min-width: 0; }
 .operation { min-width: 0; scroll-margin-top: 24px; }
 .card > div:first-child h2 { font-size: 16px; }
-.card > div:first-child p { font-size: 14px; line-height: 1.5; }
+.card > div:first-child p { font-size: 13px; line-height: 1.5; margin-left: 48px; }
 .card > div:first-child button { font-size: 14px; }
-.operation[data-operation='counting'] .card { border-top: 3px solid #b5a4da; }
-.operation[data-operation='expenses'] .card { border-top: 3px solid #dec391; }
-.operation[data-operation='payment'] .card { border-top: 3px solid #9bcab4; }
+.operationIcon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #eef3ff; color: #2855dd; flex: none; }
+.operationIcon svg { width: 19px; height: 19px; }
+.operation[data-operation='counting'] .operationIcon { background: #f1ebfa; color: #7751ba; }
+.operation[data-operation='expenses'] .operationIcon { background: #fff5e2; color: #93600d; }
+.operation[data-operation='payment'] .operationIcon { background: #eaf6ef; color: #127459; }
+.operation[data-operation='cancellation'] .operationIcon { background: #fcecef; color: #b02e44; }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: #65758b; font-weight: 700; margin-bottom: 7px; }
+.meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.page:has(.form) .hero > .primary { display: none; }
+.shortcutMarker { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #f0f3f8; color: #65758b; flex: none; }
+.shortcuts button > span:last-child { display: grid; gap: 3px; }
+.shortcuts button[data-complete='true'] .shortcutMarker { background: #e6f5ed; color: #127459; }
+.formActions { display: flex; justify-content: flex-end; align-items: center; gap: 9px; flex-wrap: wrap; padding: 15px 0 0; margin-top: 18px; border-top: 1px solid #e1e7ef; width: 100%; }
+.formActions small { margin-right: auto; color: #65758b; font-size: 12px; }
+.formActions > button { min-height: 42px; padding: 9px 13px; border: 1px solid #dce4ee; border-radius: 8px; font-weight: 600; cursor: pointer; background: white; }
+.formActions > button:disabled { opacity: .5; cursor: not-allowed; }
 .operation[data-operation='cancellation'] .card > div:first-child button { color: #a7314f; }
 .read { padding: 18px 22px; color: #65758b; line-height: 1.6; }
 .read strong { color: #1a2940; }
-.financial { background: white; border: 1px solid #e1e7ef; border-radius: 12px; }
+.financial { background: #fffcf5; border: 1px solid #eddfbb; border-radius: 12px; }
 .financial h2 { font-size: 15px; font-weight: 650; padding: 18px 20px 0; }
-.due { margin: 9px 20px 18px; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: #82591a; overflow-wrap: anywhere; }
+.due { margin: 9px 20px 18px; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: #82591a; line-height: 1.3; overflow-wrap: anywhere; }
 .financial dl { padding: 0 20px 12px; }
 .financial dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #edf0f5; font-size: 14px; }
 .financial dt { color: #65758b; }
@@ -47,22 +60,29 @@
 .page :global(.tour-embedded) dl dd { font-size: 18px; }
 .page :global(.tour-embedded) button[type='submit'] { background: #3154d6; }
 .page :global(.tour-embedded) > div:has(> form) { flex-direction: column; align-items: stretch; }
-.page :global(.tour-counting-line) { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 3fr); gap: 12px; align-items: center; }
-.page :global(.tour-counting-quantities) { margin-top: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.page :global(.tour-counting-quantities) > div { padding: 0; border: 0; background: transparent; border-radius: 0; }
-.page :global(.tour-counting-quantities) > div:nth-child(4) { grid-column: 1 / -1; grid-row: 2; }
-.page :global(.tour-counting-quantities) > div:nth-child(4) p { display: inline; font-size: 12px; }
+.page :global(.tour-counting-line), .page :global(.tour-counting-columns) { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 3fr); gap: 18px; align-items: center; padding: 14px 22px; }
+.page :global(.tour-counting-quantities), .page :global(.tour-counting-columns) > div { display: grid; grid-template-columns: .65fr 1fr .65fr 1.2fr; gap: 14px; align-items: center; text-align: right; }
+.page :global(.tour-counting-columns) { background: #f8fafc; color: #65758b; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid #dfe6ef; padding-block: 11px; }
+.page :global(.tour-counting-label) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+.page :global(.tour-counting-quantities) input { min-width: 0; min-height: 42px; text-align: right; padding: 8px; font-size: 15px; }
 .page :global(.tour-counting-quantities) p { font-size: 14px; }
-.page :global(.tour-counting-quantities) label { font-size: 11px; }
+.page :global(.tour-counting-product) h3 { font-size: 14px; }
+.page :global(.tour-counting-product) p { font-size: 12px; }
+.page :global(.tour-counting-product) p:last-child { font-size: 11px; }
 .page :global(.tour-counting-line) > p { grid-column: 1 / -1; }
+.page :global(.tour-embedded) :global(.tour-expense-summary) { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; background: #f5f8fd; border: 0; padding: 16px; }
+.page :global(.tour-embedded) :global(.tour-expense-summary) > div { background: transparent; padding: 0; }
+.page :global(.tour-embedded) :global(.tour-expense-summary) dt { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.page :global(.tour-embedded) :global(.tour-expense-summary) dd { font-size: 18px; }
+.page :global(.tour-embedded) > form > p:first-child { background: #f1f5ff; font-size: 13px; padding: 12px 14px; }
 .page :global(.tour-expense-line) { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 12px; padding: 0; border: 0; background: white; }
 .page :global(.tour-expense-line) > div { display: contents; }
 .page :global(.tour-expense-line) h4 { display: none; }
 .page :global(.tour-expense-line) > div:first-child > button { grid-column: 3; grid-row: 1; align-self: start; margin-top: 25px; }
 .page :global(.tour-expense-line) > div:nth-child(2) > div:first-child { grid-column: 1; grid-row: 1; }
 .page :global(.tour-expense-line) > div:nth-child(2) > div:nth-child(2) { grid-column: 2; grid-row: 1; }
-.page :global(.tour-counting-quantities) > div:nth-child(4) p:first-child { margin-right: 4px; font-weight: 500; text-transform: none; }
-@media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr) 250px; } .page :global(.tour-counting-line) { grid-template-columns: 1fr; } }
+
+@media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr) 245px; } .page :global(.tour-counting-line), .page :global(.tour-counting-columns) { gap: 12px; padding-inline: 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 3fr); } }
 @media (max-width: 760px) {
   .page { padding: 22px 16px 48px; }
   .hero h1 { font-size: 23px; }
@@ -75,8 +95,15 @@
   .financial dl > div { display: block; }
   .financial dd { text-align: left; margin-top: 5px; }
   .due { font-size: 25px; }
-  .page :global(.tour-counting-quantities) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .page :global(.tour-counting-quantities) > div:nth-child(4) { grid-row: 3; }
+  .page :global(.tour-counting-columns) { display: none; }
+  .page :global(.tour-counting-line) { grid-template-columns: 1fr; gap: 12px; }
+  .page :global(.tour-counting-quantities) { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; gap: 14px 22px; }
+  .page :global(.tour-counting-label) { position: static; width: auto; height: auto; margin: 0 0 5px; clip-path: none; overflow: visible; font-size: 12px; color: #65758b; }
+  .page :global(.tour-counting-quantities) input { max-width: 145px; text-align: left; }
+  .page :global(.tour-embedded) :global(.tour-expense-summary) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .formActions small { width: 100%; }
+  .formActions > button { flex: 1; }
+  .page :global(.tour-embedded) .formActions > button { width: auto; }
   .read { padding: 16px; }
   .page :global(.tour-expense-line) { grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; }
   .page :global(.tour-expense-line) > div:first-child > button { padding: 8px 2px; }
@@ -84,3 +111,44 @@
 
 }
 @media (prefers-reduced-motion: reduce) { .page * { transition: none !important; scroll-behavior: auto !important; } }
+
+.card:has(.form) > div:first-child { background: white; }
+.page :global(.tour-embedded) div:has(> .formActions) { flex-direction: column; align-items: stretch; }
+.badge[data-status='LOADED'] { background: #eaf0ff; color: #3154b0; }
+.badge[data-status='COUNTED'] { background: #f0eafa; color: #7450aa; }
+.badge[data-status='CLOSED'] { background: #e7f5ee; color: #127459; }
+.badge[data-status='CANCELLED'] { background: #fcecef; color: #b02e44; }
+.page :global(.tour-embedded) form > div:first-child:not(:has(input)) { border-color: #dce5fa; background: #f1f5ff; }
+.operation[data-operation='payment'] :global(.tour-embedded) form > div { border-color: #dfe6ef; }
+.operation[data-operation='payment'] :global(.tour-embedded) form > div:has(> p:first-child):not(:has(input)):not(:has(button)) { background: #f5f8fd; }
+@media (max-width: 760px) {
+  .page :global(.tour-embedded) .formActions > button { min-width: 0; padding-inline: 10px; font-size: 13px; }
+}
+
+.productList { border-radius: 13px; box-shadow: 0 2px 3px #18304b03; }
+.productList > div:first-child > div { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: #f8fafc; border-color: #dfe6ef; }
+.productList > div:first-child > div > p { margin-top: 0; }
+.productLine { padding: 16px 22px; }
+.productLine > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 22px; align-items: center; }
+.productLine > div > div:last-child { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 18px; align-items: center; }
+.productLine > div > div:last-child > div { background: transparent; border: 0; padding: 0; margin: 0; }
+.productLine > div > div:last-child > div > p:first-child { font-size: 11px; color: #65758b; text-transform: none; letter-spacing: 0; }
+.productLine > div > div:last-child > div > p:nth-child(2) { font-size: 15px; color: #1a2940; overflow-wrap: anywhere; }
+.productLine > div > div:first-child > p:first-child { color: #65758b; font-size: 12px; font-family: inherit; }
+.productLine > div > div:first-child > p:last-child { font-size: 12px; margin-top: 5px; }
+.productLine h3 { font-size: 14px; }
+.trace dl > div { border-left: 2px solid #e1e8f4; padding: 4px 0 4px 20px; position: relative; }
+.trace dl > div::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #94a8c4; position: absolute; left: -5px; top: 10px; }
+@media (max-width: 1000px) {
+  .page :global(.tour-counting-columns) { display: none; }
+  .page :global(.tour-counting-line) { grid-template-columns: 1fr; }
+  .page :global(.tour-counting-quantities) { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; gap: 14px 22px; }
+  .page :global(.tour-counting-label) { position: static; width: auto; height: auto; margin: 0 0 5px; clip-path: none; overflow: visible; font-size: 12px; color: #65758b; }
+  .page :global(.tour-counting-quantities) input { max-width: 145px; text-align: left; }
+}
+@media (max-width: 760px) {
+  .productLine { padding: 14px 16px; }
+  .productLine > div { grid-template-columns: 1fr; gap: 14px; }
+  .productLine > div > div:last-child { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
+  .productLine > div > div:last-child > div > p:nth-child(2) { font-size: 14px; }
+}

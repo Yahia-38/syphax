@@ -1,6 +1,6 @@
 'use client';
 
-import { useTourActionState, useTourDraft } from './tour-operation-context.js';
+import { TourFormActions, useTourActionState, useTourDraft } from './tour-operation-context.js';
 
 import { useRef, useState } from 'react';
 
@@ -60,7 +60,7 @@ const PreviewAmount = ({ label, value }) => (
 );
 
 const FinancialSummary = ({ values }) => (
-  <dl className='grid gap-px border-t border-amber-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
+  <dl className='tour-expense-summary grid gap-px border-t border-amber-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-5'>
     {values.map(([label, value]) => (
       <PreviewAmount key={label} label={label} value={value} />
     ))}
@@ -508,7 +508,7 @@ const TourExpensePreview = ({
           <input name='confirmationKey' type='hidden' value={confirmationKey} />
           <input name='expenseDigest' type='hidden' value={preview.digest} />
 
-          <div className='mt-5 flex justify-end'>
+          <TourFormActions pending={pending}>
             <button
               className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50 sm:w-auto'
               disabled={pending}
@@ -516,7 +516,7 @@ const TourExpensePreview = ({
             >
               {pending ? 'Enregistrement…' : 'Vérifier la déclaration'}
             </button>
-          </div>
+          </TourFormActions>
 
           <ConfirmationDialog
             confirmLabel='Enregistrer définitivement'

@@ -51,7 +51,10 @@ const TourNavigation = ({ tourId, returnHref, defaultView, header, operations, p
       </nav>
       {view === 'operations' && <>
         <nav className={styles.shortcuts} aria-label='Accès aux opérations'>
-          {shortcuts.map((shortcut) => <button key={shortcut.target} onClick={() => go(shortcut)} type='button'><strong>{shortcut.label}</strong><small>{shortcut.state}</small></button>)}
+          {shortcuts.map((shortcut, index) => {
+            const complete = ['Confirmé', 'Enregistré', 'Déclarés', 'Soldée'].includes(shortcut.state);
+            return <button key={shortcut.target} data-complete={complete} onClick={() => go(shortcut)} type='button'><span className={styles.shortcutMarker} aria-hidden='true'>{complete ? '✓' : index + 1}</span><span><strong>{shortcut.label}</strong><small>{shortcut.state}</small></span></button>;
+          })}
         </nav>
         <div className={styles.layout}><div className={styles.operations}>{operations}</div>{financial}</div>
       </>}

@@ -40,7 +40,28 @@ Vérifications exécutées :
   action masquée une fois soldée, réservation/libération et annulation motivée.
 
 Les tests utilisent des bases temporaires, supprimées après vérification.
-La tournée réelle fournie n’a pas été modifiée. Aucun commit, déploiement,
-seed client ou migration n’a été effectué. La navigation et pagination des
+La tournée réelle fournie n’a pas été modifiée. La refonte initiale a été commitée à la demande de l’utilisateur.
+Aucun déploiement, seed client ou migration n’a été effectué. La navigation et pagination des
 historiques longs sont conservées ; leur couverture visuelle exhaustive n’a
 pas été exécutée. Les conflits de production restent hors de cette vérification.
+
+
+Comparaison avec `fiche-tournee-apercu.html` (16 septembre 2026) :
+
+- En-tête avec repère Fiche tournée, statut et métadonnées regroupées.
+- Icônes discrètes des cartes et repères textuels des raccourcis.
+- Comptage sur cinq colonnes, prix historique sous le produit, labels mobiles,
+  champs vides, compteur et prochaine ligne après la pagination.
+- Frais compacts et prévisualisation sur trois colonnes sur bureau, deux sur mobile.
+- Annulation de saisie et validation regroupées pour comptage, frais et versement,
+  avec annulation de secours si une relecture rend le formulaire indisponible.
+- Champs cachés de toutes les lignes regroupés dans un conteneur masqué :
+  sérialisation complète conservée sans lignes vides dans les actions de fin.
+- Synthèse avec accent ambre léger ; notices et formulaires harmonisés.
+- Produits chargés et réservés en lignes compactes avec valeurs historiques,
+  conversions et libération conservées ; repères visuels de traçabilité.
+
+Vérification de cette correction : captures Chrome de la maquette et du résultat
+sur bureau et mobile, interactions ciblées sur base temporaire, 25 tests des
+calculs et de la navigation, ESLint ciblé et build webpack. Les services métier
+et leurs écritures ne sont pas modifiés par cette correction.

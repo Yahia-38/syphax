@@ -1,8 +1,19 @@
 'use client';
 
 import { createContext, useActionState, useContext, useEffect, useRef } from 'react';
+import styles from './tour-detail.module.css';
 
 export const TourOperationContext = createContext(null);
+
+export const TourFormActions = ({ children, pending }) => {
+  const operation = useContext(TourOperationContext);
+  if (!operation) return children;
+  return <div className={styles.formActions}>
+    <small>{pending ? 'Enregistrement en cours…' : 'Saisie non enregistrée'}</small>
+    <button disabled={pending} onClick={operation.onCancel} type='button'>Annuler la saisie</button>
+    {children}
+  </div>;
+};
 
 // Keep the existing action contract; only report its confirmed lifecycle to the card.
 export const useTourActionState = (action, initialState) => {

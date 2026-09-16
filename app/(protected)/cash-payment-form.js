@@ -1,6 +1,6 @@
 'use client';
 
-import { useTourDraft } from './tournees/[id]/tour-operation-context.js';
+import { TourFormActions, useTourDraft } from './tournees/[id]/tour-operation-context.js';
 
 import { useMemo, useState } from 'react';
 
@@ -158,14 +158,14 @@ const CashPaymentForm = ({
           La confirmation enregistre l’argent effectivement reçu. Le versement
           sera conservé sans modification ni suppression.
         </p>
-        <button
+        <TourFormActions pending={pending}><button
           className='inline-flex w-full items-center justify-center rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
           disabled={pending
             || calculation.remainingAfterPaymentInCentimes === null}
           type='submit'
         >
           {pending ? 'Enregistrement…' : 'Enregistrer le versement'}
-        </button>
+        </button></TourFormActions>
       </div>
 
       <ConfirmationDialog

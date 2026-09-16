@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { calculateLoadedLineValue } from '../../../../lib/tour-counting-calculations.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import TourReservationReleaseButton from './tour-reservation-release-button.js';
+import styles from './tour-detail.module.css';
 
 const LINES_PER_PAGE = 5;
 
@@ -79,7 +80,7 @@ const TourProductList = ({
   return (
     <section
       aria-labelledby='tour-products-title'
-      className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+      className={`${styles.productList} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm`}
     >
       <div className='border-b border-slate-200 p-5 sm:p-6'>
         <h2 className='text-lg font-semibold text-slate-900' id='tour-products-title'>
@@ -166,7 +167,7 @@ const TourProductList = ({
       {paginatedLines.length > 0 ? (
         <div className='divide-y divide-slate-100'>
           {paginatedLines.map((line) => (
-            <article className='p-5 sm:p-6' key={line.id}>
+            <article className={`${styles.productLine} p-5 sm:p-6`} key={line.id}>
               <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
                 <div className='min-w-0'>
                   <p className='break-all font-mono text-sm font-semibold text-blue-700'>

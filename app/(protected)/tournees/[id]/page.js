@@ -168,8 +168,9 @@ const TourPage = async ({ params, searchParams }) => {
   return <TourDetail tourId={tour.id} returnHref={returnHref} defaultView={readTourView(query.vue, tour.status)} priority={priority}
     header={<header>
       {canReadDeliverer && <EditingLink className={styles.back} href={returnHref}>← Retour à la fiche livreur</EditingLink>}
-      <h1>{tour.reference}<span className={styles.badge}>{formatTourStatus(tour.status)}</span></h1>
-      <p>{tour.delivererCode} — {tour.delivererName} · Prévue le {formatTourDate(tour.plannedDate)}</p>
+      <p className={styles.eyebrow}>Fiche tournée</p>
+      <h1>{tour.reference}</h1>
+      <p className={styles.meta}><span className={styles.badge} data-status={tour.status}>{formatTourStatus(tour.status)}</span><span>{tour.delivererName} · {tour.delivererCode}</span><span>Prévue le {formatTourDate(tour.plannedDate)}</span></p>
     </header>}
     shortcuts={[
       { label: 'Chargement', state: cancelled ? 'Annulée' : preparation ? 'En préparation' : 'Confirmé', target: 'chargement', view: 'produits' },
