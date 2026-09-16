@@ -40,7 +40,7 @@ const ReceptionList = ({ receptions, readError }) => {
     <div>
       <div className={styles.sectionLabel}><h2 id='reception-list-title'>Historique des réceptions</h2><p>Documents enregistrés · du plus récent au plus ancien</p></div>
       <section className={styles.card} aria-labelledby='reception-list-title'>
-      <form className={styles.compactFilters} key={`${query}:${supplierId}`} role='search' onSubmit={(event) => {
+      <form className={`${styles.compactFilters} ${styles.historyFilters}`} key={`${query}:${supplierId}`} role='search' onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         changeFilters({ query: String(data.get('query')).trim(), supplierId: String(data.get('supplierId')), page: 1 });
@@ -60,7 +60,13 @@ const ReceptionList = ({ receptions, readError }) => {
             <td><Link className={styles.reference} href={getReceptionHref(reception.id)}>{reception.supplierReference}</Link><small>{reception.lines.length} ligne{reception.lines.length > 1 ? 's enregistrées' : ' enregistrée'}</small></td>
             <td><span className={styles.mobileLabel}>Date de réception</span>{formatReceptionShortDate(reception.receptionDate)}</td>
             <td><span className={styles.mobileLabel}>Fournisseur</span>{reception.supplierName}</td>
-            <td className={styles.products}>{reception.lines.slice(0, 2).map((line) => line.productDesignation || line.productCode).join(' · ')}{reception.lines.length > 2 && ` · + ${reception.lines.length - 2} lignes`}<div className={styles.quantityBadges}>{reception.lines.slice(0, 2).map((line, index) => Number.isSafeInteger(line.quantityInBaseUnits) && line.quantityInBaseUnits > 0 && <span key={index}>{line.quantityInBaseUnits} {BASE_UNIT_LABELS.get(line.baseUnit) ?? line.baseUnit ?? 'unités'}</span>)}</div></td>
+            <td className={styles.products}>
+              {reception.lines.slice(0, 2).map((line, index) => <div className={styles.productPreview} key={index}>
+                <span>{line.productDesignation || line.productCode}</span>
+                {Number.isSafeInteger(line.quantityInBaseUnits) && line.quantityInBaseUnits > 0 && <span className={styles.productQuantity}>{line.quantityInBaseUnits} {BASE_UNIT_LABELS.get(line.baseUnit) ?? line.baseUnit ?? 'unités'}</span>}
+              </div>)}
+              {reception.lines.length > 2 && <small>+ {reception.lines.length - 2} lignes</small>}
+            </td>
             <td><Link className={styles.openLink} aria-label={`Ouvrir la réception ${reception.supplierReference}`} href={getReceptionHref(reception.id)}>Ouvrir <span aria-hidden='true'>→</span></Link></td>
           </tr>)}
         </tbody></table>

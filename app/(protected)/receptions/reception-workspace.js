@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
+import { buildReceptionHistoryHref, readReceptionHistoryState } from '../../../lib/receptions.js';
 import { EditingSessionProvider } from '../components/editing-session.js';
 import ReceptionForm from './reception-form.js';
 import ReceptionList from './reception-list.js';
@@ -25,7 +26,8 @@ const ReceptionWorkspace = ({
   }, []);
   const handleReceptionCreated = useCallback((message, result) => {
     closeForm();
-    setNotice({ message, receptionId: result.receptionId, retour: `${window.location.pathname}${window.location.search}` });
+    const retour = buildReceptionHistoryHref(readReceptionHistoryState(Object.fromEntries(new URLSearchParams(window.location.search))));
+    setNotice({ message, receptionId: result.receptionId, retour });
   }, [closeForm]);
 
   return (

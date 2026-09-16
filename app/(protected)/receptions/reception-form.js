@@ -80,6 +80,7 @@ const ReceptionLineForm = ({
             <option value='PACKAGING' disabled={!receptionPackagings.length}>Nombre de conditionnements</option>
           </select>
           <p className={styles.lineHelp}>{!product ? 'Sélectionnez d’abord un produit.' : !receptionPackagings.length ? 'Aucun conditionnement activé pour la réception : saisie directe uniquement.' : `Unité de base : ${unitLabel}`}</p>
+          {product && <p className={styles.lineHelp}>Changer de produit efface les quantités, le conditionnement et le montant. Changer de mode efface les quantités et le conditionnement.</p>}
         </div>
         {line.quantityMode === 'PACKAGING' && <div>
           <label htmlFor={`${line.id}-packaging`}>Conditionnement</label>
@@ -190,6 +191,9 @@ const ReceptionDraftForm = ({
   });
   const uncertain = Boolean(state.errors.form && state.revision > 0);
   const blocked = pending || uncertain;
+  const missingPrerequisite = !suppliers.length || !products.length;
+  const hasPreparedDraft = documentValidated || lines.length > 0 || Boolean(lineDraft)
+    || documentDraft.supplierId !== '' || documentDraft.supplierReference !== '' || documentDraft.receptionDate !== initialDate;
   const lineDraftProduct = lineDraft ? getProduct(products, lineDraft.productId) : null;
   const lineDraftCalculation = useMemo(() => lineDraft ? calculateReceptionLine(lineDraft, lineDraftProduct) : null, [lineDraft, lineDraftProduct]);
   const validatedLines = lines.filter(({ id }) => id !== editingLineId);
@@ -289,8 +293,15 @@ const ReceptionDraftForm = ({
   const quantities = <dl>{summary.quantities.map(({ unit, quantity }) => <div className={styles.unitTotal} key={unit}><dt>{baseUnits.find(({ code }) => code === unit)?.label ?? unit}</dt><dd>{quantity ?? 'Non calculable'}</dd></div>)}</dl>;
   return (
     <>
-      <div className={styles.draftMeta}><button className={styles.quiet} disabled={pending} onClick={() => session.request(onCancel)} type='button'>← Historique</button><span className={`${styles.badge} ${styles.draftBadge}`}>Brouillon non enregistré</span></div>
-      {catalogError ? <section className={styles.card}><div className={styles.empty}><h3>Préparation indisponible</h3><ReadError>{catalogError}</ReadError></div></section> : (
+      <div className={styles.draftMeta}><button className={styles.quiet} disabled={pending} onClick={() => session.request(onCancel)} type='button'>← Retour à l’historique</button><span className={`${styles.badge} ${styles.draftBadge}`}>Brouillon non enregistré</span></div>
+      {catalogError ? <section className={styles.card}><div className={styles.empty}><h3>Préparation indisponible</h3><ReadError>{catalogError}</ReadError></div></section> : missingPrerequisite && !hasPreparedDraft ? <section className={styles.card}>
+        <div className={styles.empty}><h2>Avant de préparer une réception</h2><p>Complétez les prérequis pour saisir les marchandises reçues.</p></div>
+        <div className={styles.prerequisite}>
+          {!suppliers.length && <p>Ajoutez un fournisseur actif avant de préparer une réception.</p>}
+          {!products.length && <p>Ajoutez un produit au catalogue avant de préparer les lignes.</p>}
+          {!suppliers.length && canReadSuppliers && <EditingLink href='/receptions?onglet=fournisseurs'>Consulter les fournisseurs</EditingLink>}
+        </div>
+      </section> : (
         <form ref={formRef} action={save} onSubmit={verify} noValidate aria-busy={pending} id='new-reception-form'>
           <input name='lines' type='hidden' value={JSON.stringify(lines.map((line) => ({ ...line, baseUnit: getProduct(products, line.productId)?.baseUnit ?? '' })))} />
           <input name='submissionKey' type='hidden' value={submissionKey} />
@@ -314,7 +325,7 @@ const ReceptionDraftForm = ({
               <section className={`${styles.card} ${lineDraft ? styles.editing : ''}`} aria-labelledby='reception-lines-title'>
                 <div className={styles.cardHeader}><div><h2 id='reception-lines-title'><span className={styles.step}>2</span>Marchandises reçues</h2></div><button className={styles.secondary} ref={addRef} disabled={Boolean(lineDraft) || !products.length || lines.length >= 100} onClick={addLine} type='button'>{lines.length >= 100 ? 'Limite de 100 lignes' : '+ Ajouter une ligne'}</button></div>
                 {!products.length && <p className={styles.prerequisite}>Aucun produit disponible. Complétez le catalogue avant de préparer les lignes.</p>}
-                {lines.length > 0 && <div className={styles.filters}><div><label htmlFor='draft-line-search'>Rechercher dans le brouillon</label><input id='draft-line-search' type='search' disabled={Boolean(lineDraft)} value={lineQuery} onChange={(event) => { setLineQuery(event.target.value); setLinePage(1); }} placeholder='Code ou désignation' /></div><div><label htmlFor='draft-line-mode'>Mode de quantité</label><select id='draft-line-mode' disabled={Boolean(lineDraft)} value={lineMode} onChange={(event) => { setLineMode(event.target.value); setLinePage(1); }}><option value='ALL'>Tous les modes</option><option value='DIRECT'>Quantité directe</option><option value='PACKAGING'>Conditionnement</option></select></div></div>}
+                {lines.length > 0 && <div className={styles.filters} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }}><div><label htmlFor='draft-line-search'>Rechercher dans le brouillon</label><input id='draft-line-search' type='search' disabled={Boolean(lineDraft)} value={lineQuery} onChange={(event) => { setLineQuery(event.target.value); setLinePage(1); }} placeholder='Code ou désignation' /></div><div><label htmlFor='draft-line-mode'>Mode de quantité</label><select id='draft-line-mode' disabled={Boolean(lineDraft)} value={lineMode} onChange={(event) => { setLineMode(event.target.value); setLinePage(1); }}><option value='ALL'>Tous les modes</option><option value='DIRECT'>Quantité directe</option><option value='PACKAGING'>Conditionnement</option></select></div></div>}
                 {visibleLines.map((line) => line.id === editingLineId ? <div className={styles.editor} key={line.id}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} editing index={lines.findIndex(({ id }) => id === line.id)} line={lineDraft} onCancel={() => discardLineRef.current?.showModal()} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div> : <ReceptionLineSummary key={line.id} baseUnits={baseUnits} index={lines.findIndex(({ id }) => id === line.id)} line={line} disabled={Boolean(lineDraft)} onEdit={() => editLine(line)} onRemove={() => { setLineToRemove(line); requestAnimationFrame(() => removeRef.current?.showModal()); }} products={products} />)}
                 {lineDraft && !editingLineId && <div className={styles.editor}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} index={lines.length} line={lineDraft} onCancel={() => discardLineRef.current?.showModal()} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div>}
                 {!lines.length && !lineDraft && <div className={styles.empty}><h3>Aucune ligne préparée</h3><p>Ajoutez les produits, leur quantité et le montant TTC de chaque ligne.</p></div>}
@@ -330,7 +341,8 @@ const ReceptionDraftForm = ({
                   <h2 id='reception-summary-title'>Total des lignes validées</h2>
                   <div className={styles.amount}>{summary.amountInCentimes === null ? '—' : formatReceptionMoney(summary.amountInCentimes)}</div>
                   <p>{validatedLines.length} ligne{validatedLines.length > 1 ? 's' : ''} validée{validatedLines.length > 1 ? 's' : ''}{lineDraft && ' · 1 ligne en cours, non incluse'}</p>
-                  {editingLineId && <p className={styles.summaryHelp}>Total partiel : la ligne en cours n’est pas incluse.</p>}
+                  {!validatedLines.length && <p className={styles.summaryHelp}>Validez une ligne pour calculer le récapitulatif.</p>}
+                  {lineDraft && validatedLines.length > 0 && <p className={styles.summaryHelp}>Total partiel : la ligne en cours n’est pas incluse.</p>}
                   {validatedLines.length > 0 && !summary.complete && <p className={styles.summaryHelp}>Récapitulatif non calculable : vérifiez les lignes.</p>}
                   <div className={styles.quantityTotals}>{quantities}</div>
                   <p className={styles.summaryHelp}>Quantités regroupées par unité, jamais additionnées entre unités différentes.</p>

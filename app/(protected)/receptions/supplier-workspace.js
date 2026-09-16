@@ -11,8 +11,11 @@ import styles from './receptions.module.css';
 const SupplierEditor = ({ supplier, onCancel, onSuccess }) => {
   const action = useMemo(() => supplier ? updateSupplier.bind(null, supplier.id) : createSupplier, [supplier]);
   return <div className={styles.supplierForm}>
-    {!supplier && <h3>Nouveau fournisseur</h3>}
-    {!supplier && <p>Seul le nom est obligatoire.</p>}
+    <div className={styles.supplierEditorHeader}>
+      <h3>{supplier ? `Modifier ${supplier.name}` : 'Nouveau fournisseur'}</h3>
+      {supplier && <span className={`${styles.badge} ${supplier.active ? styles.green : ''}`}>{supplier.active ? 'Actif' : 'Désactivé'}</span>}
+    </div>
+    <p>Seul le nom est obligatoire.</p>
     <SupplierForm action={action} autoFocusName idPrefix={supplier ? `supplier-${supplier.id}` : 'create-supplier'}
       initialValues={supplier ?? undefined} onCancel={onCancel} onSuccess={onSuccess} cancelLabel='Annuler'
       pendingLabel='Enregistrement…' submitLabel={supplier ? 'Enregistrer' : 'Créer le fournisseur'} />
@@ -117,15 +120,14 @@ const SupplierContent = ({ canCreateSupplier, canDeleteSupplier, canUpdateSuppli
     </section>
     {!readError && <div className={styles.supplierCards}>
       {paginatedSuppliers.map((supplier) => <section className={`${styles.card} ${target === supplier.id ? styles.editing : ''}`} key={supplier.id} aria-label={supplier.name}>
-        <div className={styles.supplierOverview}>
+        {target === supplier.id && canUpdateSupplier ? <SupplierEditor supplier={supplier} onCancel={cancel} onSuccess={saved} /> : <div className={styles.supplierOverview}>
           <div><h3>{supplier.name}</h3><span className={`${styles.badge} ${supplier.active ? styles.green : ''}`}>{supplier.active ? 'Actif' : 'Désactivé'}</span><p>{supplier.contactName ? `Contact : ${supplier.contactName}` : 'Contact non renseigné'}</p></div>
           <div><p>{supplier.phone || 'Téléphone non renseigné'}</p><p>{supplier.email || 'E-mail non renseigné'}</p>{supplier.address && <details><summary>Voir l’adresse</summary><p className='whitespace-pre-wrap'>{supplier.address}</p></details>}</div>
           <div className={styles.supplierActions}>
             {canUpdateSupplier && target !== supplier.id && <button className={styles.secondary} onClick={(event) => edit(supplier.id, event)} type='button'>Modifier</button>}
             {canDeleteSupplier && target !== supplier.id && <button className={styles.danger} onClick={() => session.request(() => { setNotice(null); setRemoveError(null); setSupplierToRemove(supplier); })} type='button'>Retirer</button>}
           </div>
-        </div>
-        {target === supplier.id && canUpdateSupplier && <SupplierEditor supplier={supplier} onCancel={cancel} onSuccess={saved} />}
+        </div>}
       </section>)}
       {filteredSuppliers.length > 0 && <Pagination page={activePage} totalPages={totalPages} totalResults={filteredSuppliers.length} label='Pagination des fournisseurs' onChange={(page) => changeList(() => setCurrentPage(page))} />}
       <p className={styles.supplierHelp}>Un fournisseur déjà utilisé est désactivé lorsqu’il est retiré. Les réceptions conservent leur historique.</p>
