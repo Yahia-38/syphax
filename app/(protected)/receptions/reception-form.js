@@ -6,7 +6,6 @@ import {
   calculateReceptionLine,
   changeReceptionLineProduct,
   createEmptyReceptionLine,
-  formatReceptionDate,
   formatReceptionMoney,
   formatReceptionUnitCost,
   validateReceptionDraft,
@@ -16,11 +15,9 @@ import { summarizeReceptionDraft, validateReceptionDocument } from '../../../lib
 import ConfirmationDialog from '../confirmation-dialog.js';
 import { useInlineSave } from '../components/editable-card.js';
 import { EditingLink, useEditingSession } from '../components/editing-session.js';
-import { Pagination, ReadError } from './reception-ui.js';
+import { Pagination, ReadError, formatReceptionShortDate } from './reception-ui.js';
 import styles from './receptions.module.css';
 import { createReception } from './actions.js';
-
-const INPUT_CLASS = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
 const INITIAL_RECEPTION_STATE = {
   errors: {},
@@ -44,301 +41,78 @@ const getQuantityUnitLabel = (baseUnits, product) => ({
 }[product?.baseUnit] ?? getUnitLabel(baseUnits, product).toLocaleLowerCase('fr'));
 
 const ReceptionLineForm = ({
-  baseUnits,
-  calculation,
-  errors,
-  index,
-  line,
-  onCancel,
-  onChange,
-  onProductChange,
-  onValidate,
-  products,
+  baseUnits, calculation, errors, index, line, onCancel, onChange, onProductChange, onValidate, products, editing,
 }) => {
   const product = getProduct(products, line.productId);
-  const unitLabel = getUnitLabel(baseUnits, product);
-  const hasPackagings = Boolean(product?.packagings.length);
-  const lowerUnitLabel = unitLabel.toLocaleLowerCase('fr');
+  const unitLabel = getUnitLabel(baseUnits, product).toLocaleLowerCase('fr');
   const quantityUnitLabel = getQuantityUnitLabel(baseUnits, product);
   const packaging = product?.packagings.find(({ id }) => id === line.packagingId);
   const editorRef = useRef(null);
+  const quantityField = line.quantityMode === 'PACKAGING' ? 'packagingCount' : 'directQuantity';
+  const quantityId = `${line.id}-${line.quantityMode === 'PACKAGING' ? 'packaging-count' : 'direct-quantity'}`;
   useLayoutEffect(() => { editorRef.current?.querySelector('select')?.focus(); }, [line.id]);
   useEffect(() => {
     if (Object.keys(errors).length) editorRef.current?.querySelector('[aria-invalid="true"]')?.focus();
   }, [errors]);
+  const error = (name, id) => errors[name] && <p className={styles.fieldError} id={`${id}-error`}>{errors[name]}</p>;
 
   return (
-    <fieldset ref={editorRef} className='rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5'>
+    <fieldset ref={editorRef} className={styles.lineForm} onKeyDown={(event) => {
+      if (event.key === 'Enter' && event.target.tagName === 'INPUT') { event.preventDefault(); onValidate(); }
+    }}>
       <legend className='sr-only'>Ligne {index + 1}</legend>
-      <div>
-        <p className='text-sm font-semibold text-slate-900'>
-          Saisie de la ligne {index + 1}
-        </p>
-        <p className='mt-1 text-xs text-slate-500'>
-          Validation locale : aucun stock écrit. Changer de produit réinitialise quantité, conditionnement et montant ; changer de mode réinitialise la quantité.
-        </p>
-      </div>
-
-      <div className='mt-5 grid gap-5 lg:grid-cols-2'>
-        <div className='lg:col-span-2'>
-          <label
-            className='block text-sm font-medium text-slate-700'
-            htmlFor={`${line.id}-product`}
-          >
-            Produit
-          </label>
-          <select
-            aria-describedby={errors.product ? `${line.id}-product-error` : undefined}
-            aria-invalid={Boolean(errors.product)}
-            className={INPUT_CLASS}
-            id={`${line.id}-product`}
-            onChange={(event) => onProductChange(event.target.value)}
-            required
-            value={line.productId}
-          >
-            <option value=''>Sélectionnez un produit</option>
-            {products.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.code} — {candidate.designation}
-              </option>
-            ))}
+      <h3>{editing ? 'Modifier la ligne' : 'Ajouter une ligne'}</h3>
+      <div className={styles.lineGrid}>
+        <div className={styles.fullField}>
+          <label htmlFor={`${line.id}-product`}>Produit du catalogue</label>
+          <select id={`${line.id}-product`} value={line.productId} onChange={(event) => onProductChange(event.target.value)} aria-invalid={Boolean(errors.product)} aria-describedby={errors.product ? `${line.id}-product-error` : undefined}>
+            <option value=''>Sélectionner un produit</option>
+            {products.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.code} · {candidate.designation}</option>)}
           </select>
-          {errors.product && (
-            <p className='mt-2 text-sm text-red-700' id={`${line.id}-product-error`}>
-              {errors.product}
-            </p>
-          )}
+          {error('product', `${line.id}-product`)}
         </div>
-
-        <div className='lg:col-span-2'>
-          <p className='text-sm font-medium text-slate-700'>Mode de saisie</p>
-          <div className='mt-2 flex flex-col gap-2 sm:flex-row sm:gap-6'>
-            <label className='inline-flex items-center gap-2 text-sm text-slate-700'>
-              <input
-                checked={line.quantityMode === 'DIRECT'}
-                name={`${line.id}-quantity-mode`}
-                onChange={() => onChange({
-                  directQuantity: '',
-                  packagingCount: '',
-                  packagingId: '',
-                  quantityMode: 'DIRECT',
-                })}
-                type='radio'
-              />
-              Quantité directe
-            </label>
-            <label className='inline-flex items-center gap-2 text-sm text-slate-700'>
-              <input
-                checked={line.quantityMode === 'PACKAGING'}
-                disabled={!product || !hasPackagings}
-                name={`${line.id}-quantity-mode`}
-                onChange={() => onChange({
-                  directQuantity: '',
-                  packagingCount: '',
-                  packagingId: '',
-                  quantityMode: 'PACKAGING',
-                })}
-                type='radio'
-              />
-              Nombre de conditionnements
-            </label>
-          </div>
-          {product && !hasPackagings && (
-            <p className='mt-2 text-xs text-amber-700'>
-              Ce produit ne possède aucun conditionnement ; utilisez la saisie directe.
-            </p>
-          )}
+        <div>
+          <label htmlFor={`${line.id}-quantity-mode`}>Mode de saisie</label>
+          <select id={`${line.id}-quantity-mode`} disabled={!product} value={line.quantityMode} onChange={(event) => onChange({ directQuantity: '', packagingCount: '', packagingId: '', quantityMode: event.target.value })}>
+            <option value='DIRECT'>Quantité directe</option>
+            <option value='PACKAGING' disabled={!product?.packagings.length}>Nombre de conditionnements</option>
+          </select>
+          <p className={styles.lineHelp}>{!product ? 'Sélectionnez d’abord un produit.' : !product.packagings.length ? 'Aucun conditionnement : saisie directe uniquement.' : `Unité de base : ${unitLabel}`}</p>
         </div>
-
-        {line.quantityMode === 'DIRECT' ? (
-          <div>
-            <label
-              className='block text-sm font-medium text-slate-700'
-              htmlFor={`${line.id}-direct-quantity`}
-            >
-              Quantité en {lowerUnitLabel}
-            </label>
-            <input
-              aria-describedby={errors.directQuantity
-                ? `${line.id}-direct-quantity-error`
-                : undefined}
-              aria-invalid={Boolean(errors.directQuantity)}
-              className={INPUT_CLASS}
-              disabled={!product}
-              id={`${line.id}-direct-quantity`}
-              inputMode='numeric'
-              min='1'
-              onChange={(event) => onChange({ directQuantity: event.target.value })}
-              placeholder='Ex. 60'
-              step='1'
-              type='number'
-              value={line.directQuantity}
-            />
-            {errors.directQuantity && (
-              <p
-                className='mt-2 text-sm text-red-700'
-                id={`${line.id}-direct-quantity-error`}
-              >
-                {errors.directQuantity}
-              </p>
-            )}
-          </div>
-        ) : (
-          <>
-            <div>
-              <label
-                className='block text-sm font-medium text-slate-700'
-                htmlFor={`${line.id}-packaging`}
-              >
-                Conditionnement
-              </label>
-              <select
-                aria-describedby={errors.packaging
-                  ? `${line.id}-packaging-error`
-                  : undefined}
-                aria-invalid={Boolean(errors.packaging)}
-                className={INPUT_CLASS}
-                id={`${line.id}-packaging`}
-                onChange={(event) => onChange({ packagingId: event.target.value })}
-                value={line.packagingId}
-              >
-                <option value=''>Sélectionnez un conditionnement</option>
-                {(product?.packagings ?? []).map((packaging) => (
-                  <option key={packaging.id} value={packaging.id}>
-                    {packaging.label} — {packaging.quantity} {lowerUnitLabel}
-                  </option>
-                ))}
-              </select>
-              {errors.packaging && (
-                <p className='mt-2 text-sm text-red-700' id={`${line.id}-packaging-error`}>
-                  {errors.packaging}
-                </p>
-              )}
-            </div>
-            <div>
-              <label
-                className='block text-sm font-medium text-slate-700'
-                htmlFor={`${line.id}-packaging-count`}
-              >
-                Nombre de conditionnements
-              </label>
-              <input
-                aria-describedby={errors.packagingCount
-                  ? `${line.id}-packaging-count-error`
-                  : undefined}
-                aria-invalid={Boolean(errors.packagingCount)}
-                className={INPUT_CLASS}
-                id={`${line.id}-packaging-count`}
-                inputMode='numeric'
-                min='1'
-                onChange={(event) => onChange({ packagingCount: event.target.value })}
-                placeholder='Ex. 10'
-                step='1'
-                type='number'
-                value={line.packagingCount}
-              />
-              {errors.packagingCount && (
-                <p
-                  className='mt-2 text-sm text-red-700'
-                  id={`${line.id}-packaging-count-error`}
-                >
-                  {errors.packagingCount}
-                </p>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className='lg:col-span-2'>
-          <label
-            className='block text-sm font-medium text-slate-700'
-            htmlFor={`${line.id}-amount`}
-          >
-            Montant TTC de la ligne
-          </label>
-          <div className='relative mt-2'>
-            <input
-              aria-describedby={errors.amount
-                ? `${line.id}-amount-error ${line.id}-amount-help`
-                : `${line.id}-amount-help`}
-              aria-invalid={Boolean(errors.amount)}
-              className={`${INPUT_CLASS} mt-0 pr-12`}
-              id={`${line.id}-amount`}
-              inputMode='decimal'
-              onChange={(event) => onChange({ amount: event.target.value })}
-              placeholder='Ex. 120,00'
-              required
-              type='text'
-              value={line.amount}
-            />
-            <span className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-500'>
-              DA
-            </span>
-          </div>
-          <p className='mt-2 text-xs leading-5 text-slate-500' id={`${line.id}-amount-help`}>
-            Montant total TTC du produit sur cette ligne, avant calcul du coût unitaire.
-          </p>
-          {errors.amount && (
-            <p className='mt-2 text-sm text-red-700' id={`${line.id}-amount-error`}>
-              {errors.amount}
-            </p>
-          )}
+        {line.quantityMode === 'PACKAGING' && <div>
+          <label htmlFor={`${line.id}-packaging`}>Conditionnement</label>
+          <select id={`${line.id}-packaging`} value={line.packagingId} onChange={(event) => onChange({ packagingId: event.target.value })} aria-invalid={Boolean(errors.packaging)} aria-describedby={errors.packaging ? `${line.id}-packaging-error` : undefined}>
+            <option value=''>Sélectionner</option>
+            {(product?.packagings ?? []).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} · {candidate.quantity} {quantityUnitLabel}</option>)}
+          </select>
+          {error('packaging', `${line.id}-packaging`)}
+        </div>}
+        <div>
+          <label htmlFor={quantityId}>{line.quantityMode === 'PACKAGING' ? 'Nombre de conditionnements' : `Quantité en ${product ? quantityUnitLabel : 'unités de base'}`}</label>
+          <input id={quantityId} disabled={!product} inputMode='numeric' type='text' value={line[quantityField]} onChange={(event) => onChange({ [quantityField]: event.target.value })} placeholder='Ex. 10' aria-invalid={Boolean(errors[quantityField])} aria-describedby={errors[quantityField] ? `${quantityId}-error` : undefined} />
+          {error(quantityField, quantityId)}
         </div>
-
-        <div className='rounded-lg border border-blue-100 bg-blue-50 p-4'>
-          <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-            Quantité totale reçue
-          </p>
-          <p className='mt-2 text-xl font-bold text-blue-950'>
-            {calculation.quantityInBaseUnits ?? '—'} {quantityUnitLabel}
-          </p>
-          <p className='mt-1 text-xs leading-5 text-blue-800'>
-            {line.quantityMode === 'PACKAGING'
-              ? packaging && calculation.quantityInBaseUnits !== null
-                ? `${line.packagingCount} × ${packaging.quantity} ${quantityUnitLabel} = ${calculation.quantityInBaseUnits} ${quantityUnitLabel}`
-                : 'Choisissez un conditionnement et renseignez son nombre.'
-              : 'Saisie directement dans l’unité de base du produit.'}
-          </p>
-        </div>
-
-        <div className='rounded-lg border border-emerald-100 bg-emerald-50 p-4'>
-          <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>
-            Coût unitaire TTC
-          </p>
-          <p className='mt-2 text-xl font-bold text-emerald-950'>
-            {formatReceptionUnitCost(calculation)}
-            {calculation.amountInCentimes !== null
-              && calculation.quantityInBaseUnits !== null && (
-                <span className='ml-1 text-sm font-medium text-emerald-800'>
-                  / {lowerUnitLabel}
-                </span>
-            )}
-          </p>
-          <p className='mt-1 text-xs leading-5 text-emerald-800'>
-            Calculé depuis le montant TTC et la quantité totale en unité de base.
-          </p>
-        </div>
-
-        <div className='flex justify-end gap-3 lg:col-span-2'>
-          <button
-            className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={onCancel}
-            type='button'
-          >
-            Annuler
-          </button>
-          <button
-            className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            onClick={onValidate}
-            type='button'
-          >
-            Valider la ligne
-          </button>
+        <div>
+          <label htmlFor={`${line.id}-amount`}>Montant TTC total de la ligne · DA</label>
+          <input id={`${line.id}-amount`} inputMode='decimal' type='text' value={line.amount} onChange={(event) => onChange({ amount: event.target.value })} placeholder='Ex. 1200,00' aria-invalid={Boolean(errors.amount)} aria-describedby={`${line.id}-amount-help${errors.amount ? ` ${line.id}-amount-error` : ''}`} />
+          <p className={styles.lineHelp} id={`${line.id}-amount-help`}>Le montant de cette ligne, pas un prix unitaire. Zéro est accepté s’il est explicite.</p>
+          {error('amount', `${line.id}-amount`)}
         </div>
       </div>
+      <div className={styles.linePreview}>
+        <dl>
+          <div><dt>Quantité totale reçue</dt><dd>{calculation.quantityInBaseUnits === null ? '—' : `${calculation.quantityInBaseUnits} ${quantityUnitLabel}`}</dd></div>
+          <div><dt>Coût unitaire TTC calculé</dt><dd>{formatReceptionUnitCost(calculation)}{calculation.amountInCentimes !== null && calculation.quantityInBaseUnits !== null && ` / ${unitLabel}`}</dd></div>
+        </dl>
+        {line.quantityMode === 'PACKAGING' && packaging && calculation.quantityInBaseUnits !== null && <p className={styles.lineHelp}>{line.packagingCount} × {packaging.quantity} {quantityUnitLabel} = {calculation.quantityInBaseUnits} {quantityUnitLabel}</p>}
+        <p className={styles.lineHelp}>Montant TTC de la ligne ÷ quantité en unité de base. Aucun prix de vente n’est utilisé.</p>
+      </div>
+      <div className={styles.lineFormActions}><button className={styles.secondary} onClick={onCancel} type='button'>Annuler</button><button className={styles.primary} onClick={onValidate} type='button'>Valider la ligne</button></div>
+      <p className={styles.lineHelp}>Valider la ligne l’ajoute au brouillon. Le stock ne change qu’à l’enregistrement final.</p>
     </fieldset>
   );
 };
+
 
 const ReceptionLineSummary = ({ baseUnits, index, line, onEdit, onRemove, products, disabled }) => {
   const product = getProduct(products, line.productId);
@@ -349,7 +123,7 @@ const ReceptionLineSummary = ({ baseUnits, index, line, onEdit, onRemove, produc
   return (
     <article className={styles.line}>
       <div className={styles.lineTop}>
-        <div><p>Ligne {index + 1} · Validée dans le brouillon</p><h3>{product?.code} — {product?.designation}</h3><p>{packaging ? `${line.packagingCount} × ${packaging.label} de ${packaging.quantity} ${unitLabel}` : 'Quantité saisie directement'}</p></div>
+        <div><p className={styles.lineLabel}>Ligne {index + 1} · brouillon</p><h3>{product?.designation}</h3><p>{product?.code} · {packaging ? `${line.packagingCount} × ${packaging.label}` : 'Saisie directe'}</p></div>
         <div className={styles.lineActions}><button className={styles.quiet} disabled={disabled} onClick={onEdit} type='button'>Modifier</button><button className={styles.danger} disabled={disabled} onClick={onRemove} type='button'>Retirer</button></div>
       </div>
       <dl className={styles.lineValues}>
@@ -372,6 +146,7 @@ const ReceptionDraftForm = ({
   const documentRef = useRef(null);
   const confirmationRef = useRef(null);
   const removeRef = useRef(null);
+  const discardLineRef = useRef(null);
   const submitRef = useRef(null);
   const addRef = useRef(null);
   const submittedDataRef = useRef(null);
@@ -507,50 +282,67 @@ const ReceptionDraftForm = ({
   }, [state.revision, pending]);
 
   const quantities = <dl>{summary.quantities.map(({ unit, quantity }) => <div className={styles.unitTotal} key={unit}><dt>{baseUnits.find(({ code }) => code === unit)?.label ?? unit}</dt><dd>{quantity ?? 'Non calculable'}</dd></div>)}</dl>;
-  const missingPrerequisite = catalogError || !suppliers.length || !products.length;
   return (
     <>
-      <div className={styles.draftMeta}><button className={styles.quiet} disabled={pending} onClick={() => session.request(onCancel)} type='button'>← Retour à l’historique</button><span className={`${styles.badge} ${styles.amber}`}>Brouillon non enregistré</span></div>
-      {missingPrerequisite ? <section className={styles.card}><div className={styles.empty}><h3>Préparation indisponible</h3>{catalogError ? <ReadError>{catalogError}</ReadError> : <><p>{!suppliers.length ? 'Ajoutez un fournisseur actif avant de préparer une réception.' : 'Ajoutez un produit au catalogue avant de préparer une réception.'}</p>{!suppliers.length && canReadSuppliers && <EditingLink className={styles.secondary} href='/receptions?onglet=fournisseurs'>Consulter les fournisseurs</EditingLink>}</>}</div></section> : (
+      <div className={styles.draftMeta}><button className={styles.quiet} disabled={pending} onClick={() => session.request(onCancel)} type='button'>← Historique</button><span className={`${styles.badge} ${styles.draftBadge}`}>Brouillon non enregistré</span></div>
+      {catalogError ? <section className={styles.card}><div className={styles.empty}><h3>Préparation indisponible</h3><ReadError>{catalogError}</ReadError></div></section> : (
         <form ref={formRef} action={save} onSubmit={verify} noValidate aria-busy={pending} id='new-reception-form'>
           <input name='lines' type='hidden' value={JSON.stringify(lines.map((line) => ({ ...line, baseUnit: getProduct(products, line.productId)?.baseUnit ?? '' })))} />
           <input name='submissionKey' type='hidden' value={submissionKey} />
           {Object.entries(document).map(([name, value]) => <input key={name} name={name} type='hidden' value={value} />)}
           <fieldset disabled={blocked} className={styles.draftLayout}>
             <div className={styles.stack}>
-              <section className={styles.card} ref={documentRef} aria-labelledby='reception-document-title'>
-                <div className={styles.cardHeader}><h2 id='reception-document-title'><span className={styles.step}>1</span>Document fournisseur</h2>{!documentEditing && <button className={styles.secondary} onClick={() => { setDocumentDraft(document); setDocumentErrors({}); setDocumentEditing(true); }} type='button'>{documentValidated ? 'Modifier' : 'Renseigner'}</button>}</div>
+              <section className={`${styles.card} ${documentEditing ? styles.editing : ''}`} ref={documentRef} aria-labelledby='reception-document-title' onKeyDown={(event) => {
+                if (event.key === 'Enter' && event.target.tagName === 'INPUT' && documentEditing) { event.preventDefault(); validateDocument(); }
+              }}>
+                <div className={styles.cardHeader}><h2 id='reception-document-title'><span className={styles.step}>1</span>Document fournisseur</h2>{documentEditing ? <span className={`${styles.badge} ${styles.blue}`}>Saisie en cours</span> : <button className={styles.secondary} onClick={() => { setDocumentDraft(document); setDocumentErrors({}); setDocumentEditing(true); }} type='button'>{documentValidated ? 'Modifier' : 'Renseigner'}</button>}</div>
                 {documentEditing ? <>
                   <div className={styles.documentFields}>
-                    <div><label className='text-xs font-semibold' htmlFor='reception-supplier'>Fournisseur actif *</label><select className={INPUT_CLASS} id='reception-supplier' value={documentDraft.supplierId} onChange={(event) => changeDocument('supplierId', event.target.value)} aria-invalid={Boolean(documentErrors.supplierId)} aria-describedby={documentErrors.supplierId ? 'reception-supplier-error' : undefined}><option value=''>Sélectionnez un fournisseur</option>{suppliers.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select>{documentErrors.supplierId && <p className='mt-2 text-xs text-red-700' id='reception-supplier-error'>{documentErrors.supplierId}</p>}</div>
-                    <div><label className='text-xs font-semibold' htmlFor='reception-date'>Date de réception *</label><input className={INPUT_CLASS} id='reception-date' type='date' value={documentDraft.receptionDate} onChange={(event) => changeDocument('receptionDate', event.target.value)} aria-invalid={Boolean(documentErrors.receptionDate)} aria-describedby={documentErrors.receptionDate ? 'reception-date-error' : undefined} />{documentErrors.receptionDate && <p className='mt-2 text-xs text-red-700' id='reception-date-error'>{documentErrors.receptionDate}</p>}</div>
-                    <div><label className='text-xs font-semibold' htmlFor='supplier-reference'>Référence BL / facture *</label><input className={INPUT_CLASS} id='supplier-reference' maxLength={100} value={documentDraft.supplierReference} onChange={(event) => changeDocument('supplierReference', event.target.value)} placeholder='Ex. BL-2026-0042' aria-invalid={Boolean(documentErrors.supplierReference)} aria-describedby={documentErrors.supplierReference ? 'supplier-reference-error' : undefined} />{documentErrors.supplierReference && <p className='mt-2 text-xs text-red-700' id='supplier-reference-error'>{documentErrors.supplierReference}</p>}</div>
+                    <div><label htmlFor='reception-supplier'>Fournisseur actif</label><select id='reception-supplier' value={documentDraft.supplierId} onChange={(event) => changeDocument('supplierId', event.target.value)} aria-invalid={Boolean(documentErrors.supplierId)} aria-describedby={documentErrors.supplierId ? 'reception-supplier-error' : undefined}><option value=''>Sélectionner un fournisseur</option>{suppliers.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select>{documentErrors.supplierId && <p className='mt-2 text-xs text-red-700' id='reception-supplier-error'>{documentErrors.supplierId}</p>}</div>
+                    <div><label htmlFor='reception-date'>Date de réception</label><input id='reception-date' type='date' value={documentDraft.receptionDate} onChange={(event) => changeDocument('receptionDate', event.target.value)} aria-invalid={Boolean(documentErrors.receptionDate)} aria-describedby={documentErrors.receptionDate ? 'reception-date-error' : undefined} />{documentErrors.receptionDate && <p className='mt-2 text-xs text-red-700' id='reception-date-error'>{documentErrors.receptionDate}</p>}</div>
+                    <div><label htmlFor='supplier-reference'>Référence du document</label><input id='supplier-reference' maxLength={100} value={documentDraft.supplierReference} onChange={(event) => changeDocument('supplierReference', event.target.value)} placeholder='Ex. BL-2026-0042' aria-invalid={Boolean(documentErrors.supplierReference)} aria-describedby={documentErrors.supplierReference ? 'supplier-reference-error' : undefined} />{documentErrors.supplierReference && <p className='mt-2 text-xs text-red-700' id='supplier-reference-error'>{documentErrors.supplierReference}</p>}</div>
                   </div>
-                  <div className={styles.localActions}><small>Validation locale · aucun stock écrit</small><button className={styles.secondary} onClick={cancelDocument} type='button'>Annuler</button><button className={styles.primary} onClick={validateDocument} type='button'>Valider les informations</button></div>
-                </> : <dl className={styles.documentSummary}><div><dt>Fournisseur</dt><dd>{supplier?.name ?? 'À renseigner'}</dd></div><div><dt>Date de réception</dt><dd>{formatReceptionDate(document.receptionDate)}</dd></div><div><dt>Référence fournisseur</dt><dd>{document.supplierReference || 'À renseigner'}</dd></div></dl>}
+                  {!suppliers.length && <div className={styles.prerequisite}><p>Aucun fournisseur actif disponible. Un fournisseur actif est nécessaire pour enregistrer la réception.</p>{canReadSuppliers && <EditingLink href='/receptions?onglet=fournisseurs'>Consulter les fournisseurs</EditingLink>}</div>}
+                  <div className={styles.localActions}><small>Informations du brouillon</small>{documentValidated && <button className={styles.secondary} onClick={cancelDocument} type='button'>Annuler</button>}<button className={styles.primary} onClick={validateDocument} type='button'>Valider les informations</button></div>
+                </> : <dl className={styles.documentSummary}><div><dt>Fournisseur</dt><dd>{supplier?.name ?? 'À renseigner'}</dd></div><div><dt>Date de réception</dt><dd>{formatReceptionShortDate(document.receptionDate)}</dd></div><div><dt>Référence fournisseur</dt><dd>{document.supplierReference || 'À renseigner'}</dd></div></dl>}
               </section>
-              <section className={styles.card} aria-labelledby='reception-lines-title'>
-                <div className={styles.cardHeader}><div><h2 id='reception-lines-title'><span className={styles.step}>2</span>Marchandises reçues</h2><p>Une saisie à la fois ; chaque quantité garde son unité.</p></div><button className={styles.secondary} ref={addRef} disabled={Boolean(lineDraft) || lines.length >= 100} onClick={addLine} type='button'>{lineDraft ? 'Ligne en cours' : lines.length >= 100 ? 'Limite de 100 lignes' : '+ Ajouter une ligne'}</button></div>
+              <section className={`${styles.card} ${lineDraft ? styles.editing : ''}`} aria-labelledby='reception-lines-title'>
+                <div className={styles.cardHeader}><div><h2 id='reception-lines-title'><span className={styles.step}>2</span>Marchandises reçues</h2></div><button className={styles.secondary} ref={addRef} disabled={Boolean(lineDraft) || !products.length || lines.length >= 100} onClick={addLine} type='button'>{lines.length >= 100 ? 'Limite de 100 lignes' : '+ Ajouter une ligne'}</button></div>
+                {!products.length && <p className={styles.prerequisite}>Aucun produit disponible. Complétez le catalogue avant de préparer les lignes.</p>}
                 {lines.length > 0 && <div className={styles.filters}><div><label htmlFor='draft-line-search'>Rechercher dans le brouillon</label><input id='draft-line-search' type='search' disabled={Boolean(lineDraft)} value={lineQuery} onChange={(event) => { setLineQuery(event.target.value); setLinePage(1); }} placeholder='Code ou désignation' /></div><div><label htmlFor='draft-line-mode'>Mode de quantité</label><select id='draft-line-mode' disabled={Boolean(lineDraft)} value={lineMode} onChange={(event) => { setLineMode(event.target.value); setLinePage(1); }}><option value='ALL'>Tous les modes</option><option value='DIRECT'>Quantité directe</option><option value='PACKAGING'>Conditionnement</option></select></div></div>}
-                {visibleLines.map((line) => line.id === editingLineId ? <div className={styles.editor} key={line.id}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} index={lines.findIndex(({ id }) => id === line.id)} line={lineDraft} onCancel={cancelLineDraft} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div> : <ReceptionLineSummary key={line.id} baseUnits={baseUnits} index={lines.findIndex(({ id }) => id === line.id)} line={line} disabled={Boolean(lineDraft)} onEdit={() => editLine(line)} onRemove={() => { setLineToRemove(line); requestAnimationFrame(() => removeRef.current?.showModal()); }} products={products} />)}
-                {lineDraft && !editingLineId && <div className={styles.editor}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} index={lines.length} line={lineDraft} onCancel={cancelLineDraft} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div>}
-                {!lines.length && !lineDraft && <div className={styles.empty}><h3>Aucune ligne ajoutée</h3><p>Ajoutez un produit, sa quantité et le montant TTC de sa ligne.</p></div>}
+                {visibleLines.map((line) => line.id === editingLineId ? <div className={styles.editor} key={line.id}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} editing index={lines.findIndex(({ id }) => id === line.id)} line={lineDraft} onCancel={() => discardLineRef.current?.showModal()} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div> : <ReceptionLineSummary key={line.id} baseUnits={baseUnits} index={lines.findIndex(({ id }) => id === line.id)} line={line} disabled={Boolean(lineDraft)} onEdit={() => editLine(line)} onRemove={() => { setLineToRemove(line); requestAnimationFrame(() => removeRef.current?.showModal()); }} products={products} />)}
+                {lineDraft && !editingLineId && <div className={styles.editor}><ReceptionLineForm baseUnits={baseUnits} calculation={lineDraftCalculation} errors={lineErrors} index={lines.length} line={lineDraft} onCancel={() => discardLineRef.current?.showModal()} onChange={updateLineDraft} onProductChange={changeDraftProduct} onValidate={validateLineDraft} products={products} /></div>}
+                {!lines.length && !lineDraft && <div className={styles.empty}><h3>Aucune ligne préparée</h3><p>Ajoutez les produits, leur quantité et le montant TTC de chaque ligne.</p></div>}
                 {lines.length > 0 && !filteredLines.length && <div className={styles.empty}><h3>Aucune ligne trouvée</h3><p>Modifiez la recherche ou le mode de quantité.</p></div>}
-                {lines.length > 0 && <Pagination page={activeLinePage} totalPages={totalLinePages} label='Pagination des lignes du brouillon' onChange={setLinePage} disabled={Boolean(lineDraft)} />}
+                {lines.length > 0 && <Pagination page={activeLinePage} totalPages={totalLinePages} totalResults={filteredLines.length} label='Pagination des lignes du brouillon' onChange={setLinePage} disabled={Boolean(lineDraft)} />}
+                <p className={styles.listHelp}>Les lignes restent modifiables jusqu’à l’enregistrement de la réception.</p>
               </section>
             </div>
-            <aside className={styles.card} aria-labelledby='reception-summary-title'>
-              <div className={styles.total}><h2 id='reception-summary-title'><span className={styles.step}>3</span>Récapitulatif</h2><p className='mt-4'>Total TTC des lignes validées</p><div className={styles.amount}>{summary.amountInCentimes === null ? '—' : formatReceptionMoney(summary.amountInCentimes)}</div><p>{validatedLines.length} ligne{validatedLines.length > 1 ? 's' : ''} validée{validatedLines.length > 1 ? 's' : ''} · tout le brouillon</p>{lineDraft && <p className='mt-3'>Total partiel : la ligne en cours n’est pas incluse.</p>}{!validatedLines.length && <p className='mt-3'>Validez une ligne pour calculer le récapitulatif.</p>}{validatedLines.length > 0 && !summary.complete && <p className='mt-3'>Récapitulatif non calculable : vérifiez les lignes.</p>}<h3>Quantités par unité de base</h3>{summary.quantities.length ? quantities : <p className='mt-3'>Aucune quantité validée.</p>}</div>
-              <div className={styles.finalActions}><p>Les validations restent locales jusqu’à la confirmation finale.</p><button className={styles.primary} ref={submitRef} type='submit'>Vérifier la réception</button></div>
+            <aside className={styles.sidebar} aria-labelledby='reception-summary-title'>
+              <section className={styles.card}>
+                <div className={styles.total}>
+                  <p className={styles.eyebrow}>Récapitulatif du brouillon</p>
+                  <h2 id='reception-summary-title'>Total des lignes validées</h2>
+                  <div className={styles.amount}>{summary.amountInCentimes === null ? '—' : formatReceptionMoney(summary.amountInCentimes)}</div>
+                  <p>{validatedLines.length} ligne{validatedLines.length > 1 ? 's' : ''} validée{validatedLines.length > 1 ? 's' : ''}{lineDraft && ' · 1 ligne en cours, non incluse'}</p>
+                  {editingLineId && <p className={styles.summaryHelp}>Total partiel : la ligne en cours n’est pas incluse.</p>}
+                  {validatedLines.length > 0 && !summary.complete && <p className={styles.summaryHelp}>Récapitulatif non calculable : vérifiez les lignes.</p>}
+                  <div className={styles.quantityTotals}>{quantities}</div>
+                  <p className={styles.summaryHelp}>Quantités regroupées par unité, jamais additionnées entre unités différentes.</p>
+                </div>
+                <div className={styles.finalActions}><p>La confirmation enregistrera la réception et ses entrées de stock. Aucun encaissement ou paiement fournisseur ne sera créé.</p><button className={styles.primary} ref={submitRef} type='submit'>Vérifier la réception</button></div>
+              </section>
+              <p className={styles.info}>La référence identifie le document fournisseur. Le total ci-dessus est calculé à partir des lignes saisies.</p>
             </aside>
           </fieldset>
           {(receptionError || state.errors.lines || state.errors.form) && <p data-reception-error tabIndex={-1} className={styles.error} role='alert'>{receptionError ?? state.errors.lines ?? state.errors.form}</p>}
           {uncertain && <div className={styles.error}><p>Le résultat de l’enregistrement doit être vérifié. Réessayez avec les mêmes informations ; la demande reste conservée.</p><button className={styles.secondary} disabled={pending} onClick={() => confirmationRef.current?.showModal()} type='button'>Vérifier et réessayer</button></div>}
           <ConfirmationDialog dialogRef={confirmationRef} confirmType='button' title='Enregistrer cette réception ?' confirmLabel='Enregistrer la réception' pending={pending} pendingLabel='Enregistrement…' onConfirm={submit} onClose={() => submitRef.current?.focus()}>
-            <dl className={styles.documentSummary}><div><dt>Fournisseur</dt><dd>{supplier?.name}</dd></div><div><dt>Référence</dt><dd>{document.supplierReference}</dd></div><div><dt>Date</dt><dd>{formatReceptionDate(document.receptionDate)}</dd></div></dl>
+            <dl className={styles.documentSummary}><div><dt>Fournisseur</dt><dd>{supplier?.name}</dd></div><div><dt>Référence</dt><dd>{document.supplierReference}</dd></div><div><dt>Date</dt><dd>{formatReceptionShortDate(document.receptionDate)}</dd></div></dl>
             <p><strong>{lines.length} ligne{lines.length > 1 ? 's' : ''} · {formatReceptionMoney(summary.amountInCentimes)}</strong></p>
             {quantities}<p>L’enregistrement est définitif dans ce parcours. Il conserve les informations historiques et crée les entrées de stock prévues.</p><p>Aucun paiement fournisseur ni encaissement de caisse n’est créé.</p>
           </ConfirmationDialog>
+          <ConfirmationDialog dialogRef={discardLineRef} confirmType='button' title='Abandonner la saisie de cette ligne ?' confirmLabel='Abandonner la saisie' onClose={() => requestAnimationFrame(() => formRef.current?.querySelector('[id$="-product"]')?.focus())} onConfirm={() => { discardLineRef.current?.close(); cancelLineDraft(); }}><p>La ligne précédemment validée restera inchangée. Une nouvelle ligne non validée ne sera pas ajoutée.</p></ConfirmationDialog>
           <ConfirmationDialog dialogRef={removeRef} confirmType='button' title='Retirer cette ligne du brouillon ?' confirmLabel='Retirer la ligne' tone='red' onClose={() => addRef.current?.focus()} onConfirm={() => { setLines((current) => current.filter(({ id }) => id !== lineToRemove.id)); setLineToRemove(null); removeRef.current?.close(); }}><p>{getProduct(products, lineToRemove?.productId)?.designation}</p><p>La ligne sera retirée de la préparation. Cette action n’effectue aucune sortie de stock.</p></ConfirmationDialog>
         </form>
       )}

@@ -11,6 +11,7 @@ import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
 import ReceptionWorkspace from './reception-workspace.js';
 import SupplierWorkspace from './supplier-workspace.js';
+import styles from './receptions.module.css';
 
 export const metadata = {
   title: 'Réceptions | Syphax',
@@ -81,7 +82,7 @@ const ReceptionsPage = async ({ searchParams }) => {
   }
 
   return (
-    <main className='mx-auto w-full max-w-7xl px-4 py-7 sm:px-7 sm:py-8'>
+    <main className={styles.page}>
       {activeTab === 'fournisseurs' ? (
         <SupplierWorkspace
           canReadReceptions={canReadReceptions}

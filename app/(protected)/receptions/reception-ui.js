@@ -1,9 +1,14 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { buildReceptionHistoryHref, readReceptionHistoryState } from '../../../lib/receptions.js';
+import { buildReceptionHistoryHref, formatReceptionDate, readReceptionHistoryState } from '../../../lib/receptions.js';
 import { EditingLink } from '../components/editing-session.js';
 import styles from './receptions.module.css';
+
+export const formatReceptionShortDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? formatReceptionDate(value) : new Intl.DateTimeFormat('fr', { dateStyle: 'short', timeZone: 'UTC' }).format(date);
+};
 
 export const WorkspaceHeader = ({ activeTab, canReadReceptions, canReadSuppliers, children }) => {
   const parameters = useSearchParams();
@@ -13,7 +18,7 @@ export const WorkspaceHeader = ({ activeTab, canReadReceptions, canReadSuppliers
   return (
     <>
       <header className={styles.hero}>
-        <div><p className={styles.eyebrow}>Marchandises & partenaires</p><h1>Réceptions</h1><p>Retrouvez vos documents fournisseurs et préparez les entrées de marchandises.</p></div>
+        <div><p className={styles.eyebrow}>Approvisionnement</p><h1>Réceptions</h1><p>Enregistrez les marchandises reçues et retrouvez vos documents fournisseurs.</p></div>
         {children}
       </header>
       <nav className={styles.tabs} aria-label='Sections des réceptions'>
@@ -24,10 +29,10 @@ export const WorkspaceHeader = ({ activeTab, canReadReceptions, canReadSuppliers
   );
 };
 
-export const Pagination = ({ page, totalPages, onChange, label, disabled = false }) => (
+export const Pagination = ({ page, totalPages, onChange, label, disabled = false, totalResults }) => (
   <nav aria-label={label} className={styles.pagination}>
     <button disabled={disabled || page === 1} onClick={() => onChange(page - 1)} type='button'>Précédent</button>
-    <span aria-live='polite'>Page {page} sur {totalPages}</span>
+    <span aria-live='polite'>{totalResults !== undefined ? `${totalResults} résultat${totalResults > 1 ? 's' : ''} · page ${page} / ${totalPages}` : `Page ${page} sur ${totalPages}`}</span>
     <button disabled={disabled || page === totalPages} onClick={() => onChange(page + 1)} type='button'>Suivant</button>
   </nav>
 );

@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useInlineSave } from '../components/editable-card.js';
 import { useEditingSession } from '../components/editing-session.js';
+import styles from './receptions.module.css';
 
 export const EMPTY_SUPPLIER_VALUES = Object.freeze({
   name: '',
@@ -35,7 +36,6 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           id={fieldId('name')}
           maxLength={150}
           name='name'
-          placeholder='Ex. Distribution Atlas'
           required
         />
         {state.errors.name && (
@@ -50,7 +50,7 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           className='block text-sm font-medium text-slate-700'
           htmlFor={fieldId('contact')}
         >
-          Personne à contacter
+          Personne à contacter · facultatif
         </label>
         <input
           aria-describedby={
@@ -63,7 +63,6 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           id={fieldId('contact')}
           maxLength={150}
           name='contactName'
-          placeholder='Nom du contact (facultatif)'
         />
         {state.errors.contactName && (
           <p className='mt-2 text-sm text-red-700' id={errorId('contact')}>
@@ -77,7 +76,7 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           className='block text-sm font-medium text-slate-700'
           htmlFor={fieldId('phone')}
         >
-          Téléphone
+          Téléphone · facultatif
         </label>
         <input
           aria-describedby={state.errors.phone ? errorId('phone') : undefined}
@@ -88,7 +87,6 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           id={fieldId('phone')}
           maxLength={30}
           name='phone'
-          placeholder='Ex. 0550 00 00 00'
           type='tel'
         />
         {state.errors.phone && (
@@ -103,7 +101,7 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           className='block text-sm font-medium text-slate-700'
           htmlFor={fieldId('email')}
         >
-          Adresse e-mail
+          E-mail · facultatif
         </label>
         <input
           aria-describedby={state.errors.email ? errorId('email') : undefined}
@@ -114,7 +112,6 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           id={fieldId('email')}
           maxLength={254}
           name='email'
-          placeholder='contact@fournisseur.dz'
           type='email'
         />
         {state.errors.email && (
@@ -124,12 +121,12 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
         )}
       </div>
 
-      <div>
+      <div className='sm:col-span-2'>
         <label
           className='block text-sm font-medium text-slate-700'
           htmlFor={fieldId('address')}
         >
-          Adresse
+          Adresse · facultatif
         </label>
         <textarea
           aria-describedby={
@@ -142,8 +139,7 @@ const SupplierFields = ({ autoFocusName, idPrefix, state }) => {
           id={fieldId('address')}
           maxLength={500}
           name='address'
-          placeholder='Adresse postale (facultatif)'
-          rows={1}
+          rows={2}
         />
         {state.errors.address && (
           <p className='mt-2 text-sm text-red-700' id={errorId('address')}>
@@ -197,7 +193,7 @@ const SupplierForm = ({
         const data = new FormData(formRef.current);
         activeRef.current.dirty = JSON.stringify(Object.keys(EMPTY_SUPPLIER_VALUES).map((name) => [name, data.get(name)])) !== baselineRef.current;
       }}
-      className='mt-5 space-y-5 border-t border-slate-200 pt-5'
+      className='space-y-5'
     >
       {state.message && !onSuccess && (
         <p
@@ -226,10 +222,10 @@ const SupplierForm = ({
       />
 
       </fieldset>
-      <div className='flex justify-end gap-3 border-t border-slate-200 pt-5'>
+      <div className='flex justify-end gap-3'>
         {cancelLabel && (
           <button
-            className='rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+            className={styles.secondary}
             disabled={pending}
             onClick={() => session ? session.request(onCancel) : onCancel()}
             type='button'
@@ -238,7 +234,7 @@ const SupplierForm = ({
           </button>
         )}
         <button
-          className='rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60'
+          className={styles.primary}
           disabled={pending}
           type='submit'
         >

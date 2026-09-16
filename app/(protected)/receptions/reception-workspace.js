@@ -35,7 +35,7 @@ const ReceptionWorkspace = ({
           {canCreateReception && !formVisible && <button className={styles.primary} ref={triggerRef} onClick={() => {
             setNotice(null);
             setFormVisible(true);
-          }} type='button'><span aria-hidden='true'>+</span> Nouvelle réception</button>}
+          }} type='button'>Nouvelle réception</button>}
         </WorkspaceHeader>
         {notice && <p className={styles.notice} role='status'>{notice.message}<Link href={`/receptions/${notice.receptionId}?${new URLSearchParams({ retour: notice.retour })}`}>Ouvrir la fiche</Link></p>}
         {canCreateReception && formVisible && <ReceptionForm
