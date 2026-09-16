@@ -278,6 +278,7 @@ test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base',
       _id: packagingId,
       label: 'Pack de 12',
       quantity: 12,
+      usage: 'SALE',
     }],
     physicalQuantity: 100,
     salePriceInCentimes: 15000,
@@ -310,6 +311,74 @@ test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base',
   assert.ok(result.tourId);
   assert.equal(reservation.salePriceAtLoading.amountInCentimes, 15000);
   assert.equal(reservation.salePriceAtLoading.unit, 'BOUTEILLE');
+});
+
+test('recontrôle les usages avant chargement et refuse les brouillons devenus inéligibles sans transition partielle', async () => {
+  for (const usage of ['RECEPTION', undefined, null, '', 'ALL', 'REMOVED', 'FOREIGN']) {
+    const packagingId = new ObjectId();
+    const productId = await insertProduct({ packagings: [{ _id: packagingId, label: 'Pack de 6', quantity: 6, usage: 'SALE' }] });
+    const directProductId = await insertProduct();
+    const tourId = await insertTour();
+    await addReservation({ productId: directProductId, tourId });
+    await addReservation({ productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toString(), packagingCount: '5' });
+    const preview = await getPreview(tourId);
+    assert.deepEqual(preview.errors, {});
+    if (usage === 'FOREIGN') {
+      await database.collection('tourReservations').updateOne({ productId, tourId }, { $set: { 'packaging.packagingId': new ObjectId() } });
+    } else {
+      await database.collection('products').updateOne({ _id: productId }, usage === 'REMOVED'
+        ? { $set: { packagings: [] } } : usage === undefined
+          ? { $unset: { 'packagings.0.usage': '' } } : { $set: { 'packagings.0.usage': usage } });
+    }
+    const productsBefore = await database.collection('products').find({ _id: { $in: [productId, directProductId] } }).sort({ _id: 1 }).toArray();
+    const tourBefore = await database.collection('tours').findOne({ _id: tourId });
+    const delivererBefore = await database.collection('deliverers').findOne({ _id: tourBefore.delivererId });
+    const reservationsBefore = await database.collection('tourReservations').find({ tourId }).sort({ _id: 1 }).toArray();
+    assert.match((await getPreview(tourId)).errors.form, /conditionnement.*n’est plus activé pour la vente/u);
+    assert.match((await load(tourId, preview.digest)).errors.form, /conditionnement.*n’est plus activé pour la vente/u);
+    assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
+    assert.deepEqual(await database.collection('tourReservations').find({ tourId }).sort({ _id: 1 }).toArray(), reservationsBefore);
+    assert.deepEqual(await database.collection('products').find({ _id: { $in: [productId, directProductId] } }).sort({ _id: 1 }).toArray(), productsBefore);
+    assert.deepEqual(await database.collection('tours').findOne({ _id: tourId }), tourBefore);
+    assert.deepEqual(await database.collection('deliverers').findOne({ _id: tourBefore.delivererId }), delivererBefore);
+  }
+});
+
+test('contrôle aussi les anciens brouillons conditionnés sans quantityMode ou sans référence de conditionnement', async () => {
+  for (const missingField of ['quantityMode', 'packaging']) {
+    const packagingId = new ObjectId();
+    const productId = await insertProduct({ packagings: [{ _id: packagingId, label: 'Pack', quantity: 6, usage: 'SALE' }] });
+    const tourId = await insertTour();
+    await addReservation({ productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toString(), packagingCount: '5' });
+    const preview = await getPreview(tourId);
+    await database.collection('tourReservations').updateOne({ productId, tourId }, { $unset: { [missingField]: '' } });
+    if (missingField === 'quantityMode') {
+      await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.usage': 'RECEPTION' } });
+    }
+    assert.match((await getPreview(tourId)).errors.form, /conditionnement/u);
+    assert.match((await load(tourId, preview.digest)).errors.form, /conditionnement/u);
+    assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
+  }
+});
+
+test('autorise le chargement mixte et conserve le chargement historique après reclassification', async () => {
+  const packagingId = new ObjectId();
+  const productId = await insertProduct({ baseUnit: 'SACHET', packagings: [{ _id: packagingId, label: 'Lot', quantity: 6, usage: 'BOTH' }] });
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toString(), packagingCount: '5' });
+  const preview = await getPreview(tourId);
+  assert.deepEqual(preview.errors, {});
+  assert.ok((await load(tourId, preview.digest)).tourId);
+  const before = await database.collection('tourReservations').findOne({ productId, tourId });
+  const movementBefore = await database.collection('stockMovements').findOne({ sourceTourId: tourId });
+  assert.equal(before.quantityInBaseUnits, 30);
+  assert.equal(before.salePriceAtLoading.unit, 'SACHET');
+  assert.equal(movementBefore.quantityDeltaInBaseUnits, -30);
+  await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.usage': 'RECEPTION' } });
+  assert.equal((await load(tourId, preview.digest)).replayed, true);
+  assert.deepEqual(await database.collection('tourReservations').findOne({ productId, tourId }), before);
+  assert.deepEqual(await database.collection('stockMovements').findOne({ sourceTourId: tourId }), movementBefore);
+  assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 1);
 });
 
 test('refuse un tarif manquant sans sortie ni transition partielle', async () => {

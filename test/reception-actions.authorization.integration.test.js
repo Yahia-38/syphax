@@ -328,6 +328,7 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
         _id: packagingId,
         label: 'Pack de 6',
         quantity: 6,
+        usage: 'BOTH',
       }],
       createdAt: new Date(),
       createdBy: userId,
@@ -361,6 +362,7 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
           designation: 'Eau renommée',
           'packagings.0.label': 'Nouveau pack',
           'packagings.0.quantity': 12,
+          'packagings.0.usage': 'SALE',
         },
       },
     ),
@@ -369,6 +371,10 @@ test('enregistre une réception et la rend disponible dans l’historique', asyn
     storedReception._id.toString(),
     { userId: userId.toString() },
   );
+  const replay = await callWithSession(token, () => createReception({ revision: 0 }, formData));
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.errors, {});
+  assert.equal(await database.collection('stockMovements').countDocuments({ sourceReceptionId: storedReception._id }), 1);
 
   assert.equal(
     result.message,
@@ -754,6 +760,78 @@ test('conserve zéro comme montant renseigné et distingue un montant absent', a
   assert.equal(reception.lines[0].directQuantity, 5);
   assert.equal(reception.lines[1].amountInCentimes, null);
   assert.equal(reception.lines[1].quantityInBaseUnits, 2);
+});
+
+test('vérifie l’usage actuel côté serveur et convertit seulement les conditionnements réception ou mixtes', async () => {
+  const { token } = await createUserSession('reception-usages', ['receptions.create']);
+  const supplierId = new ObjectId();
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  await database.collection('suppliers').insertOne({ _id: supplierId, name: 'Atlas usages', active: true });
+  await database.collection('products').insertOne({
+    _id: productId, code: 'RECEPTION-USAGES', designation: 'Boisson', baseUnit: 'BOUTEILLE',
+    packagings: [{ _id: packagingId, label: 'Palette', quantity: 240, usage: 'RECEPTION',
+      salePrice: { amountInCentimes: 52000 }, salePriceHistory: [{ newAmountInCentimes: 52000 }] }],
+  });
+
+  for (const usage of ['RECEPTION', 'BOTH', 'SALE', undefined, null, 'ALL']) {
+    // Build a form while the conversion is reception-enabled, then change the saved usage.
+    await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.usage': 'RECEPTION' } });
+    const formData = createReceptionFormData({
+      supplierId, supplierReference: `BL-USAGE-${String(usage)}`,
+      lines: [{ productId: productId.toString(), baseUnit: 'BOUTEILLE', quantityMode: 'PACKAGING',
+        packagingId: packagingId.toString(), packagingCount: '3', amount: '120',
+        usage: 'RECEPTION', quantityInBaseUnits: 999 }],
+    });
+    await database.collection('products').updateOne({ _id: productId }, usage === undefined
+      ? { $unset: { 'packagings.0.usage': '' } } : { $set: { 'packagings.0.usage': usage } });
+    const productBefore = await database.collection('products').findOne({ _id: productId });
+    const supplierBefore = await database.collection('suppliers').findOne({ _id: supplierId });
+    const receptionCount = await database.collection('receptions').countDocuments();
+    const movementCount = await database.collection('stockMovements').countDocuments();
+    const result = await callWithSession(token, () => createReception({ revision: 0 }, formData));
+
+    if (['RECEPTION', 'BOTH'].includes(usage)) {
+      assert.deepEqual(result.errors, {});
+      const reception = await database.collection('receptions').findOne({ _id: new ObjectId(result.receptionId) });
+      assert.equal(reception.lines[0].quantityInBaseUnits, 720);
+      assert.equal(reception.lines[0].baseUnit, 'BOUTEILLE');
+      assert.equal(reception.lines[0].packaging.quantity, 240);
+      assert.equal(reception.lines[0].packaging.count, 3);
+      const movement = await database.collection('stockMovements').findOne({ sourceReceptionId: reception._id });
+      assert.equal(movement.quantityDeltaInBaseUnits, 720);
+      assert.equal(movement.baseUnit, 'BOUTEILLE');
+      assert.deepEqual((await database.collection('products').findOne({ _id: productId })).packagings, productBefore.packagings);
+    } else {
+      assert.deepEqual(result.errors, { lines: 'La ligne 1 : Ce conditionnement n’est pas activé pour la réception.' });
+      assert.equal(await database.collection('receptions').countDocuments(), receptionCount);
+      assert.equal(await database.collection('stockMovements').countDocuments(), movementCount);
+      assert.deepEqual(await database.collection('products').findOne({ _id: productId }), productBefore);
+      assert.deepEqual(await database.collection('suppliers').findOne({ _id: supplierId }), supplierBefore);
+    }
+  }
+});
+
+test('autorise la saisie directe dans l’unité de stock même sans conditionnement réception', async () => {
+  const { token } = await createUserSession('reception-directe-vente', ['receptions.create']);
+  const supplierId = new ObjectId();
+  const productId = new ObjectId();
+  await database.collection('suppliers').insertOne({ _id: supplierId, name: 'Direct usages', active: true });
+  await database.collection('products').insertOne({
+    _id: productId, code: 'DIRECT-USAGE-VENTE', baseUnit: 'SACHET', designation: 'Thé',
+    packagings: [{ _id: new ObjectId(), label: 'Pack', quantity: 6, usage: 'SALE' }],
+  });
+  const result = await callWithSession(token, () => createReception({ revision: 0 }, createReceptionFormData({
+    supplierId, supplierReference: 'BL-DIRECT-USAGE-VENTE',
+    lines: [{ productId: productId.toString(), baseUnit: 'SACHET', quantityMode: 'DIRECT', directQuantity: '20', amount: '0' }],
+  })));
+  assert.deepEqual(result.errors, {});
+  const reception = await database.collection('receptions').findOne({ _id: new ObjectId(result.receptionId) });
+  assert.equal(reception.lines[0].quantityInBaseUnits, 20);
+  assert.equal(reception.lines[0].packaging, undefined);
+  const movement = await database.collection('stockMovements').findOne({ sourceReceptionId: reception._id });
+  assert.equal(movement.quantityDeltaInBaseUnits, 20);
+  assert.equal(movement.baseUnit, 'SACHET');
 });
 
 test('refuse un fournisseur désactivé sans créer de réception', async () => {

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "database": "syphax",
+  "generatedAt": "2026-09-16T18:26:01.971Z",
+  "history": {
+    "receptions": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tours": {
+      "count": 1,
+      "sha256": "c9904b8152b9cc6667c2596f709aed97c161e361f0df5e0f6b8149b7a9a65184"
+    },
+    "tourReservations": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tourCountings": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tourExpenses": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stockMovements": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "products": [
+    {
+      "productId": "6aaad01f0279bf2491c5bb70",
+      "fingerprint": "db6a8d29d77c03b8e2fbb23df964690d24880468f1d8aa0acec696c318c237d5"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb73",
+      "fingerprint": "6cbeb7ff76337b8c4012bcfc2a5e9d3b8f38f060d7cbbc26f3aaea29f4bc2fd4"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb76",
+      "fingerprint": "95a77fb3673e515bd77b1f5212926f5964f0265871c882e11427f529f57518ec"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb79",
+      "fingerprint": "98ade2aa8511cff233ea48660f280b26b2a0e543e9a60a0cadb82a35ad40ae51"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb82",
+      "fingerprint": "964f88e86144333dce5fd87f6a693339f5b104be79d70fba63ba76c0e0747233"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb85",
+      "fingerprint": "26e530baf45880bbcdae80211eefee245013f02ef16c189e3f5c8d753256a906"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb7c",
+      "fingerprint": "e90208e21ed7e646c151d21a0c0559a9c060a5a30ebc3b1d897838495521d7b2"
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb7f",
+      "fingerprint": "cc132be123b370f65d49ac3bcfb61ec8ee87e1faf4cbab48e7f0f037f9f99327"
+    }
+  ],
+  "entries": [
+    {
+      "productId": "6aaad01f0279bf2491c5bb70",
+      "productCode": "HB-BLANCHE-1L",
+      "designation": "Hamoud Boualem La Blanche — PET 1 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb71",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 52000,
+      "priceHistoryCount": 2,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb73",
+      "productCode": "HB-BLANCHE-2L",
+      "designation": "Hamoud Boualem La Blanche — PET 2 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb74",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 88000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb76",
+      "productCode": "HB-SELECTO-1L",
+      "designation": "Hamoud Boualem Selecto — PET 1 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb77",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 52000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb79",
+      "productCode": "HB-SELECTO-2L",
+      "designation": "Hamoud Boualem Selecto — PET 2 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb7a",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 58000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb82",
+      "productCode": "HB-SLIM-CITRON-1L",
+      "designation": "Hamoud Boualem Slim Citron — PET 1 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb83",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 52000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb85",
+      "productCode": "HB-SLIM-CITRON-2L",
+      "designation": "Hamoud Boualem Slim Citron — PET 2 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb86",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 58000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb7c",
+      "productCode": "HB-SLIM-ORANGE-1L",
+      "designation": "Hamoud Boualem Slim Orange — PET 1 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb7d",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 52000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    },
+    {
+      "productId": "6aaad01f0279bf2491c5bb7f",
+      "productCode": "HB-SLIM-ORANGE-2L",
+      "designation": "Hamoud Boualem Slim Orange — PET 2 L",
+      "baseUnit": "BOUTEILLE",
+      "packagingId": "6aaad01f0279bf2491c5bb80",
+      "label": "Pack de 6 bouteilles",
+      "quantity": 6,
+      "salePriceInCentimes": 58000,
+      "priceHistoryCount": 1,
+      "currentUsage": null,
+      "proposedUsage": "SALE",
+      "reviewNote": "Proposition selon le libellé."
+    }
+  ]
+}

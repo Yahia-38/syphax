@@ -279,7 +279,7 @@ test('protège le tarif de pack avec les permissions de prix et de conditionneme
   const { token, userId } = await createUserSession('tarif-pack-autorise', ['products.read', 'pricing.read', 'pricing.update', 'packaging.read']);
   await database.collection('products').insertOne({
     _id: productId, code: 'TARIF-PACK-PROTEGE', designation: 'Soda', baseUnit: 'BOUTEILLE',
-    packagings: [{ _id: packagingId, label: 'Pack de 6', quantity: 6 }],
+    packagings: [{ _id: packagingId, label: 'Pack de 6', quantity: 6, usage: 'SALE' }],
   });
   const formData = new FormData();
   formData.set('price', '500');
@@ -301,6 +301,27 @@ test('protège le tarif de pack avec les permissions de prix et de conditionneme
   missingFormData.set('packagingId', new ObjectId().toString());
   const missing = await callWithSession(token, () => updateProductSalePrice(productId.toString(), { revision: 0 }, missingFormData));
   assert.ok(missing.errors.form.includes('conditionnement'));
+});
+
+test('refuse les tarifs de conditionnements réception côté serveur pour un compte autorisé', async () => {
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  const { token } = await createUserSession('tarif-pack-reception', ['products.read', 'pricing.read', 'pricing.update', 'packaging.read']);
+  await database.collection('products').insertOne({
+    _id: productId, code: 'TARIF-RECEPTION-INTERDIT', designation: 'Soda', baseUnit: 'BOUTEILLE',
+    packagings: [{ _id: packagingId, label: 'Palette', quantity: 240, usage: 'RECEPTION',
+      salePrice: { amountInCentimes: 54000 }, salePriceHistory: [{ newAmountInCentimes: 54000 }] }],
+  });
+  const before = await database.collection('products').findOne({ _id: productId });
+  const formData = new FormData();
+  formData.set('price', '600');
+  formData.set('packagingId', packagingId.toString());
+  const result = await callWithSession(token, () => updateProductSalePrice(productId.toString(), { revision: 0 }, formData));
+  assert.deepEqual(result.errors, {
+    price: 'Ce conditionnement n’est pas activé pour la vente. Aucun prix de vente ne peut lui être attribué.',
+  });
+  assert.equal(result.message, null);
+  assert.deepEqual(await database.collection('products').findOne({ _id: productId }), before);
 });
 
 test('protège la création de conditionnement et conserve son auteur', async () => {

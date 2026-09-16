@@ -7,6 +7,7 @@ import {
   createEmptyReceptionLine,
   formatReceptionDateInput,
   getMissingReceptionFormPermissions,
+  getReceptionPackagings,
   RECEPTION_FORM_PERMISSIONS,
   validateReceptionDraft,
   validateReceptionLine,
@@ -18,8 +19,10 @@ const product = {
   code: 'EAU-1L',
   designation: 'Eau 1 L',
   packagings: [
-    { id: 'pack-6', label: 'Pack de 6', quantity: 6 },
-    { id: 'carton-24', label: 'Carton de 24', quantity: 24 },
+    { id: 'pack-6', label: 'Pack de 6', quantity: 6, usage: 'BOTH' },
+    { id: 'carton-24', label: 'Carton de 24', quantity: 24, usage: 'RECEPTION' },
+    { id: 'sale-pack', label: 'Pack vente', quantity: 6, usage: 'SALE' },
+    { id: 'legacy-palette', label: 'Palette ancienne', quantity: 240 },
   ],
 };
 
@@ -58,6 +61,40 @@ test('convertit dix packs de six sans rendre la quantité calculée indépendant
     amountInCentimes: 12_050,
     quantityInBaseUnits: 60,
   });
+});
+
+test('offre uniquement les conditionnements explicitement activés pour réception', () => {
+  assert.deepEqual(getReceptionPackagings(product).map(({ id }) => id), ['pack-6', 'carton-24']);
+  assert.deepEqual(getReceptionPackagings(null), []);
+  assert.deepEqual(getReceptionPackagings({ packagings: [] }), []);
+  assert.deepEqual(getReceptionPackagings({ packagings: product.packagings.slice(2) }), []);
+});
+
+test('refuse les usages vente, absents ou invalides sans calculer de conversion', () => {
+  const line = {
+    ...createEmptyReceptionLine('line-1'), productId: product.id, amount: '120',
+    quantityMode: 'PACKAGING', packagingId: 'restricted', packagingCount: '10',
+  };
+  for (const usage of ['SALE', undefined, null, '', 'ALL']) {
+    const restricted = { ...product, packagings: [{ id: 'restricted', quantity: 6, usage }] };
+    assert.equal(calculateReceptionLine(line, restricted).quantityInBaseUnits, null);
+    assert.deepEqual(validateReceptionLine(line, restricted).errors, {
+      packaging: 'Ce conditionnement n’est pas activé pour la réception.',
+    });
+    assert.equal(validateReceptionLine({ ...line, quantityMode: 'DIRECT', directQuantity: '60' }, restricted).data.quantityInBaseUnits, 60);
+  }
+});
+
+test('convertit réception et usage mixte dans chacune des unités de stock existantes', () => {
+  for (const baseUnit of ['BOUTEILLE', 'PIECE', 'BOITE', 'SACHET']) {
+    for (const usage of ['RECEPTION', 'BOTH']) {
+      const receptionProduct = { ...product, baseUnit, packagings: [{ id: 'palette', quantity: 240, usage }] };
+      const line = { ...createEmptyReceptionLine('line-1'), amount: '120',
+        quantityMode: 'PACKAGING', packagingId: 'palette', packagingCount: '3' };
+      assert.equal(validateReceptionLine(line, receptionProduct).data.quantityInBaseUnits, 720);
+      assert.equal(calculateReceptionLine({ ...line, packagingCount: String(Number.MAX_SAFE_INTEGER) }, receptionProduct).quantityInBaseUnits, null);
+    }
+  }
 });
 
 test('réinitialise les données dépendantes lors du changement de produit', () => {

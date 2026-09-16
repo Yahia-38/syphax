@@ -4,7 +4,7 @@ import { summarizeReceptionDraft, validateReceptionDocument } from '../lib/recep
 import { createEmptyReceptionLine } from '../lib/receptions.js';
 
 const products = [
-  { id: 'water', baseUnit: 'BOUTEILLE', packagings: [{ id: 'pack', quantity: 6 }] },
+  { id: 'water', baseUnit: 'BOUTEILLE', packagings: [{ id: 'pack', quantity: 6, usage: 'BOTH' }] },
   { id: 'tea', baseUnit: 'SACHET', packagings: [] },
 ];
 const line = (id, productId, quantity, amount) => ({ ...createEmptyReceptionLine(id), productId, directQuantity: quantity, amount });

@@ -211,7 +211,7 @@ test('liste le prix de vente en centimes ou null lorsqu’il est absent', async 
 test('le catalogue affiche le tarif du plus grand pack et le tarif unitaire sans pack', async () => {
   const authorId = new ObjectId();
   const pack = (label, quantity, amountInCentimes) => ({
-    _id: new ObjectId(), label, quantity,
+    _id: new ObjectId(), label, quantity, usage: 'SALE',
     ...(amountInCentimes === undefined ? {} : { salePrice: { amountInCentimes } }),
   });
   await database.collection('products').insertMany([
@@ -236,6 +236,25 @@ test('le catalogue affiche le tarif du plus grand pack et le tarif unitaire sans
   const options = { products, query: '', unit: 'ALL', stockStatus: 'ALL', sortKey: 'salePriceCentimes', sortDir: 'asc', onlyMissingPrice: false };
   assert.deepEqual(filterAndSortProducts(options).map((product) => product.code), ['CAT-PRIX-B', 'CAT-PRIX-D', 'CAT-PRIX-A', 'CAT-PRIX-C']);
   assert.deepEqual(filterAndSortProducts({ ...options, onlyMissingPrice: true }).map((product) => product.code), ['CAT-PRIX-C']);
+});
+
+test('le catalogue ignore les conditionnements réception et anciens pour choisir le tarif de vente', async () => {
+  const packagings = [
+    { _id: new ObjectId(), label: 'Palette', quantity: 240, usage: 'RECEPTION', salePrice: { amountInCentimes: 2000000 } },
+    { _id: new ObjectId(), label: 'Ancien carton', quantity: 100, salePrice: { amountInCentimes: 900000 } },
+    { _id: new ObjectId(), label: 'Pack', quantity: 6, usage: 'SALE', salePrice: { amountInCentimes: 50000 } },
+    { _id: new ObjectId(), label: 'Lot mixte', quantity: 12, usage: 'BOTH', salePrice: { amountInCentimes: 95000 } },
+  ];
+  await database.collection('products').insertMany([
+    { code: 'CAT-USAGE-A', designation: 'Vente mixte', baseUnit: 'BOUTEILLE', packagings, salePrice: { amountInCentimes: 9000 } },
+    { code: 'CAT-USAGE-B', designation: 'Réception seulement', baseUnit: 'BOUTEILLE', packagings: packagings.slice(0, 2), salePrice: { amountInCentimes: 9000 } },
+  ]);
+  const before = await database.collection('products').find({ code: /^CAT-USAGE-/u }).sort({ code: 1 }).toArray();
+  const products = await listProducts({ query: 'CAT-USAGE-', includePricing: true, priceByLargestPack: true });
+  assert.deepEqual(products.map(({ code, salePriceCentimes, salePricePackagingQuantity }) => [code, salePriceCentimes, salePricePackagingQuantity]), [
+    ['CAT-USAGE-A', 95000, 12], ['CAT-USAGE-B', 9000, null],
+  ]);
+  assert.deepEqual(await database.collection('products').find({ code: /^CAT-USAGE-/u }).sort({ code: 1 }).toArray(), before);
 });
 
 test('omet les données tarifaires lorsque leur lecture est désactivée', async () => {
@@ -730,6 +749,43 @@ test('refuse les tarifs de packs invalides ou appartenant à un autre produit', 
   const stored = await database.collection('products').findOne({ _id: new ObjectId(product.id) });
   assert.equal(stored.salePrice, undefined);
   assert.equal(stored.packagings[0].salePrice, undefined);
+});
+
+test('refuse les tarifs de conditionnements non activés pour la vente sans modifier leurs prix historiques', async () => {
+  const authorId = new ObjectId().toString();
+  const productId = new ObjectId();
+  const mixedId = new ObjectId();
+  const packagings = ['RECEPTION', undefined, null, '', 'ALL'].map((usage) => ({
+    _id: new ObjectId(), label: 'Conditionnement', quantity: 24,
+    ...(usage === undefined ? {} : { usage }),
+    salePrice: { amountInCentimes: 54000 }, salePriceHistory: [{
+      _id: new ObjectId(), oldAmountInCentimes: null, newAmountInCentimes: 54000,
+      changedAt: new Date('2026-09-16T17:30:00.000Z'), changedBy: new ObjectId(authorId),
+    }],
+  }));
+  packagings.push({ _id: mixedId, label: 'Mixte', quantity: 6, usage: 'BOTH' });
+  await database.collection('products').insertOne({
+    _id: productId, code: 'TARIFS-USAGES', baseUnit: 'BOUTEILLE', designation: 'Soda', packagings,
+  });
+  const before = await database.collection('products').findOne({ _id: productId });
+  for (const packaging of packagings.slice(0, -1)) {
+    assert.deepEqual(await updateProductSalePrice({ productId: productId.toString(),
+      packagingId: packaging._id.toString(), price: '600', updatedBy: authorId }), {
+      errors: { price: 'Ce conditionnement n’est pas activé pour la vente. Aucun prix de vente ne peut lui être attribué.' },
+    });
+    assert.deepEqual(await database.collection('products').findOne({ _id: productId }), before);
+  }
+  const result = await updateProductSalePrice({ productId: productId.toString(), packagingId: mixedId.toString(), price: '500', updatedBy: authorId });
+  assert.equal(result.salePrice.amountInCentimes, 50000);
+  const after = await database.collection('products').findOne({ _id: productId });
+  assert.deepEqual(after.packagings.slice(0, -1), before.packagings.slice(0, -1));
+  const detail = await getProductById(productId.toString(), { includePricing: true });
+  for (const [index, packaging] of detail.packagings.slice(0, -1).entries()) {
+    assert.equal(packaging.salePrice.amountInCentimes, 54000);
+    assert.equal(packaging.salePriceHistory.length, 1);
+    assert.equal(packaging.salePriceHistory[0].newAmountInCentimes, 54000);
+    assert.equal(packaging.salePriceHistory[0].id, before.packagings[index].salePriceHistory[0]._id.toString());
+  }
 });
 
 test('conserve les changements concurrents du prix unitaire et du pack', async () => {

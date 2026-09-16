@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { sortProductPackagings } from '../../../../lib/product-pricing.js';
+import { getSalePackagings } from '../../../../lib/product-packaging.js';
 
 import { useEditingSession } from '../../components/editing-session.js';
 import PriceHistory from './price-history.js';
@@ -22,7 +23,8 @@ const PackPricing = ({ packagings, productId, baseUnitLabel, basePriceInCentimes
   const session = useEditingSession();
   const changeView = (update) => session ? session.request(update) : update();
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
-  const filtered = sortProductPackagings(packagings).filter((packaging) => (
+  const salePackagings = getSalePackagings(packagings);
+  const filtered = sortProductPackagings(salePackagings).filter((packaging) => (
     (!normalizedQuery || `${packaging.label} ${packaging.quantity}`.toLocaleLowerCase('fr').includes(normalizedQuery))
     && (status === 'ALL' || Boolean(packaging.salePrice) === (status === 'PRICED'))
   ));
@@ -35,7 +37,7 @@ const PackPricing = ({ packagings, productId, baseUnitLabel, basePriceInCentimes
   return (
     <section aria-labelledby='pack-pricing-title' className={styles.embeddedPackPricing}>
       <h3 className='sr-only' id='pack-pricing-title'>Tarification à l’unité et par pack</h3>
-      {canReadPackaging && packagings.length > 0 &&
+      {canReadPackaging && salePackagings.length > 0 &&
         <div className={styles.filters} role='search'>
           <div className={styles.search}>
             <ProductIcon name='search' />
@@ -69,8 +71,8 @@ const PackPricing = ({ packagings, productId, baseUnitLabel, basePriceInCentimes
         })}
         {unitPricing}
       </div>
-      {canReadPackaging && !visible.length && <div className={styles.empty}><ProductIcon name='box' /><h3>{packagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement'}</h3><p>{packagings.length ? 'Modifiez la recherche ou le filtre de tarif.' : 'Ajoutez un pack dans l’onglet Conditionnements pour renseigner son tarif.'}</p></div>}
-      {canReadPackaging && packagings.length > 0 &&
+      {canReadPackaging && !visible.length && <div className={styles.empty}><ProductIcon name='box' /><h3>{salePackagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement de vente'}</h3><p>{salePackagings.length ? 'Modifiez la recherche ou le filtre de tarif.' : 'Ajoutez un conditionnement activé pour la vente dans l’onglet Conditionnements pour renseigner son tarif.'}</p></div>}
+      {canReadPackaging && salePackagings.length > 0 &&
       <div className={styles.footer}>
         <span>{filtered.length ? `${offset + 1}–${offset + visible.length}` : '0'} sur {filtered.length} conditionnements</span>
         <nav aria-label='Pagination des tarifs de packs' className={styles.pagination}>

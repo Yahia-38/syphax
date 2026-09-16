@@ -211,6 +211,7 @@ test('recalcule une conversion depuis le conditionnement stocké', async () => {
       _id: packagingId,
       label: 'Pack de 6',
       quantity: 6,
+      usage: 'SALE',
     }],
   });
   const tourId = await insertTour();
@@ -236,6 +237,42 @@ test('recalcule une conversion depuis le conditionnement stocké', async () => {
     },
     { count: 5, label: 'Pack de 6', quantity: 6 },
   );
+});
+
+test('refuse les conditionnements réception, anciens ou invalides sans réservation ni modification de stock', async () => {
+  for (const usage of ['RECEPTION', undefined, null, '', 'ALL']) {
+    const packagingId = new ObjectId();
+    const productId = await insertProduct({ packagings: [{ _id: packagingId, label: 'Palette', quantity: 24,
+      ...(usage === undefined ? {} : { usage }) }] });
+    const tourId = await insertTour();
+    const productBefore = await database.collection('products').findOne({ _id: productId });
+    const tourBefore = await database.collection('tours').findOne({ _id: tourId });
+    const stockBefore = (await getProductStockSummaries([productId])).get(productId.toString());
+    const result = await addAndReserveTourProduct({ ...createRequest({
+      productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toString(), packagingCount: '2',
+    }), usage: 'SALE' });
+    assert.deepEqual(result.errors, { packagingId: 'Ce conditionnement n’est pas activé pour la vente.' });
+    assert.equal(await database.collection('tourReservations').countDocuments({ productId, tourId }), 0);
+    assert.deepEqual(await database.collection('products').findOne({ _id: productId }), productBefore);
+    assert.deepEqual(await database.collection('tours').findOne({ _id: tourId }), tourBefore);
+    assert.deepEqual((await getProductStockSummaries([productId])).get(productId.toString()), stockBefore);
+  }
+});
+
+test('autorise un conditionnement mixte et la saisie directe avec des conditionnements réception seulement', async () => {
+  for (const usage of ['BOTH', 'RECEPTION']) {
+    const packagingId = new ObjectId();
+    const productId = await insertProduct({ baseUnit: 'SACHET',
+      packagings: [{ _id: packagingId, label: 'Lot', quantity: 6, usage }] });
+    const tourId = await insertTour();
+    const result = await addAndReserveTourProduct(createRequest({ productId, tourId,
+      quantityMode: usage === 'BOTH' ? 'PACKAGING' : 'DIRECT',
+      packagingId: packagingId.toString(), packagingCount: '5', directQuantity: '30' }));
+    assert.ok(result.reservation.id);
+    const reservation = await database.collection('tourReservations').findOne({ productId, tourId });
+    assert.equal(reservation.quantityInBaseUnits, 30);
+    assert.equal(reservation.baseUnit, 'SACHET');
+  }
 });
 
 test('refuse un stock insuffisant sans ligne ni réservation', async () => {

@@ -3,6 +3,7 @@
 import { useTourActionState, useTourDraft } from './tour-operation-context.js';
 
 import { useMemo, useState } from 'react';
+import { getSalePackagings } from '../../../../lib/product-packaging.js';
 
 import { addTourProduct } from './actions.js';
 
@@ -94,7 +95,8 @@ const TourProductForm = ({
   );
   const product = products.find((candidate) => candidate.id === productId)
     ?? null;
-  const packaging = product?.packagings.find(
+  const salePackagings = getSalePackagings(product?.packagings);
+  const packaging = salePackagings.find(
     (candidate) => candidate.id === packagingId,
   ) ?? null;
   const directQuantityValue = parsePositiveInteger(directQuantity);
@@ -304,7 +306,7 @@ const TourProductForm = ({
             <label className='inline-flex items-center gap-2 text-sm text-slate-700'>
               <input
                 checked={quantityMode === 'PACKAGING'}
-                disabled={!product?.packagings.length}
+                disabled={!salePackagings.length}
                 onChange={() => {
                   setQuantityMode('PACKAGING');
                   setDirectQuantity('');
@@ -373,7 +375,7 @@ const TourProductForm = ({
                 value={packagingId}
               >
                 <option value=''>Sélectionnez un conditionnement</option>
-                {(product?.packagings ?? []).map((candidate) => (
+                {salePackagings.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
                     {candidate.label} — {candidate.quantity} {lowerBaseUnit}
                   </option>

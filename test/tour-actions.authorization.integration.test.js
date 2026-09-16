@@ -27,6 +27,7 @@ const { RequestCookies } = await import(
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { getTourExpensePreview } = await import('../lib/tour-expenses.js');
+const { getTourLoadingPreview } = await import('../lib/tour-loadings.js');
 const { createTour } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
@@ -307,6 +308,44 @@ test('refuse l’ajout de produit sans la permission dédiée', async () => {
     database.collection('stockMovements').deleteMany({ productId }),
     database.collection('tours').deleteOne({ _id: tourId }),
   ]);
+});
+
+test('refuse un conditionnement réception à l’ajout et revérifie la vente à la confirmation du chargement', async () => {
+  const { token, userId } = await createUserSession('tournee-usages', [
+    'packaging.read', 'products.read', 'tours.products.add', 'tours.load', 'tours.read', 'pricing.read',
+  ]);
+  const delivererId = new ObjectId();
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  const tourId = new ObjectId();
+  await database.collection('deliverers').insertOne({ _id: delivererId, active: true, code: 'LIV-USAGES', name: 'Usages' });
+  await database.collection('products').insertOne({
+    _id: productId, baseUnit: 'BOUTEILLE', code: 'PRD-USAGES', designation: 'Boisson',
+    salePrice: { amountInCentimes: 9000, currency: 'DZD', taxIncluded: true },
+    packagings: [{ _id: packagingId, label: 'Palette', quantity: 24, usage: 'RECEPTION' }],
+  });
+  await database.collection('tours').insertOne({ _id: tourId, delivererId, reference: 'TRN-USAGES', status: 'PREPARATION' });
+  await database.collection('stockMovements').insertOne({ productId, baseUnit: 'BOUTEILLE', quantityDeltaInBaseUnits: 100 });
+  const formData = createTourProductFormData({ productId: productId.toString() });
+  formData.set('quantityMode', 'PACKAGING');
+  formData.set('packagingId', packagingId.toString());
+  formData.set('packagingCount', '2');
+  const rejected = await callWithSession(token, () => addTourProduct(tourId.toString(), { revision: 0 }, formData));
+  assert.deepEqual(rejected.errors, { packagingId: 'Ce conditionnement n’est pas activé pour la vente.' });
+  assert.equal(await database.collection('tourReservations').countDocuments({ tourId }), 0);
+  await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.usage': 'SALE' } });
+  const added = await callWithSession(token, () => addTourProduct(tourId.toString(), { revision: 0 }, formData));
+  assert.deepEqual(added.errors, {});
+  const preview = await getTourLoadingPreview({ tourId: tourId.toString(), userId: userId.toString() });
+  assert.deepEqual(preview.errors, {});
+  const loadingFormData = new FormData();
+  loadingFormData.set('loadingDigest', preview.digest);
+  await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.usage': 'RECEPTION' } });
+  const result = await callWithSession(token, () => loadTour(tourId.toString(), { revision: 0 }, loadingFormData));
+  assert.match(result.errors.form, /conditionnement.*n’est plus activé pour la vente/u);
+  assert.equal(result.message, null);
+  assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
+  assert.equal((await database.collection('tours').findOne({ _id: tourId })).status, 'PREPARATION');
 });
 
 test('refuse le retrait sans la permission dédiée et sans écrire', async () => {

@@ -8,6 +8,7 @@ import {
   createEmptyReceptionLine,
   formatReceptionMoney,
   formatReceptionUnitCost,
+  getReceptionPackagings,
   validateReceptionDraft,
   validateReceptionLine,
 } from '../../../lib/receptions.js';
@@ -46,7 +47,8 @@ const ReceptionLineForm = ({
   const product = getProduct(products, line.productId);
   const unitLabel = getUnitLabel(baseUnits, product).toLocaleLowerCase('fr');
   const quantityUnitLabel = getQuantityUnitLabel(baseUnits, product);
-  const packaging = product?.packagings.find(({ id }) => id === line.packagingId);
+  const receptionPackagings = getReceptionPackagings(product);
+  const packaging = receptionPackagings.find(({ id }) => id === line.packagingId);
   const editorRef = useRef(null);
   const quantityField = line.quantityMode === 'PACKAGING' ? 'packagingCount' : 'directQuantity';
   const quantityId = `${line.id}-${line.quantityMode === 'PACKAGING' ? 'packaging-count' : 'direct-quantity'}`;
@@ -75,15 +77,15 @@ const ReceptionLineForm = ({
           <label htmlFor={`${line.id}-quantity-mode`}>Mode de saisie</label>
           <select id={`${line.id}-quantity-mode`} disabled={!product} value={line.quantityMode} onChange={(event) => onChange({ directQuantity: '', packagingCount: '', packagingId: '', quantityMode: event.target.value })}>
             <option value='DIRECT'>Quantité directe</option>
-            <option value='PACKAGING' disabled={!product?.packagings.length}>Nombre de conditionnements</option>
+            <option value='PACKAGING' disabled={!receptionPackagings.length}>Nombre de conditionnements</option>
           </select>
-          <p className={styles.lineHelp}>{!product ? 'Sélectionnez d’abord un produit.' : !product.packagings.length ? 'Aucun conditionnement : saisie directe uniquement.' : `Unité de base : ${unitLabel}`}</p>
+          <p className={styles.lineHelp}>{!product ? 'Sélectionnez d’abord un produit.' : !receptionPackagings.length ? 'Aucun conditionnement activé pour la réception : saisie directe uniquement.' : `Unité de base : ${unitLabel}`}</p>
         </div>
         {line.quantityMode === 'PACKAGING' && <div>
           <label htmlFor={`${line.id}-packaging`}>Conditionnement</label>
           <select id={`${line.id}-packaging`} value={line.packagingId} onChange={(event) => onChange({ packagingId: event.target.value })} aria-invalid={Boolean(errors.packaging)} aria-describedby={errors.packaging ? `${line.id}-packaging-error` : undefined}>
             <option value=''>Sélectionner</option>
-            {(product?.packagings ?? []).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} · {candidate.quantity} {quantityUnitLabel}</option>)}
+            {receptionPackagings.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label} · {candidate.quantity} {quantityUnitLabel}</option>)}
           </select>
           {error('packaging', `${line.id}-packaging`)}
         </div>}
@@ -119,7 +121,7 @@ const ReceptionLineSummary = ({ baseUnits, index, line, onEdit, onRemove, produc
   const calculation = calculateReceptionLine(line, product);
   const unitLabel = getUnitLabel(baseUnits, product).toLocaleLowerCase('fr');
   const packaging = line.quantityMode === 'PACKAGING'
-    ? product?.packagings.find(({ id }) => id === line.packagingId) : null;
+    ? getReceptionPackagings(product).find(({ id }) => id === line.packagingId) : null;
   return (
     <article className={styles.line}>
       <div className={styles.lineTop}>
