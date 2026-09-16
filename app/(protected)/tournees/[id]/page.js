@@ -13,6 +13,7 @@ import {
   getTourCancellationPreview,
 } from '../../../../lib/tour-cancellations.js';
 import { listProducts } from '../../../../lib/products.js';
+import { getSalePackagings } from '../../../../lib/product-packaging.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
   TOUR_CLOSE_PERMISSIONS,
@@ -104,7 +105,10 @@ const TourPage = async ({ params, searchParams }) => {
     (permission) => permissions.includes(permission),
   );
   const products = canAddTourProducts && tour.status === TOUR_STATUS_PREPARATION
-    ? await listProducts({ includePackagings: true, onlyUsable: true })
+    ? (await listProducts({ includePackagings: true, onlyUsable: true })).map((product) => ({
+        ...product,
+        packagings: getSalePackagings(product.packagings),
+      }))
     : [];
   const loadingPreview = canLoadTour
     && tour.status === TOUR_STATUS_PREPARATION

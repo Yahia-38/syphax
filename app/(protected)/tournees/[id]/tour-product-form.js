@@ -46,7 +46,7 @@ const TourProductForm = ({
   const [additionKey, setAdditionKey] = useState(initialAdditionKey);
   const [productQuery, setProductQuery] = useState('');
   const [productId, setProductId] = useState('');
-  const [quantityMode, setQuantityMode] = useState('DIRECT');
+  const [quantityMode, setQuantityMode] = useState('PACKAGING');
   const [directQuantity, setDirectQuantity] = useState('');
   const [packagingId, setPackagingId] = useState('');
   const [packagingCount, setPackagingCount] = useState('');
@@ -58,7 +58,7 @@ const TourProductForm = ({
       setAdditionKey(globalThis.crypto.randomUUID());
       setProductQuery('');
       setProductId('');
-      setQuantityMode('DIRECT');
+      setQuantityMode('PACKAGING');
       setDirectQuantity('');
       setPackagingId('');
       setPackagingCount('');
@@ -116,10 +116,12 @@ const TourProductForm = ({
     ?? 'unité de base';
 
   const changeProduct = (nextProductId) => {
+    const nextProduct = products.find((candidate) => candidate.id === nextProductId);
+    const defaultPackaging = getSalePackagings(nextProduct?.packagings)[0];
     setProductId(nextProductId);
-    setQuantityMode('DIRECT');
+    setQuantityMode(!nextProduct || defaultPackaging ? 'PACKAGING' : 'DIRECT');
     setDirectQuantity('');
-    setPackagingId('');
+    setPackagingId(defaultPackaging?.id ?? '');
     setPackagingCount('');
   };
 
@@ -310,6 +312,7 @@ const TourProductForm = ({
                 onChange={() => {
                   setQuantityMode('PACKAGING');
                   setDirectQuantity('');
+                  setPackagingId(salePackagings[0]?.id ?? '');
                 }}
                 type='radio'
               />

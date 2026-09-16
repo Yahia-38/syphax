@@ -240,12 +240,15 @@ const ReceptionDraftForm = ({
     setLineDraft((line) => ({ ...line, ...changes })); setLineErrors({}); setReceptionError(null);
   };
   const changeDraftProduct = (id) => {
-    setLineDraft((line) => changeReceptionLineProduct(line, id)); setLineErrors({}); setReceptionError(null);
+    setLineDraft((line) => ({
+      ...changeReceptionLineProduct(line, id),
+      quantityMode: getReceptionPackagings(getProduct(products, id)).length ? 'PACKAGING' : 'DIRECT',
+    })); setLineErrors({}); setReceptionError(null);
   };
   const addLine = () => {
     if (lineDraft || blocked || lines.length >= 100) return;
     const id = `reception-line-${nextLineId.current++}`;
-    setEditingLineId(null); setLineDraft(createEmptyReceptionLine(id)); setLineErrors({}); setReceptionError(null);
+    setEditingLineId(null); setLineDraft({ ...createEmptyReceptionLine(id), quantityMode: 'PACKAGING' }); setLineErrors({}); setReceptionError(null);
   };
   const cancelLineDraft = () => {
     setEditingLineId(null); setLineDraft(null); setLineErrors({}); setReceptionError(null);

@@ -1,0 +1,186 @@
+{
+  "simulation": true,
+  "dates": [
+    "2026-09-09",
+    "2026-09-10",
+    "2026-09-11",
+    "2026-09-12",
+    "2026-09-13",
+    "2026-09-14",
+    "2026-09-15"
+  ],
+  "deliverer": {
+    "id": "6aaaf5669c5084d0c7774c7d",
+    "code": "BRAHIM-01",
+    "name": "Brahim"
+  },
+  "backupPath": "/home/yahia/projects/syphax/.backups/before-brahim-week-2026-09-16T20-00-38.712Z.ejson",
+  "priceBasis": "Current unit sale prices actually used by Syphax tour loading: 90 DA for 1 L and 150 DA for 2 L. Supplier costs assumed at 80% for simulation.",
+  "targetMerchandiseDA": 2500000,
+  "loadedMerchandiseDA": 2499990,
+  "targetDifferenceDA": 10,
+  "grossCountedDA": 2392350,
+  "expensesDA": 17050,
+  "netDueDA": 2375300,
+  "paymentsDA": 2343137,
+  "remainingDueDA": 32163,
+  "cashBalanceDA": 2343137,
+  "paymentCount": 10,
+  "supplierPurchaseCostDA": 2125440,
+  "receivedQuantity": 22320,
+  "loadedQuantity": 20833,
+  "returnedQuantity": 900,
+  "remainingStockQuantity": 2387,
+  "stock": [
+    {
+      "code": "HB-BLANCHE-1L",
+      "received": 2880,
+      "loaded": 2604,
+      "returned": 114,
+      "available": 390
+    },
+    {
+      "code": "HB-BLANCHE-2L",
+      "received": 2700,
+      "loaded": 2605,
+      "returned": 114,
+      "available": 209
+    },
+    {
+      "code": "HB-SELECTO-1L",
+      "received": 2880,
+      "loaded": 2604,
+      "returned": 114,
+      "available": 390
+    },
+    {
+      "code": "HB-SELECTO-2L",
+      "received": 2700,
+      "loaded": 2604,
+      "returned": 108,
+      "available": 204
+    },
+    {
+      "code": "HB-SLIM-CITRON-1L",
+      "received": 2880,
+      "loaded": 2604,
+      "returned": 114,
+      "available": 390
+    },
+    {
+      "code": "HB-SLIM-CITRON-2L",
+      "received": 2700,
+      "loaded": 2604,
+      "returned": 108,
+      "available": 204
+    },
+    {
+      "code": "HB-SLIM-ORANGE-1L",
+      "received": 2880,
+      "loaded": 2604,
+      "returned": 114,
+      "available": 390
+    },
+    {
+      "code": "HB-SLIM-ORANGE-2L",
+      "received": 2700,
+      "loaded": 2604,
+      "returned": 114,
+      "available": 210
+    }
+  ],
+  "breakage": {
+    "bottles": 9,
+    "amountDA": 1350,
+    "recordedAs": "Declared expense. Counting classifies all non-returned units as sold, including these damaged bottles."
+  },
+  "days": [
+    {
+      "date": "2026-09-09",
+      "tourId": "6aaaf5669c5084d0c7774c90",
+      "reference": "TRN-6AAAF5669C5084D0C7774C90",
+      "status": "CLOSED",
+      "loadedDA": 308340,
+      "grossCountedDA": 285300,
+      "expensesDA": 2000,
+      "paidDA": 283300,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-10",
+      "tourId": "6aaaf5679c5084d0c7774cac",
+      "reference": "TRN-6AAAF5679C5084D0C7774CAC",
+      "status": "CLOSED",
+      "loadedDA": 333360,
+      "grossCountedDA": 316080,
+      "expensesDA": 2000,
+      "paidDA": 314080,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-11",
+      "tourId": "6aaaf5679c5084d0c7774cd9",
+      "reference": "TRN-6AAAF5679C5084D0C7774CD9",
+      "status": "CLOSED",
+      "loadedDA": 355860,
+      "grossCountedDA": 339480,
+      "expensesDA": 1900,
+      "paidDA": 337580,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-12",
+      "tourId": "6aaaf5689c5084d0c7774cf6",
+      "reference": "TRN-6AAAF5689C5084D0C7774CF6",
+      "status": "CLOSED",
+      "loadedDA": 392400,
+      "grossCountedDA": 380880,
+      "expensesDA": 2700,
+      "paidDA": 378180,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-13",
+      "tourId": "6aaaf5699c5084d0c7774d24",
+      "reference": "TRN-6AAAF5699C5084D0C7774D24",
+      "status": "CLOSED",
+      "loadedDA": 426420,
+      "grossCountedDA": 398520,
+      "expensesDA": 2800,
+      "paidDA": 395720,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-14",
+      "tourId": "6aaaf5699c5084d0c7774d41",
+      "reference": "TRN-6AAAF5699C5084D0C7774D41",
+      "status": "CLOSED",
+      "loadedDA": 353520,
+      "grossCountedDA": 347760,
+      "expensesDA": 2950,
+      "paidDA": 344810,
+      "remainingDA": 0
+    },
+    {
+      "date": "2026-09-15",
+      "tourId": "6aaaf56a9c5084d0c7774d5d",
+      "reference": "TRN-6AAAF56A9C5084D0C7774D5D",
+      "status": "CLOSED",
+      "loadedDA": 330090,
+      "grossCountedDA": 324330,
+      "expensesDA": 2700,
+      "paidDA": 289467,
+      "remainingDA": 32163
+    }
+  ],
+  "verified": [
+    "7 closed tours",
+    "56 loaded reservations; no active reservations",
+    "3 receptions using reception-only palettes",
+    "Sale packaging for tour reservations except one final direct line",
+    "Stock reconciled for each product",
+    "Cash balance reconciled with payments",
+    "Deliverer remainder reconciled",
+    "Product prices and packaging preserved"
+  ]
+}
