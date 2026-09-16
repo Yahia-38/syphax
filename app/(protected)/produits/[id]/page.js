@@ -6,6 +6,7 @@ import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.
 import { requirePermission } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
 import PackagingForm from './packaging-form.js';
+import PackPricing from './pack-pricing.js';
 import PriceHistory from './price-history.js';
 import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
@@ -54,10 +55,10 @@ const formatStockQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
 
 const formatMoney = (value) => new Intl.NumberFormat('fr-DZ', { maximumFractionDigits: 2 }).format(value / 100);
 
-const SectionHeading = ({ title, description }) => (
+const SectionHeading = ({ title, description, note = 'Quantités et montants par unité de base' }) => (
   <div className={styles.sectionHeading}>
     <div><h2>{title}</h2><p>{description}</p></div>
-    <span className={styles.subnote}>Quantités et montants par unité de base</span>
+    <span className={styles.subnote}>{note}</span>
   </div>
 );
 
@@ -120,6 +121,18 @@ const ProductPage = async ({ params, searchParams }) => {
   } : null);
   const latestPurchaseCost = activeSection === 'tarification' && canReadPurchaseCosts
     ? await getLatestProductPurchaseCost({ baseUnit: product.baseUnit, productId: product.id, userId: session.userId }) : null;
+  const unitPricing = <div>
+    <PricingForm baseUnitLabel={baseUnitLabel} canUpdatePrice={canUpdatePrice} title={`Prix par ${baseUnitLabel.toLocaleLowerCase('fr')}`}
+      description={`Unité de base · 1 ${baseUnitLabel.toLocaleLowerCase('fr')}`}
+      currentPrice={formatPriceInput(product.salePrice?.amountInCentimes)} currentPriceInCentimes={product.salePrice?.amountInCentimes ?? null}
+      initiallyOpen={query.prix === '1' && canUpdatePrice}
+      lastChange={latestPriceChange?.changedAt ? { author: latestPriceChange.changedBy ?? 'Compte indisponible', date: formatDate(latestPriceChange.changedAt) } : null}
+      productId={product.id} />
+    <details className={styles.help}>
+      <summary>Historique du tarif unitaire</summary>
+      <PriceHistory history={product.salePriceHistory} title='Historique du prix unitaire' />
+    </details>
+  </div>;
 
   return (
     <EditingSessionProvider key={product.id}>
@@ -163,18 +176,17 @@ const ProductPage = async ({ params, searchParams }) => {
             </details>}
           </div>}
           {activeSection === 'tarification' && <div aria-labelledby='tarification-tab' id='tarification-panel'>
-            <SectionHeading title='Tarification' description={canReadPricing ? 'Prix de vente, dernier coût d’achat renseigné et historique.' : 'Dernier coût d’achat renseigné et réception source.'} />
+            <SectionHeading title='Tarification' note='Montants TTC en DA' description={canReadPricing ? 'Prix de vente à l’unité et par pack, dernier coût d’achat renseigné et historique.' : 'Dernier coût d’achat renseigné et réception source.'} />
             <div className={`${styles.priceGrid} ${canReadPricing && canReadPurchaseCosts ? '' : styles.priceSingle}`}>
-              {canReadPricing && <PricingForm baseUnitLabel={baseUnitLabel} canUpdatePrice={canUpdatePrice}
-                currentPrice={formatPriceInput(product.salePrice?.amountInCentimes)} currentPriceInCentimes={product.salePrice?.amountInCentimes ?? null}
-                initiallyOpen={query.prix === '1' && canUpdatePrice}
-                lastChange={latestPriceChange && latestPriceChange.changedAt ? { author: latestPriceChange.changedBy ?? 'Compte indisponible', date: formatDate(latestPriceChange.changedAt) } : null}
-                productId={product.id} />}
+              {canReadPricing && <section aria-labelledby='sale-pricing-title' className={`${styles.card} ${styles.priceCurrent}`}>
+                <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='price' /><h2 id='sale-pricing-title'>Prix de vente TTC</h2></div></div>
+                <PackPricing packagings={product.packagings} productId={product.id} baseUnitLabel={baseUnitLabel} canReadPackaging={canReadPackaging}
+                  basePriceInCentimes={product.salePrice?.amountInCentimes ?? null} canUpdatePrice={canUpdatePrice} unitPricing={unitPricing} />
+              </section>}
               {canReadPurchaseCosts && <PurchaseCostCard baseUnitLabel={baseUnitLabel} purchaseCost={latestPurchaseCost}
                  />}
             </div>
             {canReadPricing && canReadPurchaseCosts && <PurchasePriceGap baseUnitLabel={baseUnitLabel} purchaseCost={latestPurchaseCost} salePriceInCentimes={product.salePrice?.amountInCentimes ?? null} />}
-            {canReadPricing && <div className={canReadPurchaseCosts ? '' : 'mt-5'}><PriceHistory history={product.salePriceHistory} /></div>}
             {canReadPurchaseCosts && <details className={styles.help}><summary>Comment lire le coût d’achat ?</summary><p>Il provient de la dernière ligne de réception compatible dont le montant TTC et la quantité permettent un calcul. Ce n’est pas un coût moyen ni une valorisation FIFO. L’écart vente − dernier achat est uniquement une comparaison de montants unitaires.</p></details>}
           </div>}
           {activeSection === 'conditionnements' && <div aria-labelledby='conditionnements-tab' id='conditionnements-panel'>

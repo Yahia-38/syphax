@@ -54,7 +54,7 @@ const getChangeType = (entry) => {
   return 'UNCHANGED';
 };
 
-const PriceHistory = ({ history }) => {
+const PriceHistory = ({ history, idPrefix = 'price', title = 'Historique du prix' }) => {
   const [query, setQuery] = useState('');
   const [changeType, setChangeType] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -99,13 +99,13 @@ const PriceHistory = ({ history }) => {
   };
 
   return (
-    <section aria-labelledby='price-history-title' className={styles.card}>
-      <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='clock' /><h2 id='price-history-title'>Historique du prix</h2></div><span className={styles.pill}>{history.length} changements</span></div>
+    <section aria-labelledby={`${idPrefix}-history-title`} className={styles.card}>
+      <div className={styles.cardHead}><div className={styles.cardTitle}><ProductIcon name='clock' /><h2 id={`${idPrefix}-history-title`}>{title}</h2></div><span className={styles.pill}>{history.length} changements</span></div>
       <div className={styles.filters} role='search'>
-        <div className={styles.search}><ProductIcon name='search' /><label className='sr-only' htmlFor='price-history-search'>Rechercher dans l’historique</label>
-          <input id='price-history-search' maxLength={100} placeholder='Rechercher par auteur, date ou montant' type='search' value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} /></div>
-        <label className='sr-only' htmlFor='price-change-filter'>Filtrer par type de variation</label>
-        <select id='price-change-filter' value={changeType} onChange={(event) => { setChangeType(event.target.value); setCurrentPage(1); }}>
+        <div className={styles.search}><ProductIcon name='search' /><label className='sr-only' htmlFor={`${idPrefix}-history-search`}>Rechercher dans l’historique</label>
+          <input id={`${idPrefix}-history-search`} maxLength={100} placeholder='Rechercher par auteur, date ou montant' type='search' value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1); }} /></div>
+        <label className='sr-only' htmlFor={`${idPrefix}-change-filter`}>Filtrer par type de variation</label>
+        <select id={`${idPrefix}-change-filter`} value={changeType} onChange={(event) => { setChangeType(event.target.value); setCurrentPage(1); }}>
           <option value='ALL'>Toutes les variations</option>{availableChangeTypes.map(({ label, value }) => <option key={value} value={value}>{label}</option>)}
         </select>
         {filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Réinitialiser</button>}

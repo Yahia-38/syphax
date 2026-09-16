@@ -94,16 +94,19 @@ const Availability = ({ product }) => {
   );
 };
 
-const Price = ({ product }) => (
-  Number.isSafeInteger(product.salePriceCentimes) ? (
+const Price = ({ product }) => {
+  const unitLabel = getPriceUnitLabel(product.baseUnit);
+  const priceLabel = Number.isSafeInteger(product.salePricePackagingQuantity)
+    ? `pack de ${product.salePricePackagingQuantity} ${unitLabel}s` : unitLabel;
+  return (
     <span className={styles.price}>
-      <strong>{formatMoney(product.salePriceCentimes)}</strong>
-      <span>/ {getPriceUnitLabel(product.baseUnit)}</span>
+      {Number.isSafeInteger(product.salePriceCentimes)
+        ? <strong>{formatMoney(product.salePriceCentimes)}</strong>
+        : <span className={styles.missingPrice}>À renseigner</span>}
+      <span>/ {priceLabel}</span>
     </span>
-  ) : (
-    <span className={styles.missingPrice}>À renseigner</span>
-  )
-);
+  );
+};
 
 const SortableHeader = ({
   className = '',

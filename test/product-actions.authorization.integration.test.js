@@ -273,6 +273,36 @@ test('protège la modification du prix et conserve son auteur', async () => {
   );
 });
 
+test('protège le tarif de pack avec les permissions de prix et de conditionnement', async () => {
+  const productId = new ObjectId();
+  const packagingId = new ObjectId();
+  const { token, userId } = await createUserSession('tarif-pack-autorise', ['products.read', 'pricing.read', 'pricing.update', 'packaging.read']);
+  await database.collection('products').insertOne({
+    _id: productId, code: 'TARIF-PACK-PROTEGE', designation: 'Soda', baseUnit: 'BOUTEILLE',
+    packagings: [{ _id: packagingId, label: 'Pack de 6', quantity: 6 }],
+  });
+  const formData = new FormData();
+  formData.set('price', '500');
+  formData.set('packagingId', packagingId.toString());
+  for (const missingPermission of ['pricing.read', 'pricing.update', 'packaging.read']) {
+    const denied = await createUserSession(`tarif-pack-sans-${missingPermission}`, ['products.read', 'pricing.read', 'pricing.update', 'packaging.read'].filter((permission) => permission !== missingPermission));
+    await assert.rejects(callWithSession(denied.token, () => updateProductSalePrice(productId.toString(), { revision: 0 }, formData)), isPermissionDenied(missingPermission));
+  }
+  const refused = await database.collection('products').findOne({ _id: productId });
+  assert.equal(refused.packagings[0].salePrice, undefined);
+  const result = await callWithSession(token, () => updateProductSalePrice(productId.toString(), { revision: 0 }, formData));
+  assert.equal(result.message, 'Le prix de vente a été mis à jour.');
+  const updated = await database.collection('products').findOne({ _id: productId });
+  assert.equal(updated.salePrice, undefined);
+  assert.equal(updated.packagings[0].salePrice.amountInCentimes, 50000);
+  assert.ok(updated.packagings[0].salePrice.updatedBy.equals(userId));
+  const missingFormData = new FormData();
+  missingFormData.set('price', '600');
+  missingFormData.set('packagingId', new ObjectId().toString());
+  const missing = await callWithSession(token, () => updateProductSalePrice(productId.toString(), { revision: 0 }, missingFormData));
+  assert.ok(missing.errors.form.includes('conditionnement'));
+});
+
 test('protège la création de conditionnement et conserve son auteur', async () => {
   const productId = new ObjectId();
   const { token: deniedToken } = await createUserSession(

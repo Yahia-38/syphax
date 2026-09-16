@@ -208,6 +208,36 @@ test('liste le prix de vente en centimes ou null lorsqu’il est absent', async 
   );
 });
 
+test('le catalogue affiche le tarif du plus grand pack et le tarif unitaire sans pack', async () => {
+  const authorId = new ObjectId();
+  const pack = (label, quantity, amountInCentimes) => ({
+    _id: new ObjectId(), label, quantity,
+    ...(amountInCentimes === undefined ? {} : { salePrice: { amountInCentimes } }),
+  });
+  await database.collection('products').insertMany([
+    { code: 'CAT-PRIX-A', designation: 'Grand pack tarifé', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      salePrice: { amountInCentimes: 9000 }, packagings: [pack('Pack de 12', 12, 110000), pack('Pack de 24', 24, 200000), pack('Pack de 6', 6, 60000)] },
+    { code: 'CAT-PRIX-B', designation: 'Sans pack', baseUnit: 'BOUTEILLE', createdBy: authorId, salePrice: { amountInCentimes: 9900 } },
+    { code: 'CAT-PRIX-C', designation: 'Grand pack sans tarif', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      salePrice: { amountInCentimes: 9500 }, packagings: [pack('Pack de 6', 6, 50000), pack('Pack de 24', 24)] },
+    { code: 'CAT-PRIX-D', designation: 'Pack sans tarif unitaire', baseUnit: 'BOUTEILLE', createdBy: authorId, packagings: [pack('Pack de 12', 12, 120000)] },
+  ]);
+  const products = await listProducts({ query: 'CAT-PRIX-', includePricing: true, priceByLargestPack: true });
+  assert.deepEqual(products.map((product) => [product.code, product.salePriceCentimes, product.salePricePackagingQuantity]), [
+    ['CAT-PRIX-A', 200000, 24], ['CAT-PRIX-B', 9900, null], ['CAT-PRIX-C', null, 24], ['CAT-PRIX-D', 120000, 12],
+  ]);
+  assert.ok(products.every((product) => !('packagings' in product)));
+  const legacy = await listProducts({ query: 'CAT-PRIX-A', includePricing: true });
+  assert.equal(legacy[0].salePriceCentimes, 9000);
+  assert.equal('salePricePackagingQuantity' in legacy[0], false);
+  const hidden = await listProducts({ query: 'CAT-PRIX-', includePricing: false, priceByLargestPack: true });
+  assert.ok(hidden.every((product) => !('salePriceCentimes' in product) && !('salePricePackagingQuantity' in product)));
+  const { filterAndSortProducts } = await import('../app/(protected)/produits/product-table-utils.js');
+  const options = { products, query: '', unit: 'ALL', stockStatus: 'ALL', sortKey: 'salePriceCentimes', sortDir: 'asc', onlyMissingPrice: false };
+  assert.deepEqual(filterAndSortProducts(options).map((product) => product.code), ['CAT-PRIX-B', 'CAT-PRIX-D', 'CAT-PRIX-A', 'CAT-PRIX-C']);
+  assert.deepEqual(filterAndSortProducts({ ...options, onlyMissingPrice: true }).map((product) => product.code), ['CAT-PRIX-C']);
+});
+
 test('omet les données tarifaires lorsque leur lecture est désactivée', async () => {
   const authorId = new ObjectId().toString();
   const created = await createProduct({
@@ -632,4 +662,70 @@ test('la fiche peut exclure les conditionnements de sa lecture', async () => {
   const filtered = await getProductById(result.product.id, { includePackagings: false });
   assert.deepEqual(filtered.packagings, []);
   assert.equal(JSON.stringify(filtered).includes('Carton secret'), false);
+});
+
+test('tarife un pack indépendamment du prix unitaire et des autres packs', async () => {
+  const authorId = new ObjectId();
+  await database.collection('users').insertOne({ _id: authorId, username: 'tarif-pack' });
+  const { product } = await createProduct({ code: 'PACK-PRIX', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId.toString() });
+  const { packaging: first } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', createdBy: authorId.toString() });
+  const { packaging: second } = await addProductPackaging({ productId: product.id, label: 'Pack de 12', quantity: '12', createdBy: authorId.toString() });
+  await updateProductSalePrice({ productId: product.id, price: '90', updatedBy: authorId.toString() });
+  for (const price of ['500', '510,50']) {
+    const result = await updateProductSalePrice({ productId: product.id, packagingId: first.id, price, updatedBy: authorId.toString() });
+    assert.ok(result.salePrice);
+  }
+  const details = await getProductById(product.id, { includePricing: true });
+  assert.equal(details.salePrice.amountInCentimes, 9000);
+  assert.equal(details.salePriceHistory.length, 1);
+  const pack = details.packagings.find(({ id }) => id === first.id);
+  assert.equal(pack.salePrice.amountInCentimes, 51050);
+  assert.equal(pack.salePrice.updatedBy, 'tarif-pack');
+  assert.equal(pack.salePrice.currency, 'DZD');
+  assert.equal(pack.salePrice.taxIncluded, true);
+  assert.deepEqual(pack.salePriceHistory.map((entry) => [entry.oldAmountInCentimes, entry.newAmountInCentimes, entry.changedBy]), [
+    [50000, 51050, 'tarif-pack'], [null, 50000, 'tarif-pack'],
+  ]);
+  assert.equal(details.packagings.find(({ id }) => id === second.id).salePrice, null);
+  const withoutPricing = await getProductById(product.id, { includePricing: false });
+  assert.equal('salePrice' in withoutPricing.packagings[0], false);
+  assert.equal('salePriceHistory' in withoutPricing.packagings[0], false);
+  const withoutPacks = await getProductById(product.id, { includePricing: true, includePackagings: false });
+  assert.deepEqual(withoutPacks.packagings, []);
+});
+
+test('refuse les tarifs de packs invalides ou appartenant à un autre produit', async () => {
+  const authorId = new ObjectId().toString();
+  const { product } = await createProduct({ code: 'PACK-PRIX-INVALIDE', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId });
+  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', createdBy: authorId });
+  const missing = await updateProductSalePrice({ productId: new ObjectId().toString(), packagingId: packaging.id, price: '500', updatedBy: authorId });
+  assert.deepEqual(missing, { notFound: true });
+  for (const packagingId of ['', 'invalid', new ObjectId().toString()]) {
+    assert.deepEqual(await updateProductSalePrice({ productId: product.id, packagingId, price: '500', updatedBy: authorId }), { notFound: true });
+  }
+  assert.ok((await updateProductSalePrice({ productId: product.id, packagingId: packaging.id, price: '0', updatedBy: authorId })).errors.price);
+  const stored = await database.collection('products').findOne({ _id: new ObjectId(product.id) });
+  assert.equal(stored.salePrice, undefined);
+  assert.equal(stored.packagings[0].salePrice, undefined);
+});
+
+test('conserve les changements concurrents du prix unitaire et du pack', async () => {
+  const authorId = new ObjectId().toString();
+  const { product } = await createProduct({ code: 'PACK-PRIX-CONCURRENT', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId });
+  const { packaging } = await addProductPackaging({ productId: product.id, label: 'Pack', quantity: '6', createdBy: authorId });
+  const results = await Promise.all([
+    updateProductSalePrice({ productId: product.id, price: '90', updatedBy: authorId }),
+    ...['500', '520', '530'].map((price) => updateProductSalePrice({ productId: product.id, packagingId: packaging.id, price, updatedBy: authorId })),
+  ]);
+  assert.ok(results.every((result) => result.salePrice));
+  const stored = await database.collection('products').findOne({ _id: new ObjectId(product.id) });
+  assert.equal(stored.salePrice.amountInCentimes, 9000);
+  const pack = stored.packagings[0];
+  assert.equal(pack.quantity, 6);
+  assert.equal(pack.salePriceHistory.length, 3);
+  assert.equal(pack.salePriceHistory[0].oldAmountInCentimes, null);
+  assert.equal(pack.salePriceHistory[1].oldAmountInCentimes, pack.salePriceHistory[0].newAmountInCentimes);
+  assert.equal(pack.salePriceHistory[2].oldAmountInCentimes, pack.salePriceHistory[1].newAmountInCentimes);
+  assert.equal(pack.salePrice.amountInCentimes, pack.salePriceHistory[2].newAmountInCentimes);
+  assert.ok(pack.salePrice.versionId.equals(pack.salePriceHistory[2]._id));
 });

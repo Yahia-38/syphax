@@ -17,6 +17,8 @@ export const updateProductSalePrice = async (
 ) => {
   const session = await requirePermission('pricing.update');
   await requirePermission('pricing.read');
+  const packagingId = formData.has('packagingId') ? readTextField(formData, 'packagingId') : undefined;
+  if (packagingId !== undefined) await requirePermission('packaging.read');
   const values = { price: readTextField(formData, 'price') };
   const previousRevision = Number.isSafeInteger(previousState?.revision)
     ? previousState.revision
@@ -28,6 +30,7 @@ export const updateProductSalePrice = async (
       productId,
       price: values.price,
       updatedBy: session.userId,
+      packagingId,
     });
 
     if (result.errors) {
@@ -36,7 +39,7 @@ export const updateProductSalePrice = async (
 
     if (result.notFound) {
       return {
-        errors: { form: 'Ce produit n’existe plus.' },
+        errors: { form: packagingId === undefined ? 'Ce produit n’existe plus.' : 'Ce produit ou conditionnement n’existe plus.' },
         message: null,
         revision,
         values,

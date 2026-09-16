@@ -25,7 +25,7 @@ const ProductsPage = async ({ searchParams }) => {
   const productDeleted = resolvedSearchParams?.deleted === '1';
   const canCreateProduct = permissions.includes('products.create');
   const canReadPricing = permissions.includes('pricing.read');
-  const products = await listProducts({ includePricing: canReadPricing });
+  const products = await listProducts({ includePricing: canReadPricing, priceByLargestPack: true });
 
   return (
     <main className='mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 sm:py-9 lg:pb-12'>
