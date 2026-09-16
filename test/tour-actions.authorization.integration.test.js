@@ -24,6 +24,7 @@ const { workUnitAsyncStorage } = await import(
 const { RequestCookies } = await import(
   'next/dist/server/web/spec-extension/cookies.js'
 );
+const { seedValuedStockReceipt } = await import('./helpers/stock-valuation-fixtures.js');
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const { getTourExpensePreview } = await import('../lib/tour-expenses.js');
@@ -325,7 +326,7 @@ test('refuse un conditionnement réception à l’ajout et revérifie la vente �
     packagings: [{ _id: packagingId, label: 'Palette', quantity: 24, usage: 'RECEPTION' }],
   });
   await database.collection('tours').insertOne({ _id: tourId, delivererId, reference: 'TRN-USAGES', status: 'PREPARATION' });
-  await database.collection('stockMovements').insertOne({ productId, baseUnit: 'BOUTEILLE', quantityDeltaInBaseUnits: 100 });
+  await seedValuedStockReceipt({ database, productId, baseUnit: 'BOUTEILLE', recordedBy: userId });
   const formData = createTourProductFormData({ productId: productId.toString() });
   formData.set('quantityMode', 'PACKAGING');
   formData.set('packagingId', packagingId.toString());
@@ -639,7 +640,7 @@ test('refuse la création avec la seule permission deliverers.read sans écrire'
     (error) => error instanceof PermissionDeniedError
       && error.permission === 'tours.create',
   );
-  assert.equal(await database.collection('tours').countDocuments({}), 0);
+  assert.equal(await database.collection('tours').countDocuments({ delivererId }), 0);
 });
 
 test('crée via la session, ignore les métadonnées du navigateur et ouvre la fiche', async () => {

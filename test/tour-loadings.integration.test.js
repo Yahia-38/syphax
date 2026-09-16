@@ -12,9 +12,10 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
-const { PermissionDeniedError } = await import('../lib/access.js');
+const { seedValuedStockReceipt } = await import('./helpers/stock-valuation-fixtures.js');
+const { PermissionDeniedError, grantYahiaFullAccessPermission } = await import('../lib/access.js');
 const { deactivateDeliverer } = await import('../lib/deliverers.js');
-const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
+const { closeMongoConnection, getDatabase, getMongoClient } = await import('../lib/mongodb.js');
 const { updateProductSalePrice } = await import('../lib/products.js');
 const {
   TOUR_LOADING_OUTPUT_KIND,
@@ -31,6 +32,11 @@ const {
   createTourLoadingDigest,
   getTourLoadingPreview,
 } = await import('../lib/tour-loadings.js');
+const { readStoredStockValuationReconciliation } = await import('../lib/stock-valuations.js');
+const { calculateStockReturn } = await import('../lib/stock-valuation-calculations.js');
+const { createStockValuationEntry } = await import('../lib/stock-valuation-records.js');
+const { createReception } = await import('../lib/reception-records.js');
+const { applyTourLoadingStockValuations, prepareTourLoadingStockValuations } = await import('../lib/tour-loading-stock-valuations.js');
 const { formatTourStatus, getTourById } = await import('../lib/tours.js');
 
 let database;
@@ -94,6 +100,7 @@ const insertProduct = async ({
   baseUnit = 'PIECE',
   packagings = [],
   physicalQuantity = 100,
+  purchaseValueInCentimes = 10_000,
   salePriceInCentimes = 15000,
 } = {}) => {
   const productId = new ObjectId();
@@ -119,14 +126,8 @@ const insertProduct = async ({
         }
       : {}),
   });
-  await database.collection('stockMovements').insertOne({
-    _id: new ObjectId(),
-    kind: 'TEST_IN',
-    productId,
-    baseUnit,
-    quantityDeltaInBaseUnits: physicalQuantity,
-    occurredOn: new Date('2026-09-14T08:00:00.000Z'),
-  });
+  await seedValuedStockReceipt({ database, productId, baseUnit,
+    quantityInBaseUnits: physicalQuantity, amountInCentimes: purchaseValueInCentimes, recordedBy: loaderId });
 
   return productId;
 };
@@ -634,7 +635,9 @@ test('refuse de charger lorsque le physique ne couvre plus les réservations', a
     reservedBy: loaderId,
   });
 
-  const result = await load(tourId, await getDigest(tourId));
+  const preview = await getPreview(tourId);
+  assert.match(preview.errors.form, /stock physique/u);
+  const result = await load(tourId, createTourLoadingDigest([]));
   const stock = (await getProductStockSummaries([productId], { database }))
     .get(productId.toString());
 
@@ -699,7 +702,7 @@ test('sérialise ajout, retrait, autre chargement et désactivation du livreur',
   assert.ok(loadAgainstRelease.tourId || loadAgainstRelease.errors?.form);
   assert.ok(release.reservation || release.errors?.form);
   assert.equal(Boolean(loadAgainstRelease.tourId && release.reservation), false);
-  assert.ok(firstSharedLoad.tourId);
+  assert.ok(firstSharedLoad.tourId || firstSharedLoad.errors?.form);
   assert.ok(secondSharedLoad.tourId || secondSharedLoad.errors?.form);
   assert.ok(loadAgainstDeactivation.tourId || /désactivé/u.test(
     loadAgainstDeactivation.errors?.form ?? '',
@@ -803,4 +806,398 @@ test('masque la source tournée de l’historique sans droit de lecture', async 
 
   assert.equal(hiddenLoading.sourceTour, null);
   assert.equal(visibleLoading.sourceTour.id, tourId.toString());
+});
+
+const readValuationReport = async (productId) => {
+  const product = await database.collection('products').findOne({ _id: productId });
+  return readStoredStockValuationReconciliation({ database, productId, baseUnit: product.baseUnit });
+};
+
+const receive = async (productId, quantity = 10, amount = '50') => {
+  const supplierId = new ObjectId();
+  await database.collection('suppliers').insertOne({ _id: supplierId, active: true, name: 'Atlas' });
+  return createReception({
+    createdBy: loaderId.toHexString(), supplierId: supplierId.toHexString(),
+    receptionDate: '2026-09-17', supplierReference: 'BL-VALUATION', submissionKey: randomUUID(),
+    lines: [{ productId: productId.toHexString(), baseUnit: 'PIECE',
+      quantityMode: 'DIRECT', directQuantity: String(quantity), amount }],
+  });
+};
+
+const createCostReader = async () => {
+  const userId = new ObjectId();
+  const roleId = new ObjectId();
+  await database.collection('roles').insertOne({
+    _id: roleId, permissions: ['tours.load', 'tours.read', 'pricing.read', 'stock.valuation.read'],
+  });
+  await database.collection('users').insertOne({ _id: userId, active: true, roleIds: [roleId] });
+  return { userId, roleId };
+};
+
+const snapshotLoadingRecords = async (tourId, productIds) => ({
+  tour: await database.collection('tours').findOne({ _id: tourId }),
+  reservations: await database.collection('tourReservations').find({ tourId }).sort({ _id: 1 }).toArray(),
+  products: await database.collection('products').find({ _id: { $in: productIds } }).sort({ _id: 1 }).toArray(),
+  valuations: await database.collection('stockValuations').find({ productId: { $in: productIds } }).sort({ productId: 1 }).toArray(),
+  entries: await database.collection('stockValuationEntries').find({ productId: { $in: productIds } }).sort({ _id: 1 }).toArray(),
+  movements: await database.collection('stockMovements').find({ productId: { $in: productIds } }).sort({ _id: 1 }).toArray(),
+});
+
+test('purchase costs are hidden without stock.valuation.read and shown only after server authorization', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId });
+  const { userId, roleId } = await createCostReader();
+  const hidden = await getPreview(tourId);
+  const visible = await getPreview(tourId, userId);
+  assert.equal(hidden.digest, visible.digest);
+  assert.equal('totalPurchaseCostInCentimes' in hidden, false);
+  assert.equal('purchaseCostAtLoading' in hidden.lines[0], false);
+  assert.equal('valuationSource' in hidden.lines[0], false);
+  assert.equal('valuationSource' in visible.lines[0], false);
+  assert.equal(visible.totalPurchaseCostInCentimes, 3_000);
+  assert.deepEqual(visible.lines[0].purchaseCostAtLoading, {
+    method: 'MOVING_WEIGHTED_AVERAGE', version: 1, baseUnit: 'PIECE',
+    quantityInBaseUnits: 30, valueInCentimes: 3_000, currency: 'DZD', taxIncluded: true,
+  });
+  await database.collection('roles').updateOne({ _id: roleId }, { $pull: { permissions: 'stock.valuation.read' } });
+  const revoked = await getPreview(tourId, userId);
+  assert.equal('purchaseCostAtLoading' in revoked.lines[0], false);
+  assert.equal('totalPurchaseCostInCentimes' in revoked, false);
+  assert.ok((await load(tourId, hidden.digest)).tourId);
+  const stored = await database.collection('tourReservations').findOne({ tourId });
+  assert.deepEqual(stored.purchaseCostAtLoading, visible.lines[0].purchaseCostAtLoading);
+  const result = await readValuationReport(productId);
+  assert.equal(result.complete, true);
+  assert.equal(result.quantityInBaseUnits, 70);
+  assert.equal(result.valueInCentimes, 7_000);
+  // Existing reservation/tour readers do not accidentally expose newly stored costs.
+  const detail = await getTourById(tourId.toHexString(), { includePricing: true, userId: loaderId.toHexString() });
+  assert.equal('purchaseCostAtLoading' in detail.lines[0], false);
+  const [line] = await listTourReservations({ database, tourId: tourId.toHexString() });
+  assert.equal('purchaseCostAtLoading' in line, false);
+});
+
+test('internal loading allocation rounds combined withdrawal once and preserves repeated line order', async () => {
+  // The current reservation UI permits one active line per product. Exercise the
+  // internal writer's multiple-line contract for imported/future source records.
+  const productId = await insertProduct({ physicalQuantity: 3, purchaseValueInCentimes: 1 });
+  const original = await database.collection('stockValuationEntries').findOne({ productId });
+  const client = await getMongoClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await database.collection('products').updateOne({ _id: productId }, { $inc: { stockReferenceVersion: 1 } }, { session });
+      const lines = [1, 1].map((quantityInBaseUnits) => ({
+        _id: new ObjectId(), productId, baseUnit: 'PIECE', quantityInBaseUnits,
+      }));
+      const prepared = await prepareTourLoadingStockValuations({ database, session, lines });
+      assert.deepEqual(prepared.map((line) => line.purchaseCostAtLoading.valueInCentimes), [1, 0]);
+      const recordedAt = new Date();
+      const tourId = new ObjectId();
+      const movements = lines.map((line) => ({
+        _id: new ObjectId(), productId, baseUnit: 'PIECE', kind: 'TOUR_LOADING_OUT',
+        quantityDeltaInBaseUnits: -line.quantityInBaseUnits,
+        sourceTourId: tourId, sourceTourReservationId: line._id, recordedAt, recordedBy: loaderId,
+      }));
+      await applyTourLoadingStockValuations({ database, session, lines: prepared, movements });
+      await database.collection('stockMovements').insertMany(movements, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+  const entries = await database.collection('stockValuationEntries').find({ productId }).sort({ revision: 1 }).toArray();
+  assert.deepEqual(entries[0], original);
+  assert.deepEqual(entries.map((entry) => entry.valueDeltaInCentimes), [1, -1, 0]);
+  assert.deepEqual(entries.map((entry) => entry.revision), [1, 2, 3]);
+  const report = await readValuationReport(productId);
+  assert.equal(report.complete, true);
+  assert.equal(report.quantityInBaseUnits, 1);
+  assert.equal(report.valueInCentimes, 0);
+});
+
+test('full loading removes the entire remaining purchase value, including zero-cost stock', async () => {
+  for (const purchaseValueInCentimes of [0, 100]) {
+    const productId = await insertProduct({ physicalQuantity: 3, purchaseValueInCentimes });
+    const tourId = await insertTour();
+    await addReservation({ productId, tourId, quantity: 3 });
+    assert.ok((await load(tourId, await getDigest(tourId))).tourId);
+    const report = await readValuationReport(productId);
+    assert.equal(report.complete, true);
+    assert.equal(report.quantityInBaseUnits, 0);
+    assert.equal(report.valueInCentimes, 0);
+    assert.equal(report.averageUnitCostInCentimes, null);
+    const lines = await database.collection('tourReservations').find({ tourId }).toArray();
+    assert.equal(lines.reduce((sum, line) => sum + line.purchaseCostAtLoading.valueInCentimes, 0), purchaseValueInCentimes);
+  }
+});
+
+test('packaged loading assigns purchase value using the converted base-unit quantity', async () => {
+  const packagingId = new ObjectId();
+  const productId = await insertProduct({ baseUnit: 'BOUTEILLE',
+    packagings: [{ _id: packagingId, label: 'Pack', quantity: 12, usage: 'SALE' }] });
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toHexString(), packagingCount: '5' });
+  const { userId } = await createCostReader();
+  const preview = await getPreview(tourId, userId);
+  assert.equal(preview.lines[0].purchaseCostAtLoading.quantityInBaseUnits, 60);
+  assert.equal(preview.totalPurchaseCostInCentimes, 6_000);
+  assert.ok((await load(tourId, preview.digest)).tourId);
+  assert.equal((await readValuationReport(productId)).valueInCentimes, 4_000);
+  assert.equal((await readValuationReport(productId)).complete, true);
+});
+
+test('a new reception invalidates approval even when the assigned rounded cost is unchanged', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId });
+  const { userId } = await createCostReader();
+  const original = await getPreview(tourId, userId);
+  assert.equal((await receive(productId, 10, '10')).replayed, false);
+  const refreshed = await getPreview(tourId, userId);
+  assert.equal(original.totalPurchaseCostInCentimes, refreshed.totalPurchaseCostInCentimes);
+  assert.notEqual(original.digest, refreshed.digest);
+  const before = await snapshotLoadingRecords(tourId, [productId]);
+  assert.match((await load(tourId, original.digest)).errors.form, /valorisation.*changé/u);
+  assert.deepEqual(await snapshotLoadingRecords(tourId, [productId]), before);
+  assert.ok((await load(tourId, refreshed.digest)).tourId);
+});
+
+test('loading after a reception uses the remaining stock average and later receipts preserve its snapshot', async () => {
+  const productId = await insertProduct({ physicalQuantity: 100, purchaseValueInCentimes: 500_000 });
+  const firstTourId = await insertTour();
+  await addReservation({ productId, tourId: firstTourId, quantity: 40 });
+  assert.ok((await load(firstTourId, await getDigest(firstTourId))).tourId);
+  const original = await database.collection('tourReservations').findOne({ tourId: firstTourId });
+  assert.equal(original.purchaseCostAtLoading.valueInCentimes, 200_000);
+  await receive(productId, 40, '2800');
+  const report = await readValuationReport(productId);
+  assert.equal(report.complete, true);
+  assert.equal(report.quantityInBaseUnits, 100);
+  assert.equal(report.valueInCentimes, 580_000);
+  const secondTourId = await insertTour();
+  await addReservation({ productId, tourId: secondTourId, quantity: 10 });
+  assert.ok((await load(secondTourId, await getDigest(secondTourId))).tourId);
+  const second = await database.collection('tourReservations').findOne({ tourId: secondTourId });
+  assert.equal(second.purchaseCostAtLoading.valueInCentimes, 58_000);
+  assert.deepEqual(await database.collection('tourReservations').findOne({ tourId: firstTourId }), original);
+  assert.equal((await readValuationReport(productId)).valueInCentimes, 522_000);
+});
+
+test('concurrent tours sharing stock cannot both apply the same valuation approval', async () => {
+  const productId = await insertProduct({ physicalQuantity: 10, purchaseValueInCentimes: 101 });
+  const firstTourId = await insertTour();
+  const secondTourId = await insertTour();
+  await addReservation({ productId, tourId: firstTourId, quantity: 3 });
+  await addReservation({ productId, tourId: secondTourId, quantity: 4 });
+  const firstDigest = await getDigest(firstTourId);
+  const secondDigest = await getDigest(secondTourId);
+  const results = await Promise.all([load(firstTourId, firstDigest), load(secondTourId, secondDigest)]);
+  assert.equal(results.filter((result) => result.tourId).length, 1);
+  assert.match(results.find((result) => result.errors).errors.form, /valorisation.*changé/u);
+  const remainingTourId = results[0].errors ? firstTourId : secondTourId;
+  assert.ok((await load(remainingTourId, await getDigest(remainingTourId))).tourId);
+  const report = await readValuationReport(productId);
+  assert.equal(report.complete, true);
+  assert.equal(report.quantityInBaseUnits, 3);
+  const lines = await database.collection('tourReservations').find({ productId }).toArray();
+  assert.equal(report.valueInCentimes + lines.reduce((sum, line) => sum + line.purchaseCostAtLoading.valueInCentimes, 0), 101);
+});
+
+test('a concurrent reception and loading preserve cost according to the committed order', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantity: 30 });
+  const digest = await getDigest(tourId);
+  const [loading, reception] = await Promise.all([load(tourId, digest), receive(productId)]);
+  assert.equal(reception.replayed, false);
+  const report = await readValuationReport(productId);
+  assert.equal(report.complete, true);
+  if (loading.tourId) {
+    const line = await database.collection('tourReservations').findOne({ tourId });
+    assert.equal(line.purchaseCostAtLoading.valueInCentimes, 3_000);
+    assert.equal(report.valueInCentimes, 12_000);
+    assert.equal(report.quantityInBaseUnits, 80);
+  } else {
+    assert.match(loading.errors.form, /valorisation.*changé/u);
+    assert.equal(report.valueInCentimes, 15_000);
+    assert.ok((await load(tourId, await getDigest(tourId))).tourId);
+  }
+});
+
+test('unknown, missing, corrupt and mismatched valuations block loading without partial writes', async () => {
+  for (const problem of ['missing', 'unknown', 'record', 'ledger', 'unit', 'unvalued-return']) {
+    const productId = await insertProduct();
+    const tourId = await insertTour();
+    await addReservation({ productId, tourId });
+    const digest = await getDigest(tourId);
+    if (problem === 'missing') await database.collection('stockValuations').deleteOne({ productId });
+    if (problem === 'unknown') await database.collection('stockValuations').updateOne({ productId }, { $set: { status: 'UNVALUED', valueInCentimes: null } });
+    if (problem === 'record') await database.collection('stockValuations').updateOne({ productId }, { $set: { revision: -1 } });
+    if (problem === 'ledger') await database.collection('stockValuations').updateOne({ productId }, { $inc: { valueInCentimes: 1 } });
+    if (problem === 'unit') await database.collection('stockValuations').updateOne({ productId }, { $set: { baseUnit: 'BOITE' } });
+    if (problem === 'unvalued-return') await database.collection('stockMovements').insertOne({
+      productId, baseUnit: 'PIECE', kind: 'TOUR_RETURN_IN', quantityDeltaInBaseUnits: 1,
+      sourceTourId: new ObjectId(), sourceTourReservationId: new ObjectId(), sourceTourCountingId: new ObjectId(),
+    });
+    const before = await snapshotLoadingRecords(tourId, [productId]);
+    const preview = await getPreview(tourId);
+    assert.match(preview.errors.form, /valorisation.*incomplète/u);
+    assert.equal(preview.digest, undefined);
+    assert.deepEqual(preview.lines, []);
+    assert.match((await load(tourId, digest)).errors.form, /valorisation.*incomplète/u);
+    assert.deepEqual(await snapshotLoadingRecords(tourId, [productId]), before);
+  }
+});
+
+test('a ledger write failure rolls back costs, physical stock, reservations, and all locks', async () => {
+  const productId = await insertProduct();
+  const secondProductId = await insertProduct();
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantity: 10 });
+  await addReservation({ productId: secondProductId, tourId, quantity: 20 });
+  const digest = await getDigest(tourId);
+  const before = await snapshotLoadingRecords(tourId, [productId, secondProductId]);
+  const tour = before.tour;
+  const delivererBefore = await database.collection('deliverers').findOne({ _id: tour.delivererId });
+  await database.collection('stockValuationEntries').createIndex({ sourceTourId: 1 }, {
+    name: 'force_loading_valuation_failure', unique: true,
+    partialFilterExpression: { sourceTourId: tourId },
+  });
+  try {
+    await assert.rejects(load(tourId, digest), { code: 11000 });
+    assert.deepEqual(await snapshotLoadingRecords(tourId, [productId, secondProductId]), before);
+    assert.deepEqual(await database.collection('deliverers').findOne({ _id: tour.delivererId }), delivererBefore);
+  } finally {
+    await database.collection('stockValuationEntries').dropIndex('force_loading_valuation_failure');
+  }
+});
+
+test('a physical movement write failure rolls back the preceding valuation transfer', async () => {
+  const productId = await insertProduct();
+  const secondProductId = await insertProduct();
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantity: 10 });
+  await addReservation({ productId: secondProductId, tourId, quantity: 20 });
+  const digest = await getDigest(tourId);
+  const before = await snapshotLoadingRecords(tourId, [productId, secondProductId]);
+  await database.collection('stockMovements').createIndex({ sourceTourId: 1 }, {
+    name: 'force_physical_loading_failure', unique: true,
+    partialFilterExpression: { sourceTourId: tourId },
+  });
+  try {
+    await assert.rejects(load(tourId, digest), { code: 11000 });
+    assert.deepEqual(await snapshotLoadingRecords(tourId, [productId, secondProductId]), before);
+  } finally {
+    await database.collection('stockMovements').dropIndex('force_physical_loading_failure');
+  }
+});
+
+test('purchase allocations support safe integer limits without floating-point products', async () => {
+  const productId = await insertProduct({ physicalQuantity: 100, purchaseValueInCentimes: Number.MAX_SAFE_INTEGER });
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantity: 1 });
+  assert.ok((await load(tourId, await getDigest(tourId))).tourId);
+  const line = await database.collection('tourReservations').findOne({ tourId });
+  assert.equal(line.purchaseCostAtLoading.valueInCentimes, 90_071_992_547_410);
+  const report = await readValuationReport(productId);
+  assert.equal(report.complete, true);
+  assert.equal(report.valueInCentimes + line.purchaseCostAtLoading.valueInCentimes, Number.MAX_SAFE_INTEGER);
+});
+
+test('combined purchase cost overflow rejects preview and confirmation even for hidden costs', async () => {
+  const first = await insertProduct({ physicalQuantity: 1, purchaseValueInCentimes: Number.MAX_SAFE_INTEGER });
+  const second = await insertProduct({ physicalQuantity: 1, purchaseValueInCentimes: Number.MAX_SAFE_INTEGER });
+  const tourId = await insertTour();
+  await addReservation({ productId: first, tourId, quantity: 1 });
+  await addReservation({ productId: second, tourId, quantity: 1 });
+  const before = await snapshotLoadingRecords(tourId, [first, second]);
+  assert.match((await getPreview(tourId)).errors.form, /coût d’achat total.*limite/u);
+  assert.match((await load(tourId, createTourLoadingDigest([]))).errors.form, /coût d’achat total.*limite/u);
+  assert.deepEqual(await snapshotLoadingRecords(tourId, [first, second]), before);
+});
+
+test('loading valuation services require a transaction', async () => {
+  await assert.rejects(prepareTourLoadingStockValuations({ database, lines: [] }), TypeError);
+  await assert.rejects(applyTourLoadingStockValuations({ database, lines: [], movements: [] }), TypeError);
+});
+
+test('valuation permission grant changes only yahia’s dedicated role and is idempotent', async () => {
+  const dedicatedId = new ObjectId();
+  const sharedId = new ObjectId();
+  const otherId = new ObjectId();
+  await database.collection('roles').insertMany([
+    { _id: dedicatedId, key: 'yahia-full-access', permissions: [] },
+    { _id: sharedId, key: 'shared-manager', permissions: [] },
+  ]);
+  await database.collection('users').insertMany([
+    { _id: new ObjectId(), username: 'yahia', roleIds: [dedicatedId, sharedId] },
+    { _id: otherId, username: 'other-user', roleIds: [sharedId] },
+  ]);
+  const otherBefore = await database.collection('users').findOne({ _id: otherId });
+  const sharedBefore = await database.collection('roles').findOne({ _id: sharedId });
+  assert.equal((await grantYahiaFullAccessPermission('stock.valuation.read')).granted, true);
+  assert.equal((await grantYahiaFullAccessPermission('stock.valuation.read')).granted, false);
+  assert.deepEqual((await database.collection('roles').findOne({ _id: dedicatedId })).permissions, ['stock.valuation.read']);
+  assert.deepEqual(await database.collection('roles').findOne({ _id: sharedId }), sharedBefore);
+  assert.deepEqual(await database.collection('users').findOne({ _id: otherId }), otherBefore);
+});
+
+test('a reconciled return invalidates loading approval while restoring the original purchase cost', async () => {
+  const productId = await insertProduct();
+  const originalTourId = await insertTour();
+  await addReservation({ productId, tourId: originalTourId, quantity: 30 });
+  assert.ok((await load(originalTourId, await getDigest(originalTourId))).tourId);
+  const loaded = await database.collection('tourReservations').findOne({ tourId: originalTourId });
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantity: 30 });
+  const digest = await getDigest(tourId);
+  // Counting integration is phase 4; simulate a complete original-cost return
+  // using the foundation's exact calculation and the same product lock.
+  const client = await getMongoClient();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await database.collection('products').updateOne({ _id: productId }, { $inc: { stockReferenceVersion: 1 } }, { session });
+      const valuation = await database.collection('stockValuations').findOne({ productId }, { session });
+      const transition = calculateStockReturn({
+        balance: valuation, loadedQuantityInBaseUnits: 30,
+        loadedValueInCentimes: loaded.purchaseCostAtLoading.valueInCentimes,
+        returnedQuantityInBaseUnits: 10,
+      });
+      const recordedAt = new Date();
+      const movement = {
+        _id: new ObjectId(), productId, baseUnit: 'PIECE', kind: 'TOUR_RETURN_IN',
+        quantityDeltaInBaseUnits: 10, sourceTourId: originalTourId,
+        sourceTourReservationId: loaded._id, sourceTourCountingId: new ObjectId(),
+        recordedAt, recordedBy: loaderId,
+      };
+      const entry = createStockValuationEntry({ movement, ...transition, revision: valuation.revision + 1 });
+      await database.collection('stockValuationEntries').insertOne(entry, { session });
+      await database.collection('stockMovements').insertOne(movement, { session });
+      await database.collection('stockValuations').replaceOne({ _id: valuation._id }, {
+        ...valuation, ...transition.after, revision: entry.revision,
+        lastLedgerEntryId: entry._id, updatedAt: recordedAt,
+      }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+  assert.equal((await readValuationReport(productId)).complete, true);
+  assert.match((await load(tourId, digest)).errors.form, /valorisation.*changé/u);
+  assert.ok((await load(tourId, await getDigest(tourId))).tourId);
+  assert.equal((await readValuationReport(productId)).valueInCentimes, 5_000);
+  assert.deepEqual(await database.collection('tourReservations').findOne({ tourId: originalTourId }), loaded);
+});
+
+test('reservations and releases leave warehouse valuation and ledger unchanged', async () => {
+  const productId = await insertProduct();
+  const tourId = await insertTour();
+  const valuation = await database.collection('stockValuations').findOne({ productId });
+  const entries = await database.collection('stockValuationEntries').find({ productId }).toArray();
+  const addition = await addReservation({ productId, tourId });
+  assert.deepEqual(await database.collection('stockValuations').findOne({ productId }), valuation);
+  await releaseTourReservation({ releasedBy: loaderId.toHexString(), tourId: tourId.toHexString(), reservationId: addition.reservation.id });
+  assert.deepEqual(await database.collection('stockValuations').findOne({ productId }), valuation);
+  assert.deepEqual(await database.collection('stockValuationEntries').find({ productId }).toArray(), entries);
 });

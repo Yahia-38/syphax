@@ -15,6 +15,7 @@
     "access:grant-deliverer-status": "node --env-file=.env.local scripts/grant-deliverer-status-permission.js",
     "access:grant-cash": "node --env-file=.env.local scripts/grant-cash-permissions.js",
     "access:grant-tours": "node --env-file=.env.local scripts/grant-tour-permissions.js",
+    "access:grant-stock-valuation": "node --env-file=.env.local scripts/grant-stock-valuation-permission.js",
     "stock:backfill": "node --env-file-if-exists=.env.local scripts/backfill-reception-stock.js",
     "packaging:classify": "node --env-file=.env.local scripts/classify-packaging-usage.js",
     "tour-reservations:migrate-indexes": "node --env-file-if-exists=.env.local scripts/migrate-tour-reservation-indexes.js",

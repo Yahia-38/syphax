@@ -2,10 +2,12 @@
 
 Date: 2026-09-17.
 
-Status: phases 1 and 2 implemented on 2026-09-17. The user selected moving
-weighted average cost. New receptions now update valuation within their stock
-transaction. Tour integration, product display, historical migration, and
-permission grants remain planned. Existing unvalued history requires migration.
+Status: phases 1 through 3 implemented on 2026-09-17. The user selected moving
+weighted average cost. New receptions and loadings now update valuation within
+their stock transactions. Loading previews enforce authorized cost visibility
+and stale valuation checks. Counting integration, product display, and historical
+migration remain planned. Existing unvalued history requires migration before
+loading. The valuation read permission is granted only to yahia's dedicated role.
 
 ## Objective and scope
 
@@ -281,6 +283,81 @@ Phase 3 adds assigned loading costs, authorized previews/digests, and warehouse
 value transfers. Until loading and counting integration and historical migration
 are complete, only a fully reconciled valuation reader may describe stock value
 as complete; a stored status alone does not establish completeness.
+
+### Phase 3 implementation
+
+- `lib/tour-loading-stock-valuations.js`: internal transactional preparation and
+  write services. Reconciles each product's physical movements, ledger, current
+  balance, and unit before allocating any cost. Calculates the combined
+  withdrawal once per product, then distributes purchase value across lines in
+  stable source order using the phase 1 cumulative half-up allocation. Full
+  withdrawals leave zero quantity and value, including zero-cost receipts.
+- `lib/tour-loadings.js`: preview reads now use a snapshot transaction covering
+  permissions, reservations, prices, physical coverage, and valuation. The
+  confirmation digest includes assigned purchase costs and the source balance's
+  identity, revision, quantities, value, and ledger pointer. A concurrent receipt,
+  complete return, or other loading invalidates approval even when the rounded
+  assigned amount is unchanged. Hidden costs are still calculated and checked
+  by the server, with the same digest for authorized and unauthorized readers.
+- Confirmation holds the existing product locks and writes immutable ledger
+  entries, warehouse balances, physical movements, reservation cost snapshots,
+  and tour status within one transaction. Duplicate confirmations return the
+  existing loading without transferring value again. New receptions preserve
+  previously assigned loading costs. Reservations and releases do not affect
+  valuation.
+- Loaded reservations store `purchaseCostAtLoading` with method/version, base
+  unit, loaded base-unit quantity, exact total centimes, currency, and the
+  reception tax basis. Existing sale-price snapshots remain distinct. The
+  current reservation flow permits one active line per product/tour; the
+  internal writer also supports multiple source lines for the same product.
+- `stock.valuation.read` is checked on the server before serializing purchase
+  snapshots or totals in loading previews. The existing `tours.load`,
+  `tours.read`, and `pricing.read` requirements continue to govern loading.
+  Other reservation/tour readers do not expose the new stored cost fields.
+  The loading summary and application confirmation dialog show authorized
+  purchase costs alongside the existing sale-price value. Search, filtering,
+  and pagination remain available on desktop and mobile.
+- Missing, explicitly unknown, malformed, incompatible, or unreconciled
+  valuation blocks both preview and confirmation without changing stock or
+  snapshots. Historical migration is required for affected products. Counting
+  integration remains phase 4: a physical return without valuation makes the
+  reconciliation incomplete and blocks subsequent loadings; phase 2 receipts
+  continue preserving unknown values rather than inventing costs.
+- `npm run access:grant-stock-valuation` grants the new permission only to
+  `yahia` through `yahia-full-access`, idempotently. Executed on 2026-09-17; no
+  shared role or other account was granted this permission.
+
+Verification completed on 2026-09-17: 33 targeted loading integration tests,
+13 tour action/authorization tests, and 15 reception valuation integration
+tests passed (61 targeted tests). Loading coverage includes original-cost
+return invalidation, repeated source lines, packaging, zero/full withdrawals,
+numeric limits, concurrent tours/receptions, retries, permission revocation,
+preservation of historical ledger/snapshots, and rollback after ledger or
+physical movement failures. ESLint passed on all eight changed/new JavaScript
+files. Integration processes used isolated databases and removed them.
+
+The webpack production build passed (`npm run build -- --webpack`). The default
+Turbopack build could not bind a worker port in this environment, including after
+an escalated retry; it remains an environment limitation. Browser checks against
+an isolated database passed at 1440px and 390px: costs and totals, authorization,
+search/unit filtering, pagination, styled confirmation, no horizontal overflow,
+and the incomplete-history error. A mobile confirmation committed six immutable
+cost snapshots and matching warehouse transfers, with no browser exceptions.
+The temporary UI server/browser and database were removed after verification.
+
+Run integration commands in separate processes:
+
+```bash
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/tour-loadings.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/tour-actions.authorization.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/reception-stock-valuations.integration.test.js
+./node_modules/.bin/eslint lib/tour-loadings.js lib/tour-loading-stock-valuations.js lib/permissions.js scripts/grant-stock-valuation-permission.js 'app/(protected)/tournees/[id]/tour-loading-confirmation.js' test/tour-loadings.integration.test.js test/tour-actions.authorization.integration.test.js test/helpers/stock-valuation-fixtures.js
+```
+
+Next: phase 4 copies the original loading snapshots into counting records,
+splits returned value from cost of goods sold, and restores returned purchase
+value atomically with counting movements. Historical counting data still awaits
+the migration phase.
 
 ## Targeted verification and acceptance criteria
 

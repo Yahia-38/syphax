@@ -10,6 +10,38 @@ import {
   createStockValuationRecord,
 } from '../../lib/stock-valuation-records.js';
 
+export const seedValuedStockReceipt = async ({
+  database, productId, baseUnit = 'PIECE', quantityInBaseUnits = 100,
+  amountInCentimes = 10_000, recordedBy = new ObjectId(),
+}) => {
+  const recordedAt = new Date('2026-09-14T08:00:00.000Z');
+  const receptionId = new ObjectId();
+  const lineId = new ObjectId();
+  const movement = {
+    _id: new ObjectId(), productId, baseUnit, kind: 'RECEPTION_IN',
+    quantityDeltaInBaseUnits: quantityInBaseUnits,
+    sourceReceptionId: receptionId, sourceReceptionLineId: lineId,
+    occurredOn: recordedAt, recordedAt, recordedBy,
+  };
+  const transition = calculateStockReceipt({
+    balance: { quantityInBaseUnits: 0, valueInCentimes: 0 },
+    quantityInBaseUnits, amountInCentimes,
+  });
+  const entry = createStockValuationEntry({ movement, ...transition, revision: 1 });
+  const valuation = createStockValuationRecord({
+    productId, baseUnit, ...transition.after, revision: 1,
+    lastLedgerEntryId: entry._id, updatedAt: recordedAt,
+  });
+  await database.collection('receptions').insertOne({
+    _id: receptionId, createdAt: recordedAt, createdBy: recordedBy,
+    lines: [{ _id: lineId, productId, baseUnit, quantityInBaseUnits, amountInCentimes }],
+  });
+  await database.collection('stockMovements').insertOne(movement);
+  await database.collection('stockValuationEntries').insertOne(entry);
+  await database.collection('stockValuations').insertOne(valuation);
+  return { movement, entry, valuation };
+};
+
 export const createValuationHistory = () => {
   const productId = new ObjectId();
   const baseUnit = 'PIECE';

@@ -162,6 +162,11 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
                     <p className='mt-1 text-lg font-bold tabular-nums text-blue-950'>
                       {formatReceptionMoney(line.loadedValueInCentimes)}
                     </p>
+                    {line.purchaseCostAtLoading && (
+                      <p className='mt-2 text-sm text-slate-700'>
+                        Coût d’achat attribué : {formatReceptionMoney(line.purchaseCostAtLoading.valueInCentimes)}
+                      </p>
+                    )}
                   </div>
                 </article>
               ))}
@@ -208,6 +213,11 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
               <p className='mt-1 text-2xl font-bold tabular-nums text-blue-950'>
                 {formatReceptionMoney(preview?.totalValueInCentimes)}
               </p>
+              {preview?.totalPurchaseCostInCentimes !== undefined && (
+                <p className='mt-2 text-sm text-slate-700'>
+                  Coût d’achat total : {formatReceptionMoney(preview.totalPurchaseCostInCentimes)}
+                </p>
+              )}
             </div>
             <form
               action={formAction}
@@ -247,6 +257,11 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
                   <p className='mt-1 text-xl font-bold text-blue-950'>
                     {formatReceptionMoney(preview?.totalValueInCentimes)}
                   </p>
+                  {preview?.totalPurchaseCostInCentimes !== undefined && (
+                    <p className='mt-2 text-sm text-slate-700'>
+                      Coût d’achat total : {formatReceptionMoney(preview.totalPurchaseCostInCentimes)}
+                    </p>
+                  )}
                 </div>
                 <p>
                   Cette valeur n’est ni une vente définitive ni un encaissement.
