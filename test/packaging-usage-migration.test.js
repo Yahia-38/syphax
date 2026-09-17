@@ -259,3 +259,30 @@ test('un ajout concurrent après le contrôle empêche la migration d’invalide
   assert.equal(await database.collection('tourReservations').countDocuments({ tourId, status: 'ACTIVE' }), 1);
   assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
 });
+
+test('remet à l’unité de base un défaut dont le conditionnement n’est plus vendu, puis reste sans effet', async () => {
+  const product = fixture();
+  const [pallet, pack, carton] = product.packagings;
+  pallet.usage = 'SALE';
+  product.defaultSaleUnit = pallet._id;
+  const other = fixture();
+  other.defaultSaleUnit = other.packagings[2]._id;
+  await database.collection('products').insertMany([product, other]);
+  const inventory = createPackagingUsageInventory(database.databaseName, [product, other], {});
+  inventory.entries = inventory.entries.map((entry) => {
+    if (entry.packagingId === pallet._id.toString()) return { ...entry, proposedUsage: 'RECEPTION' };
+    return entry.packagingId === carton._id.toString() || entry.packagingId === other.packagings[2]._id.toString()
+      ? { ...entry, proposedUsage: 'SALE' } : entry;
+  });
+  let backup;
+  const result = await applyPackagingUsageInventory(database, client, inventory, async (value) => { backup = value; });
+  assert.equal(result.changed, 6);
+  assert.ok(backup.products.find(({ _id }) => _id.equals(product._id)).defaultSaleUnit.equals(pallet._id));
+  const stored = await database.collection('products').findOne({ _id: product._id });
+  assert.equal(stored.defaultSaleUnit, null);
+  assert.deepEqual(stored.packagings.map(({ usage }) => usage), ['RECEPTION', 'SALE', 'SALE']);
+  assert.ok((await database.collection('products').findOne({ _id: other._id })).defaultSaleUnit.equals(other.packagings[2]._id));
+  assert.equal(pack.usage, undefined);
+  assert.equal((await applyPackagingUsageInventory(database, client, inventory, async () => {})).changed, 0);
+  assert.equal((await database.collection('products').findOne({ _id: product._id })).defaultSaleUnit, null);
+});

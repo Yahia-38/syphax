@@ -19,6 +19,7 @@ const {
   getProductById,
   listProducts,
   removeProductPackaging,
+  setProductDefaultSaleUnit,
   updateProduct,
   updateProductSalePrice,
 } = await import('../lib/products.js');
@@ -353,6 +354,7 @@ test('retourne la fiche détaillée d’un produit et son créateur', async () =
     code: 'FICHE-01',
     createdAt: product.createdAt,
     createdBy: 'gestionnaire',
+    defaultSaleUnit: null,
     designation: 'Produit avec fiche',
     packagings: [],
     salePrice: null,
@@ -807,4 +809,96 @@ test('conserve les changements concurrents du prix unitaire et du pack', async (
   assert.equal(pack.salePriceHistory[2].oldAmountInCentimes, pack.salePriceHistory[1].newAmountInCentimes);
   assert.equal(pack.salePrice.amountInCentimes, pack.salePriceHistory[2].newAmountInCentimes);
   assert.ok(pack.salePrice.versionId.equals(pack.salePriceHistory[2]._id));
+});
+
+test('définit le conditionnement de vente par défaut ou revient à l’unité de base', async () => {
+  const authorId = new ObjectId().toString();
+  const { product } = await createProduct({ code: 'DEFAUT-VENTE', designation: 'Eau', baseUnit: 'BOUTEILLE', createdBy: authorId });
+  const productObjectId = new ObjectId(product.id);
+  assert.equal('defaultSaleUnit' in await database.collection('products').findOne({ _id: productObjectId }), false);
+  assert.equal((await getProductById(product.id)).defaultSaleUnit, null);
+
+  const { packaging: pack } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', usage: 'SALE', createdBy: authorId });
+  const { packaging: mixed } = await addProductPackaging({ productId: product.id, label: 'Carton de 12', quantity: '12', usage: 'BOTH', createdBy: authorId });
+  assert.deepEqual(await setProductDefaultSaleUnit({ productId: product.id, packagingId: pack.id, updatedBy: authorId }), { defaultSaleUnit: pack.id });
+  assert.equal((await getProductById(product.id)).defaultSaleUnit, pack.id);
+  const catalogProduct = (await listProducts({ includePackagings: true })).find(({ id }) => id === product.id);
+  assert.equal(catalogProduct.defaultSaleUnit, pack.id);
+  assert.equal('defaultSaleUnit' in (await listProducts()).find(({ id }) => id === product.id), false);
+  assert.equal('defaultSaleUnit' in await getProductById(product.id, { includePackagings: false }), true);
+  assert.equal((await getProductById(product.id, { includePackagings: false })).defaultSaleUnit, null);
+
+  assert.deepEqual(await setProductDefaultSaleUnit({ productId: product.id, packagingId: mixed.id, updatedBy: authorId }), { defaultSaleUnit: mixed.id });
+  const stored = await database.collection('products').findOne({ _id: productObjectId });
+  assert.ok(stored.defaultSaleUnit.equals(new ObjectId(mixed.id)));
+  assert.equal(stored.updatedBy.toString(), authorId);
+
+  assert.deepEqual(await setProductDefaultSaleUnit({ productId: product.id, packagingId: null, updatedBy: authorId }), { defaultSaleUnit: null });
+  assert.equal((await database.collection('products').findOne({ _id: productObjectId })).defaultSaleUnit, null);
+  assert.equal((await getProductById(product.id)).defaultSaleUnit, null);
+});
+
+test('refuse un conditionnement par défaut non vendu, inconnu ou d’un autre produit', async () => {
+  const authorId = new ObjectId().toString();
+  const { product } = await createProduct({ code: 'DEFAUT-REFUS', designation: 'Jus', baseUnit: 'BOUTEILLE', createdBy: authorId });
+  const { product: other } = await createProduct({ code: 'DEFAUT-AUTRE', designation: 'Soda', baseUnit: 'BOUTEILLE', createdBy: authorId });
+  const { packaging: pack } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', usage: 'SALE', createdBy: authorId });
+  const { packaging: pallet } = await addProductPackaging({ productId: product.id, label: 'Palette', quantity: '240', usage: 'RECEPTION', createdBy: authorId });
+  const { packaging: otherPack } = await addProductPackaging({ productId: other.id, label: 'Pack de 6', quantity: '6', usage: 'SALE', createdBy: authorId });
+  const legacyId = new ObjectId();
+  await database.collection('products').updateOne(
+    { _id: new ObjectId(product.id) },
+    { $push: { packagings: { _id: legacyId, label: 'Ancien', quantity: 12 } } },
+  );
+  await setProductDefaultSaleUnit({ productId: product.id, packagingId: pack.id, updatedBy: authorId });
+
+  for (const packagingId of [pallet.id, legacyId.toString(), otherPack.id, new ObjectId().toString()]) {
+    assert.ok((await setProductDefaultSaleUnit({ productId: product.id, packagingId, updatedBy: authorId })).errors.defaultSaleUnit);
+  }
+  for (const packagingId of ['invalide', 42]) {
+    assert.ok((await setProductDefaultSaleUnit({ productId: product.id, packagingId, updatedBy: authorId })).errors.defaultSaleUnit);
+  }
+  for (const productId of ['invalide', new ObjectId().toString()]) {
+    assert.deepEqual(await setProductDefaultSaleUnit({ productId, packagingId: pack.id, updatedBy: authorId }), { notFound: true });
+    assert.deepEqual(await setProductDefaultSaleUnit({ productId, packagingId: null, updatedBy: authorId }), { notFound: true });
+  }
+  assert.ok((await database.collection('products').findOne({ _id: new ObjectId(product.id) })).defaultSaleUnit.equals(new ObjectId(pack.id)));
+});
+
+test('lit comme unité de base un défaut stocké qui ne désigne plus un conditionnement de vente', async () => {
+  const productId = new ObjectId();
+  const palletId = new ObjectId();
+  await database.collection('products').insertOne({
+    _id: productId, code: 'DEFAUT-INCOHERENT', designation: 'Produit ancien', baseUnit: 'PIECE',
+    defaultSaleUnit: palletId,
+    packagings: [{ _id: palletId, label: 'Palette', quantity: 240, usage: 'RECEPTION' }],
+  });
+  assert.equal((await getProductById(productId.toString())).defaultSaleUnit, null);
+  const catalog = await listProducts({ includePackagings: true });
+  assert.equal(catalog.find(({ id }) => id === productId.toString()).defaultSaleUnit, null);
+});
+
+test('retirer le conditionnement par défaut revient à l’unité de base dans la même écriture', async () => {
+  const authorId = new ObjectId().toString();
+  const { product } = await createProduct({ code: 'DEFAUT-RETRAIT', designation: 'Lait', baseUnit: 'BOITE', createdBy: authorId });
+  const productObjectId = new ObjectId(product.id);
+  const { packaging: pack } = await addProductPackaging({ productId: product.id, label: 'Pack de 6', quantity: '6', usage: 'SALE', createdBy: authorId });
+  const { packaging: carton } = await addProductPackaging({ productId: product.id, label: 'Carton de 24', quantity: '24', usage: 'BOTH', createdBy: authorId });
+  await setProductDefaultSaleUnit({ productId: product.id, packagingId: carton.id, updatedBy: authorId });
+
+  assert.deepEqual(await removeProductPackaging({ productId: product.id, packagingId: pack.id }), { removed: true });
+  let stored = await database.collection('products').findOne({ _id: productObjectId });
+  assert.ok(stored.defaultSaleUnit.equals(new ObjectId(carton.id)));
+  assert.deepEqual(stored.packagings.map(({ label }) => label), ['Carton de 24']);
+
+  assert.deepEqual(await removeProductPackaging({ productId: product.id, packagingId: carton.id }), { removed: true });
+  stored = await database.collection('products').findOne({ _id: productObjectId });
+  assert.equal(stored.defaultSaleUnit, null);
+  assert.deepEqual(stored.packagings, []);
+  assert.equal((await getProductById(product.id)).defaultSaleUnit, null);
+
+  const { product: withoutDefault } = await createProduct({ code: 'DEFAUT-RETRAIT-ABSENT', designation: 'Lait', baseUnit: 'BOITE', createdBy: authorId });
+  const { packaging: onlyPack } = await addProductPackaging({ productId: withoutDefault.id, label: 'Pack', quantity: '6', usage: 'SALE', createdBy: authorId });
+  await removeProductPackaging({ productId: withoutDefault.id, packagingId: onlyPack.id });
+  assert.equal('defaultSaleUnit' in await database.collection('products').findOne({ _id: new ObjectId(withoutDefault.id) }), false);
 });

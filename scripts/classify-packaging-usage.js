@@ -34,7 +34,7 @@ const renderInventory = (inventory) => [
   '',
   'Revoir les lignes et corriger uniquement `proposedUsage` dans le JSON si nécessaire (`RECEPTION`, `SALE` ou `BOTH`).',
   'Exécuter le script avec `--apply <inventaire.json> --backup <sauvegarde.ejson>` après validation du mapping.',
-  'La sauvegarde contient les produits complets avant migration. La transaction ne modifie que `packagings[].usage` et vérifie la conservation des produits et des historiques.',
+  'La sauvegarde contient les produits complets avant migration. La transaction ne modifie que `packagings[].usage`, remet à l’unité de base le conditionnement par défaut qui n’est plus vendu, et vérifie la conservation des produits et des historiques.',
   'Un usage de vente ne peut pas être désactivé tant qu’une réservation active utilise ce conditionnement. Libérer ou charger toutes les réservations concernées avant de revoir le mapping.',
   'Un inventaire devenu obsolète est refusé ; une deuxième application du même mapping est sans effet.',
   '',
