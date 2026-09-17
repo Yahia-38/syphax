@@ -25,6 +25,7 @@ const { RequestCookies } = await import(
   'next/dist/server/web/spec-extension/cookies.js'
 );
 const { PermissionDeniedError } = await import('../lib/access.js');
+const { getObjectiveCurrentMonth } = await import('../lib/deliverer-objective-calculations.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const {
   getDelivererById,
@@ -136,6 +137,62 @@ test('la définition d’objectif détermine sa date et son auteur depuis la ses
   const stored = await database.collection('deliverers').findOne({ _id: delivererId });
   assert.ok(stored.objectiveHistory[0].changedBy.equals(userId));
   assert.ok(stored.objectiveHistory[0].changedAt >= startedAt);
+  await database.collection('deliverers').deleteOne({ _id: delivererId });
+});
+
+test('un appel direct d’objectif refuse les montants et mois invalides côté serveur', async () => {
+  const { token } = await createUserSession('objectif-validation-serveur', ['deliverers.objectives.update']);
+  const delivererId = new ObjectId();
+  await database.collection('deliverers').insertOne({ _id: delivererId, name: 'Objectif validé côté serveur' });
+  for (const [amount, month, field] of [
+    ['0', '2099-01', 'amount'], ['-1', '2099-01', 'amount'], ['12.345', '2099-01', 'amount'],
+    ['90071992547410', '2099-01', 'amount'], ['1000', '2099-13', 'effectiveMonth'], ['1000', '2000-01', 'effectiveMonth'],
+  ]) {
+    const data = new FormData();
+    data.set('objectiveAmount', amount);
+    data.set('objectiveEffectiveMonth', month);
+    data.set('objectiveExpectedVersion', '0');
+    const result = await callWithSession(token, () => updateDelivererObjective(delivererId.toString(), { revision: 0 }, data));
+    assert.ok(result.errors[field]);
+    assert.equal(result.message, null);
+    assert.deepEqual(result.values, { amount, effectiveMonth: month });
+  }
+  const stored = await database.collection('deliverers').findOne({ _id: delivererId });
+  assert.equal('objectiveHistory' in stored, false);
+  assert.equal('objectiveVersion' in stored, false);
+  await database.collection('deliverers').deleteOne({ _id: delivererId });
+});
+
+test('un appel direct avec une version périmée conserve la proposition et refuse tout écrasement', async () => {
+  const { token, userId } = await createUserSession('objectif-conflit-serveur', ['deliverers.objectives.update']);
+  const delivererId = new ObjectId();
+  const currentMonth = getObjectiveCurrentMonth();
+  const history = [{ version: 1, amountInCentimes: 100000, effectiveMonth: currentMonth, changedAt: new Date(), changedBy: userId }];
+  await database.collection('deliverers').insertOne({ _id: delivererId, name: 'Conflit objectif', objectiveVersion: 1, objectiveHistory: history });
+  for (const version of ['', '0', '-1', '1.5', 'invalide', '9007199254740992']) {
+    const data = new FormData();
+    data.set('objectiveAmount', '2000');
+    data.set('objectiveEffectiveMonth', currentMonth);
+    data.set('objectiveExpectedVersion', version);
+    const result = await callWithSession(token, () => updateDelivererObjective(delivererId.toString(), { revision: 7 }, data));
+    assert.equal(result.stale, true);
+    assert.equal(result.revision, 8);
+    assert.equal(result.message, null);
+    assert.ok(result.errors.form);
+    assert.deepEqual(result.values, { amount: '2000', effectiveMonth: currentMonth });
+  }
+  const unchanged = await database.collection('deliverers').findOne({ _id: delivererId });
+  assert.equal(unchanged.objectiveVersion, 1);
+  assert.deepEqual(unchanged.objectiveHistory, history);
+  const reviewed = new FormData();
+  reviewed.set('objectiveAmount', '2000');
+  reviewed.set('objectiveEffectiveMonth', currentMonth);
+  reviewed.set('objectiveExpectedVersion', '1');
+  const saved = await callWithSession(token, () => updateDelivererObjective(delivererId.toString(), { revision: 8 }, reviewed));
+  assert.equal(saved.stale, false);
+  assert.equal(saved.revision, 9);
+  assert.equal(saved.message, 'L’objectif mensuel a été enregistré.');
+  assert.equal((await database.collection('deliverers').findOne({ _id: delivererId })).objectiveVersion, 2);
   await database.collection('deliverers').deleteOne({ _id: delivererId });
 });
 

@@ -8,6 +8,9 @@ import {
   buildDelivererListHref,
 } from '../../../lib/deliverers.js';
 import { requirePermission } from '../../../lib/sessions.js';
+import { listDelivererObjectiveOverview } from '../../../lib/deliverer-monthly-achievement.js';
+import { readObjectiveDirectoryState } from '../../../lib/deliverer-objective-calculations.js';
+import { DELIVERER_OBJECTIVE_READ_PERMISSION } from '../../../lib/deliverer-objectives.js';
 import DelivererList from './deliverer-list.js';
 import styles from './deliverer-list.module.css';
 
@@ -21,10 +24,15 @@ const DeliverersPage = async ({ searchParams }) => {
     searchParams,
     getUserPermissions(session.userId),
   ]);
-  const listState = readDelivererListState(resolvedSearchParams);
+  const canReadObjectives = permissions.includes(DELIVERER_OBJECTIVE_READ_PERMISSION);
+  const baseListState = readDelivererListState(resolvedSearchParams);
+  const listState = canReadObjectives
+    ? { ...baseListState, ...readObjectiveDirectoryState(resolvedSearchParams) }
+    : { page: baseListState.page, query: baseListState.query, status: baseListState.status };
   let result;
   try {
-    result = await listDeliverers({ ...listState, userId: session.userId });
+    const readList = canReadObjectives ? listDelivererObjectiveOverview : listDeliverers;
+    result = await readList({ ...listState, userId: session.userId });
   } catch (error) {
     if (error instanceof PermissionDeniedError) throw error;
     console.error('Impossible de charger la liste des livreurs.', error);
@@ -42,7 +50,7 @@ const DeliverersPage = async ({ searchParams }) => {
               Livreurs
             </h1>
             <p className={styles.subtitle}>
-              Retrouvez un livreur, ses coordonnées et ses tournées.
+              {canReadObjectives ? 'Suivez les objectifs et le chiffre d’affaires mensuel des livreurs.' : 'Retrouvez un livreur, ses coordonnées et ses tournées.'}
             </p>
           </div>
 
@@ -59,6 +67,7 @@ const DeliverersPage = async ({ searchParams }) => {
         <DelivererList
           {...result}
           canCreateDeliverer={canCreateDeliverer}
+          canReadObjectives={canReadObjectives}
           canReadTours={permissions.includes('tours.read')}
           canUpdateDeliverer={permissions.includes('deliverers.update')}
         />

@@ -3,24 +3,25 @@ import { formatDelivererCreatedAt } from '../../../../lib/deliverers.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { buildDelivererToursHref } from '../../../../lib/tours.js';
 import { EditingLink } from '../../components/editing-session.js';
+import ObjectiveNavigationFields from './objective-navigation-fields.js';
+import ObjectiveNavigationForm from './objective-navigation-form.js';
 import styles from './deliverer-detail.module.css';
 
-const DelivererObjectiveHistory = ({ objectives, delivererId, returnHref }) => {
+const DelivererObjectiveHistory = ({ objectives, delivererId, returnHref, navigationState }) => {
   const { history, objectiveQuery, objectiveMonth, objectivePage, totalItems, totalPages } = objectives;
   const href = (changes = {}) => buildDelivererToursHref({
-    delivererId, returnHref, section: 'objectifs', objectiveQuery, objectiveMonth, objectivePage, ...changes,
+    delivererId, returnHref, section: 'objectifs', ...navigationState, objectiveQuery, objectiveMonth, objectivePage, ...changes,
   });
   return (
     <section className={styles.card} aria-labelledby='objective-history-title'>
       <div className={styles.cardHead}><h2 id='objective-history-title'>Historique des objectifs</h2><p>Toutes les définitions et modifications, y compris les valeurs remplacées.</p></div>
-      <form className={styles.filters} action={`/livreurs/${delivererId}`} method='get' role='search'>
-        <input type='hidden' name='retour' value={returnHref} />
-        <input type='hidden' name='section' value='objectifs' />
+      <ObjectiveNavigationForm key={href()} className={styles.filters} action={`/livreurs/${delivererId}`} role='search'>
+        <ObjectiveNavigationFields href={href()} omit={['objectifRecherche', 'objectifMois', 'objectifPage']} />
         <div><label htmlFor='objective-history-search'>Montant ou auteur</label><input id='objective-history-search' name='objectifRecherche' type='search' maxLength={100} defaultValue={objectiveQuery} placeholder='Rechercher un montant ou un auteur' /></div>
         <div><label htmlFor='objective-history-month'>Mois de prise d’effet</label><input id='objective-history-month' name='objectifMois' type='month' defaultValue={objectiveMonth} /></div>
         <button type='submit'>Rechercher</button>
         {(objectiveQuery || objectiveMonth) && <EditingLink href={href({ objectiveQuery: '', objectiveMonth: '', objectivePage: 1 })}>Réinitialiser</EditingLink>}
-      </form>
+      </ObjectiveNavigationForm>
       {history.length ? <>
         <table className={`${styles.table} ${styles.objectiveTable}`}>
           <caption className='sr-only'>Historique des définitions de l’objectif mensuel du livreur</caption>

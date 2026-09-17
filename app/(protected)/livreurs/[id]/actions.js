@@ -40,7 +40,10 @@ export const updateDelivererObjective = async (delivererId, previousState, formD
   const revision = Number.isSafeInteger(previousState?.revision) ? previousState.revision + 1 : 1;
   try {
     const result = await saveDelivererObjective({ ...values, delivererId, expectedVersion, updatedBy: session.userId });
-    if (result.stale || (!result.errors && !result.notFound)) revalidatePath(`/livreurs/${delivererId}`);
+    if (result.stale || (!result.errors && !result.notFound)) {
+      revalidatePath('/livreurs');
+      revalidatePath(`/livreurs/${delivererId}`);
+    }
     return {
       errors: result.notFound ? { form: 'Ce livreur n’existe plus.' } : result.errors ?? {},
       message: result.errors || result.notFound ? null : result.changed

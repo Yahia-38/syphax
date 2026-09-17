@@ -9,7 +9,8 @@ testUri.pathname = `/syphax_ma_${process.pid}_${randomUUID().replaceAll('-', '')
 process.env.MONGODB_URI = testUri.toString();
 
 const { PermissionDeniedError } = await import('../lib/access.js');
-const { getDelivererMonthlyAchievement, readRecordedCountingSales } = await import('../lib/deliverer-monthly-achievement.js');
+const { getDelivererMonthlyAchievement, getDelivererObjectiveDashboard, readRecordedCountingSales } = await import('../lib/deliverer-monthly-achievement.js');
+const { getObjectiveCurrentMonth } = await import('../lib/deliverer-objective-calculations.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 
 let database;
@@ -260,4 +261,67 @@ test('la lecture exige le droit objectifs et valide le mois et le livreur', asyn
   assert.ok((await read(id, '2026-13')).errors.month);
   assert.equal((await read(new ObjectId())).notFound, true);
   assert.equal((await read('invalid')).notFound, true);
+});
+
+test('le bilan sélectionne le mois et fournit un historique annuel des objectifs applicables', async () => {
+  const currentMonth = getObjectiveCurrentMonth();
+  const currentYear = currentMonth.slice(0, 4);
+  const previousYear = String(Number(currentYear) - 1);
+  const id = await deliverer({ createdAt: new Date(`${previousYear}-01-01T12:00:00Z`), objectiveHistory: [
+    { version: 1, effectiveMonth: `${previousYear}-01`, amountInCentimes: 2000 },
+    { version: 2, effectiveMonth: `${previousYear}-12`, amountInCentimes: 500 },
+  ] });
+  const decemberDate = new Date(`${previousYear}-12-15T09:00:00Z`);
+  await insertTour(id, { status: 'CLOSED', tour: { countedAt: decemberDate }, counting: { countedAt: decemberDate } });
+  const readDashboard = (searchParams = {}) => getDelivererObjectiveDashboard({ delivererId: id.toString(), userId: readerId.toString(), searchParams });
+  assert.equal((await readDashboard()).achievement.month, currentMonth);
+  const result = await readDashboard({ bilanMois: `${previousYear}-12`, bilanAnnee: previousYear });
+  assert.equal(result.achievement.targetInCentimes, 500);
+  assert.equal(result.achievement.salesInCentimes, 1000);
+  assert.equal(result.achievement.achievementPercentage, 200);
+  assert.equal(result.achievement.remainingInCentimes, 0);
+  assert.equal(result.achievement.excessInCentimes, 500);
+  assert.equal(result.achievement.status, 'reached');
+  assert.equal(result.monthlyHistory.totalItems, 12);
+  assert.equal(result.monthlyHistory.totalPages, 3);
+  assert.equal(result.monthlyHistory.rows.length, 5);
+  assert.equal(result.monthlyHistory.rows[0].month, `${previousYear}-12`);
+  assert.equal(result.monthlyHistory.rows[1].status, 'missed');
+  assert.equal(result.monthlyHistory.rows[1].salesInCentimes, 0);
+  assert.equal(result.monthlyHistory.rows[1].remainingInCentimes, 2000);
+  const missed = await readDashboard({ bilanAnnee: previousYear, bilanStatut: 'missed', bilanPage: '3' });
+  assert.equal(missed.monthlyHistory.totalItems, 11);
+  assert.equal(missed.monthlyHistory.rows.length, 1);
+  assert.equal(missed.monthlyHistory.rows[0].month, `${previousYear}-01`);
+  const reached = await readDashboard({ bilanAnnee: previousYear, bilanStatut: 'reached' });
+  assert.equal(reached.monthlyHistory.totalItems, 1);
+  assert.equal(reached.monthlyHistory.rows[0].excessInCentimes, 500);
+  const searched = await readDashboard({ bilanAnnee: previousYear, bilanRecherche: 'novembre' });
+  assert.equal(searched.monthlyHistory.totalItems, 1);
+  assert.equal(searched.monthlyHistory.rows[0].month, `${previousYear}-11`);
+});
+
+test('le bilan distingue absence d’objectif, mois courant en cours et calcul incomplet', async () => {
+  const currentMonth = getObjectiveCurrentMonth();
+  const id = await deliverer();
+  const readDashboard = (userId = readerId) => getDelivererObjectiveDashboard({ delivererId: id.toString(), userId: userId.toString() });
+  const initial = await readDashboard();
+  assert.equal(initial.achievement.status, 'undefined');
+  assert.equal(initial.monthlyHistory.totalItems, 1);
+  await database.collection('deliverers').updateOne({ _id: id }, { $set: { objectiveHistory: [{ version: 1, effectiveMonth: currentMonth, amountInCentimes: 2000 }] } });
+  assert.equal((await readDashboard()).achievement.status, 'ongoing');
+  const date = new Date(`${currentMonth}-15T09:00:00Z`);
+  const { countingId } = await insertTour(id, { tour: { countedAt: date }, counting: { countedAt: date } });
+  const partial = await readDashboard();
+  assert.equal(partial.achievement.achievementPercentage, 50);
+  assert.equal(partial.achievement.remainingInCentimes, 1000);
+  assert.equal(partial.achievement.status, 'ongoing');
+  await database.collection('tourCountings').deleteOne({ _id: countingId });
+  const invalid = await readDashboard();
+  assert.equal(invalid.achievement.status, 'incomplete');
+  assert.equal(invalid.monthlyHistory.rows[0].status, 'incomplete');
+  assert.equal(invalid.monthlyHistory.rows[0].achievementPercentage, null);
+  const unauthorized = new ObjectId();
+  await database.collection('users').insertOne({ _id: unauthorized, active: true, roleIds: [] });
+  await assert.rejects(readDashboard(unauthorized), (error) => error instanceof PermissionDeniedError && error.permission === 'deliverers.objectives.read');
 });

@@ -124,6 +124,36 @@ test('deux mises à jour concurrentes ne peuvent pas écraser leurs objectifs', 
   assert.equal((await save(id, '3000', currentMonth, null)).stale, true);
 });
 
+test('une version initiale explicite à zéro reste modifiable sans écrasement concurrent', async () => {
+  const id = await insertDeliverer({ objectiveVersion: 0, objectiveHistory: [] });
+  const results = await Promise.all([save(id, '1000', currentMonth, 0), save(id, '2000', currentMonth, 0)]);
+  assert.equal(results.filter(({ changed }) => changed).length, 1);
+  assert.equal(results.filter(({ stale }) => stale).length, 1);
+  const result = await read(id);
+  assert.equal(result.version, 1);
+  assert.equal(result.history.length, 1);
+  assert.equal((await save(id, '3000', currentMonth, 0)).stale, true);
+  assert.equal((await save(id, '3000', currentMonth, 1)).changed, true);
+  assert.equal((await read(id)).version, 2);
+});
+
+test('les versions absentes, mal formées ou trop élevées ne créent aucune révision', async () => {
+  const id = await insertDeliverer();
+  for (const version of [undefined, null, -1, 0.5, '0', NaN, Infinity, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal((await save(id, '1000', currentMonth, version)).stale, true);
+  }
+  const stored = await database.collection('deliverers').findOne({ _id: new ObjectId(id) });
+  assert.equal('objectiveHistory' in stored, false);
+  assert.equal('objectiveVersion' in stored, false);
+});
+
+test('la validation du mois refuse les modifications rétroactives à la frontière algérienne', () => {
+  const input = { amount: '0.01', effectiveMonth: '2026-09' };
+  assert.equal(validateDelivererObjective(input, getObjectiveCurrentMonth(new Date('2026-09-30T22:59:59Z'))).data.amountInCentimes, 1);
+  assert.ok(validateDelivererObjective(input, getObjectiveCurrentMonth(new Date('2026-09-30T23:00:00Z'))).errors.effectiveMonth);
+  assert.ok(validateDelivererObjective({ amount: '100', effectiveMonth: '2026-12' }, getObjectiveCurrentMonth(new Date('2026-12-31T23:00:00Z'))).errors.effectiveMonth);
+});
+
 test('l’historique est paginé, recherchable par auteur et montant et filtrable par mois', async () => {
   const id = await insertDeliverer();
   for (let index = 0; index < 7; index += 1) await save(id, String(1000 + index), laterMonth(index), index);
@@ -169,7 +199,14 @@ test('les nouvelles permissions sont attribuées uniquement au rôle dédié de 
     { _id: sharedRoleId, key: 'manager', permissions: ['deliverers.read'] },
   ]);
   await database.collection('users').insertOne({ username: 'yahia', active: true, roleIds: [roleId] });
+  const otherUserId = new ObjectId();
+  await database.collection('users').insertOne({ _id: otherUserId, username: 'autre-compte', active: true, roleIds: [sharedRoleId] });
   for (const permission of ['deliverers.objectives.read', 'deliverers.objectives.update']) await grantYahiaFullAccessPermission(permission);
   assert.deepEqual((await database.collection('roles').findOne({ _id: roleId })).permissions, ['deliverers.objectives.read', 'deliverers.objectives.update']);
   assert.deepEqual((await database.collection('roles').findOne({ _id: sharedRoleId })).permissions, ['deliverers.read']);
+  assert.deepEqual((await database.collection('users').findOne({ _id: otherUserId })).roleIds, [sharedRoleId]);
+  for (const permission of ['deliverers.objectives.read', 'deliverers.objectives.update']) {
+    assert.equal((await grantYahiaFullAccessPermission(permission)).granted, false);
+  }
+  assert.deepEqual((await database.collection('roles').findOne({ _id: roleId })).permissions, ['deliverers.objectives.read', 'deliverers.objectives.update']);
 });

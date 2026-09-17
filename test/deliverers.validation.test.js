@@ -126,3 +126,14 @@ test('formate la date de création dans le fuseau d’Alger', () => {
   );
   assert.equal(formatDelivererCreatedAt(null), 'Non renseignée');
 });
+
+test('préserve le mois et la réalisation dans les retours du répertoire', () => {
+  const state = readDelivererListState({ q: ' Atlas ', statut: 'all', page: '2', mois: '2025-12', realisation: 'reached' });
+  assert.deepEqual(state, { query: 'Atlas', status: 'all', page: 2, month: '2025-12', achievementStatus: 'reached' });
+  const href = buildDelivererListHref(state);
+  assert.equal(validateDelivererListHref(href), href);
+  assert.equal(new URL(href, 'https://syphax.invalid').searchParams.get('mois'), '2025-12');
+  assert.equal(new URL(href, 'https://syphax.invalid').searchParams.get('realisation'), 'reached');
+  assert.equal(readDelivererListState({ mois: '2026-13', realisation: 'toString' }).achievementStatus, '');
+  assert.equal(validateDelivererListHref('/livreurs?mois=2025-12&mois=2026-09'), '/livreurs');
+});

@@ -51,3 +51,21 @@ test('les retours restent fermés aux destinations et paramètres arbitraires', 
   ]) assert.equal(validateTourReturnHref(value, id), fallback);
   assert.equal(new URL(validateTourReturnHref(`/livreurs/${id}?section=ensemble&retour=https%3A%2F%2Fexample.com`, id), 'http://syphax.local').searchParams.get('retour'), '/livreurs');
 });
+
+test('les retours conservent le mois consulté et les deux historiques indépendants', () => {
+  const href = buildDelivererToursHref({
+    delivererId: id, section: 'objectifs', achievementMonth: '2025-12',
+    historyYear: '2025', historyStatus: 'missed', historyQuery: 'décembre', historyPage: 2,
+    objectiveMonth: '2026-10', objectiveQuery: 'yahia', objectivePage: 3,
+    returnHref: '/livreurs?q=Atlas&statut=all&page=2',
+  });
+  assert.equal(validateTourReturnHref(href, id), href);
+  const url = new URL(href, 'http://syphax.local');
+  assert.equal(url.searchParams.get('bilanMois'), '2025-12');
+  assert.equal(url.searchParams.get('bilanAnnee'), '2025');
+  assert.equal(url.searchParams.get('bilanStatut'), 'missed');
+  assert.equal(url.searchParams.get('bilanPage'), '2');
+  assert.equal(url.searchParams.get('objectifPage'), '3');
+  const fallback = buildDelivererToursHref({ delivererId: id });
+  assert.equal(validateTourReturnHref(`/livreurs/${id}?bilanMois=2025-12&bilanMois=2026-09`, id), fallback);
+});

@@ -11,8 +11,8 @@ import {
   getDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
 import { getDelivererSections, readDelivererSection } from '../../../../lib/deliverer-detail-navigation.js';
-import { getDelivererMonthlyAchievement } from '../../../../lib/deliverer-monthly-achievement.js';
-import { readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
+import { getDelivererObjectiveDashboard } from '../../../../lib/deliverer-monthly-achievement.js';
+import { readObjectiveAchievementState, readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
 import { DELIVERER_OBJECTIVE_READ_PERMISSION, DELIVERER_OBJECTIVE_UPDATE_PERMISSION, getDelivererObjectives } from '../../../../lib/deliverer-objectives.js';
 import { formatDelivererCreatedAt, getDelivererById, requireDelivererEditPermission, validateDelivererListHref } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
@@ -23,6 +23,7 @@ import DelivererCreditLimitForm from './deliverer-credit-limit-form.js';
 import DelivererObjectiveForm from './deliverer-objective-form.js';
 import DelivererObjectiveHistory from './deliverer-objective-history.js';
 import DelivererMonthlyAchievement from './deliverer-monthly-achievement.js';
+import DelivererMonthlyHistory from './deliverer-monthly-history.js';
 import { DelivererCashSummary, DelivererExposure } from './deliverer-overview.js';
 import DelivererStatusButton from './deliverer-status-button.js';
 import DelivererTourList from './deliverer-tour-list.js';
@@ -54,7 +55,8 @@ const DelivererPage = async ({ params, searchParams }) => {
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
   const objectiveHistoryState = readObjectiveHistoryState(query);
-  const [standaloneCashSummary, creditLimitResult, tourList, objectives, achievement] = await Promise.all([
+  const achievementState = readObjectiveAchievementState(query);
+  const [standaloneCashSummary, creditLimitResult, tourList, objectives, dashboard] = await Promise.all([
     section === 'ensemble' && canReadCash && !canReadCompleteCreditExposure
       ? getDelivererCashSummary({ delivererId: deliverer.id, userId: session.userId }) : null,
     section === 'ensemble' && canReadCompleteCreditExposure
@@ -66,10 +68,11 @@ const DelivererPage = async ({ params, searchParams }) => {
     section === 'objectifs' && canReadObjectives
       ? getDelivererObjectives({ delivererId: deliverer.id, ...objectiveHistoryState, userId: session.userId }) : null,
     section === 'objectifs' && canReadObjectives
-      ? getDelivererMonthlyAchievement({ delivererId: deliverer.id, userId: session.userId }) : null,
+      ? getDelivererObjectiveDashboard({ delivererId: deliverer.id, userId: session.userId, searchParams: query }) : null,
   ]);
   const cashSummary = creditLimitResult?.cashSummary ?? standaloneCashSummary;
-  const hrefForSection = (nextSection) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveHistoryState, returnHref, section: nextSection });
+  const objectiveNavigationState = { ...objectiveHistoryState, ...(dashboard?.monthlyHistory ?? achievementState) };
+  const hrefForSection = (nextSection) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveNavigationState, returnHref, section: nextSection });
   const currentHref = hrefForSection(section);
   const latestStatusChange = deliverer.statusHistory.at(-1);
   const trace = [
@@ -103,9 +106,10 @@ const DelivererPage = async ({ params, searchParams }) => {
         </div>}
         {section === 'tournees' && tourList && <><DelivererTourList delivererId={deliverer.id} delivererName={deliverer.name} returnHref={returnHref} {...tourList} /><p className={styles.scope}>Le statut décrit l’avancement de la tournée. Il ne représente pas son état de paiement.</p></>}
         {section === 'objectifs' && objectives && <div className={styles.overview}>
+          {dashboard?.achievement && <DelivererMonthlyAchievement achievement={dashboard.achievement} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />}
           <DelivererObjectiveForm canUpdate={canUpdateObjectives} objectives={objectives} delivererId={deliverer.id} />
-          {achievement && <DelivererMonthlyAchievement achievement={achievement} />}
-          <DelivererObjectiveHistory objectives={objectives} delivererId={deliverer.id} returnHref={returnHref} />
+          {dashboard?.monthlyHistory && <DelivererMonthlyHistory history={dashboard.monthlyHistory} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />}
+          <DelivererObjectiveHistory objectives={objectives} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />
         </div>}
         {section === 'identification' && <>
           <div className={styles.identityGrid}>
