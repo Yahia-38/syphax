@@ -7,6 +7,11 @@ import { useMemo, useState } from 'react';
 import ConfirmationDialog, {
   useFormConfirmation,
 } from '../../confirmation-dialog.js';
+import {
+  formatQuantityInBaseUnit,
+  formatQuantityInDisplayUnit,
+  getLineUnitOptions,
+} from '../../../../lib/product-display-unit.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { loadTour } from './actions.js';
 
@@ -19,10 +24,6 @@ const INITIAL_STATE = {
   replayed: false,
   revision: 0,
 };
-
-const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
-  maximumFractionDigits: 0,
-}).format(quantity);
 
 const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
   const loadCurrentTour = loadTour.bind(null, tourId);
@@ -142,8 +143,13 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
                       Quantité chargée
                     </p>
                     <p className='mt-1 font-semibold tabular-nums text-slate-900'>
-                      {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
+                      {formatQuantityInDisplayUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
                     </p>
+                    {line.displayUnit && (
+                      <p className='mt-1 text-xs tabular-nums text-slate-600'>
+                        = {formatQuantityInBaseUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
+                      </p>
+                    )}
                   </div>
                   <div className='sm:text-right'>
                     <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
@@ -152,7 +158,7 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
                     <p className='mt-1 font-semibold tabular-nums text-slate-900'>
                       {formatReceptionMoney(
                         line.salePriceAtLoading.amountInCentimes,
-                      )} / {line.salePriceAtLoading.unit}
+                      )} / {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}
                     </p>
                   </div>
                   <div className='rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 sm:text-right'>

@@ -12,7 +12,7 @@ import {
   TOUR_CANCEL_PERMISSION,
   getTourCancellationPreview,
 } from '../../../../lib/tour-cancellations.js';
-import { listProducts } from '../../../../lib/products.js';
+import { BASE_UNITS, getProductDisplayUnits, listProducts } from '../../../../lib/products.js';
 import { getSalePackagings } from '../../../../lib/product-packaging.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import {
@@ -142,6 +142,19 @@ const TourPage = async ({ params, searchParams }) => {
     ? await getTourClosurePreview({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
+  // Quantities are shown in each product's default sale unit, with base-unit labels for remainders.
+  const displayUnits = permissions.includes('packaging.read')
+    ? await getProductDisplayUnits([
+        ...tour.lines, ...(loadingPreview?.lines ?? []), ...(cancellationPreview?.lines ?? []), ...(countingSheet?.lines ?? []),
+      ].map((line) => line.productId))
+    : new Map();
+  const withDisplayUnits = (lines) => lines.map((line) => ({
+    ...line,
+    baseUnitLabel: BASE_UNITS.find(({ code }) => code === line.baseUnit)?.label ?? line.baseUnit,
+    displayUnit: displayUnits.get(line.productId) ?? null,
+  }));
+  const withLineDisplayUnits = (value) => (Array.isArray(value?.lines) ? { ...value, lines: withDisplayUnits(value.lines) } : value);
+  const tourLines = withDisplayUnits(tour.lines);
 
   const counted = [TOUR_STATUS_COUNTED, TOUR_STATUS_CLOSED].includes(tour.status);
   const preparation = tour.status === TOUR_STATUS_PREPARATION;
@@ -157,7 +170,7 @@ const TourPage = async ({ params, searchParams }) => {
     ? { target: 'comptage', view: 'operations', label: canConfirmCounting ? 'Saisir les retours' : 'Prévisualiser les retours' }
     : canDeclare ? { target: 'frais', view: 'operations', label: 'Déclarer les frais' }
     : canPay ? { target: 'versements', view: 'operations', label: 'Encaisser' } : null;
-  const countingProps = { canConfirm: canConfirmCounting, initialConfirmationKey: randomUUID(), sheet: countingSheet ? { ...countingSheet, tourReference: tour.reference, deliverer: { code: tour.delivererCode, name: tour.delivererName } } : null, tourId: tour.id };
+  const countingProps = { canConfirm: canConfirmCounting, initialConfirmationKey: randomUUID(), sheet: countingSheet ? { ...withLineDisplayUnits(countingSheet), tourReference: tour.reference, deliverer: { code: tour.delivererCode, name: tour.delivererName } } : null, tourId: tour.id };
   const expenseProps = { canDeclareExpenses: canDeclareTourExpenses, initialConfirmationKey: randomUUID(), preview: expensePreview, tourId: tour.id };
   const paymentProps = { canCreatePayment: canCreateCashPayment, initialConfirmationKey: randomUUID(), preview: paymentPreview, tourId: tour.id };
   const trace = [
@@ -214,15 +227,15 @@ const TourPage = async ({ params, searchParams }) => {
     </>}
     products={<>
       <TourOperationCard id='chargement' kind='loading' title='Chargement' summary={cancelled ? 'Tournée annulée' : preparation ? 'Réservations · le stock physique reste disponible jusqu’au chargement' : 'Chargement confirmé · prix historiques figés'}
-        canEdit={Boolean(loadingPreview)} editLabel='Vérifier le chargement' operationProps={{ preview: loadingPreview, tourId: tour.id }}>
+        canEdit={Boolean(loadingPreview)} editLabel='Vérifier le chargement' operationProps={{ preview: withLineDisplayUnits(loadingPreview), tourId: tour.id }}>
         <p className={styles.read}>{preparation ? `${tour.lines.length} références réservées. Le chargement complet vérifie les quantités et les prix avant la sortie de stock.` : 'Les produits chargés ne sont plus modifiables. Leur valeur est distincte des ventes et du reste à payer.'}</p>
       </TourOperationCard>
       {canAddTourProducts && preparation && <TourOperationCard id='ajout-produit' kind='product' title='Réserver un produit' summary='Quantité directe ou conversion depuis un conditionnement'
         canEdit editLabel='Ajouter un produit' operationProps={{ existingProductIds: tour.lines.map((line) => line.productId), initialAdditionKey: randomUUID(), products, tourId: tour.id }} />}
-      {tour.lines.length > 0 ? <TourProductList canReadPricing={canReadPricing} canRelease={canReleaseTourProducts && preparation} cancelled={cancelled} lines={tour.lines} loaded={!preparation && !cancelled} tourId={tour.id} tourReference={tour.reference} delivererName={tour.delivererName} />
+      {tour.lines.length > 0 ? <TourProductList canReadPricing={canReadPricing} canRelease={canReleaseTourProducts && preparation} cancelled={cancelled} lines={tourLines} loaded={!preparation && !cancelled} tourId={tour.id} tourReference={tour.reference} delivererName={tour.delivererName} />
         : <p className={styles.trace}>Aucun produit réservé dans cette tournée.</p>}
       {(cancellationPreview || cancelled) && <TourOperationCard id='annulation' kind='cancellation' title='Annulation de la tournée' summary={cancelled ? 'Tournée annulée · réservations libérées' : 'Libérer toutes les réservations avec un motif obligatoire'}
-        canEdit={Boolean(cancellationPreview)} editLabel='Annuler la tournée' operationProps={{ preview: cancellationPreview, tourId: tour.id }} />}
+        canEdit={Boolean(cancellationPreview)} editLabel='Annuler la tournée' operationProps={{ preview: withLineDisplayUnits(cancellationPreview), tourId: tour.id }} />}
     </>}
     history={<section className={styles.trace}><h2>Traçabilité</h2><dl>{trace.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Indisponible'}</dd></div>)}</dl></section>}
   />;

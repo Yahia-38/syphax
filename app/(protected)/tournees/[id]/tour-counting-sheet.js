@@ -7,6 +7,10 @@ import { useEffect, useMemo, useState } from 'react';
 import ConfirmationDialog, {
   useFormConfirmation,
 } from '../../confirmation-dialog.js';
+import {
+  formatQuantityInDisplayUnit,
+  getLineUnitOptions,
+} from '../../../../lib/product-display-unit.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { calculateTourCounting } from '../../../../lib/tour-counting-calculations.js';
 import { calculateCountingPurchaseCosts } from '../../../../lib/tour-counting-purchase-costs.js';
@@ -20,12 +24,6 @@ const INITIAL_STATE = {
   replayed: false,
   revision: 0,
 };
-
-const formatQuantity = (quantity) => Number.isSafeInteger(quantity)
-  ? new Intl.NumberFormat('fr-DZ', {
-      maximumFractionDigits: 0,
-    }).format(quantity)
-  : 'Non calculable';
 
 const TourCountingSheet = ({
   canConfirm,
@@ -247,17 +245,17 @@ const TourCountingSheet = ({
                       <article className='tour-counting-line p-4' key={line.id}>
                         <div className='tour-counting-product min-w-0'>
                           <h3 className='break-words font-semibold text-slate-900'>{line.productDesignation}</h3>
-                          <p className='mt-1 text-sm text-slate-600'>{line.productCode} · {line.baseUnit}</p>
+                          <p className='mt-1 text-sm text-slate-600'>{line.productCode} · retours en {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}</p>
                           <p className='mt-1 text-xs text-slate-500'>
                             {calculation?.priceAvailable
-                              ? `Prix TTC figé : ${formatReceptionMoney(line.salePriceAtLoading.amountInCentimes)} / ${line.baseUnit}`
+                              ? `Prix TTC figé : ${formatReceptionMoney(line.salePriceAtLoading.amountInCentimes)} / ${getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}`
                               : 'Prix historique manquant ou inexploitable'}
                           </p>
                         </div>
                         <div className='tour-counting-quantities'>
-                          <div><p className='tour-counting-label'>Chargé</p><p className='tabular-nums'>{formatQuantity(line.quantityInBaseUnits)}</p></div>
+                          <div><p className='tour-counting-label'>Chargé</p><p className='tabular-nums'>{formatQuantityInDisplayUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}</p></div>
                           <div>
-                            <label className='tour-counting-label' htmlFor={inputId}>Retourné<span className='sr-only'> · {line.productDesignation} en {line.baseUnit}</span></label>
+                            <label className='tour-counting-label' htmlFor={inputId}>Retourné<span className='sr-only'> · {line.productDesignation} en {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}</span></label>
                             <input
                               aria-describedby={calculation?.error ? errorId : undefined}
                               aria-invalid={Boolean(calculation?.error)}
@@ -266,8 +264,14 @@ const TourCountingSheet = ({
                               onChange={(event) => setReturnedQuantities((currentValues) => ({ ...currentValues, [line.id]: event.target.value }))}
                               placeholder='À saisir' readOnly={sheet?.recorded} type='text' value={returnedQuantities[line.id] ?? ''}
                             />
+                            {line.displayUnit && /^\d+$/u.test((returnedQuantities[line.id] ?? '').trim())
+                              && Number(returnedQuantities[line.id].trim()) >= line.displayUnit.quantity && (
+                              <p className='mt-1 text-xs tabular-nums text-slate-600'>
+                                = {formatQuantityInDisplayUnit(Number(returnedQuantities[line.id].trim()), getLineUnitOptions(line))}
+                              </p>
+                            )}
                           </div>
-                          <div><p className='tour-counting-label'>Vendu</p><p className='tabular-nums'>{Number.isSafeInteger(soldQuantityInBaseUnits) ? formatQuantity(soldQuantityInBaseUnits) : '—'}<span className='sr-only'>{!Number.isSafeInteger(soldQuantityInBaseUnits) ? 'Non calculable' : ''}</span></p></div>
+                          <div><p className='tour-counting-label'>Vendu</p><p className='tabular-nums'>{Number.isSafeInteger(soldQuantityInBaseUnits) ? formatQuantityInDisplayUnit(soldQuantityInBaseUnits, getLineUnitOptions(line)) : '—'}<span className='sr-only'>{!Number.isSafeInteger(soldQuantityInBaseUnits) ? 'Non calculable' : ''}</span></p></div>
                           <div><p className='tour-counting-label'>{sheet?.recorded ? 'Ventes TTC' : 'Ventes TTC prévues'}</p><p className='font-semibold tabular-nums'>{Number.isSafeInteger(amountDueInCentimes) ? formatReceptionMoney(amountDueInCentimes) : '—'}<span className='sr-only'>{!Number.isSafeInteger(amountDueInCentimes) ? 'Non calculable' : ''}</span></p></div>
                         </div>
 

@@ -17,6 +17,7 @@ const {
   createProduct,
   deleteProduct,
   getProductById,
+  getProductDisplayUnits,
   listProducts,
   removeProductPackaging,
   setProductDefaultSaleUnit,
@@ -251,6 +252,22 @@ test('le catalogue affiche le tarif et le stock du conditionnement de vente par 
   // Per bottle: D 80 DA, A 91.67 DA (pack of 12 at 1 100 DA), B 99 DA.
   assert.deepEqual(filterAndSortProducts(options).map((product) => product.code), ['CAT-PRIX-D', 'CAT-PRIX-A', 'CAT-PRIX-B', 'CAT-PRIX-C', 'CAT-PRIX-E']);
   assert.deepEqual(filterAndSortProducts({ ...options, onlyMissingPrice: true }).map((product) => product.code), ['CAT-PRIX-C', 'CAT-PRIX-E']);
+});
+
+test('retrouve le conditionnement de vente par défaut par identifiant de produit', async () => {
+  const pack = { _id: new ObjectId(), label: 'Pack de 6', quantity: 6, usage: 'SALE' };
+  const pallet = { _id: new ObjectId(), label: 'Palette', quantity: 480, usage: 'RECEPTION' };
+  const { insertedIds } = await database.collection('products').insertMany([
+    { code: 'UNITS-A', designation: 'Défaut pack', baseUnit: 'BOUTEILLE', packagings: [pack, pallet], defaultSaleUnit: pack._id },
+    { code: 'UNITS-B', designation: 'Défaut réception', baseUnit: 'BOUTEILLE', packagings: [pallet], defaultSaleUnit: pallet._id },
+    { code: 'UNITS-C', designation: 'Sans défaut', baseUnit: 'BOUTEILLE' },
+  ]);
+  const [a, b, c] = [0, 1, 2].map((index) => insertedIds[index].toString());
+  const units = await getProductDisplayUnits([a, a, b, c, 'invalide', new ObjectId().toString()]);
+  assert.deepEqual([...units.entries()].sort(), [
+    [a, { id: pack._id.toString(), label: 'Pack de 6', quantity: 6 }], [b, null], [c, null],
+  ].sort());
+  assert.equal((await getProductDisplayUnits([])).size, 0);
 });
 
 test('omet les données tarifaires lorsque leur lecture est désactivée', async () => {

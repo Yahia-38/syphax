@@ -7,6 +7,10 @@ import { useMemo, useState } from 'react';
 import ConfirmationDialog, {
   useFormConfirmation,
 } from '../../confirmation-dialog.js';
+import {
+  formatQuantityInDisplayUnit,
+  getLineUnitOptions,
+} from '../../../../lib/product-display-unit.js';
 import { cancelCurrentTour } from './actions.js';
 
 const LINES_PER_PAGE = 3;
@@ -20,10 +24,6 @@ const INITIAL_STATE = {
   stale: false,
   succeeded: false,
 };
-
-const formatQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
-  maximumFractionDigits: 0,
-}).format(quantity);
 
 const TourCancellationConfirmation = ({ preview, tourId, embedded = false }) => {
   const cancelSelectedTour = cancelCurrentTour.bind(null, tourId);
@@ -198,8 +198,7 @@ const TourCancellationConfirmation = ({ preview, tourId, embedded = false }) => 
                           </p>
                         </div>
                         <strong className='shrink-0 tabular-nums text-slate-950'>
-                          {formatQuantity(line.quantityInBaseUnits)}{' '}
-                          {line.baseUnit}
+                          {formatQuantityInDisplayUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
                         </strong>
                       </article>
                     ))}

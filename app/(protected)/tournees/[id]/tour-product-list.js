@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from 'react';
 
+import {
+  formatQuantityInBaseUnit,
+  formatQuantityInDisplayUnit,
+  getLineUnitOptions,
+} from '../../../../lib/product-display-unit.js';
 import { calculateLoadedLineValue } from '../../../../lib/tour-counting-calculations.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import TourReservationReleaseButton from './tour-reservation-release-button.js';
@@ -178,7 +183,7 @@ const TourProductList = ({
                   </h3>
                   <p className='mt-2 text-sm text-slate-600'>
                     {line.packaging
-                      ? `${line.packaging.count} × ${line.packaging.label} de ${formatQuantity(line.packaging.quantity)} ${line.baseUnit}`
+                      ? `${formatQuantity(line.packaging.count)} × ${line.packaging.label} · ${formatQuantityInBaseUnit(line.packaging.quantity, getLineUnitOptions(line))} chacun`
                       : 'Quantité saisie directement en unité de base'}
                   </p>
                 </div>
@@ -188,8 +193,13 @@ const TourProductList = ({
                       {cancelled ? 'Historique' : loaded ? 'Chargé' : 'Réservé'}
                     </p>
                     <p className={`mt-1 text-xl font-bold tabular-nums ${cancelled ? 'text-red-950' : loaded ? 'text-emerald-950' : 'text-amber-950'}`}>
-                      {formatQuantity(line.quantityInBaseUnits)} {line.baseUnit}
+                      {formatQuantityInDisplayUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
                     </p>
+                    {line.displayUnit && (
+                      <p className='mt-1 text-xs tabular-nums text-slate-600'>
+                        = {formatQuantityInBaseUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
+                      </p>
+                    )}
                   </div>
                   {loaded && canReadPricing && (
                     line.salePriceAtLoading ? (
@@ -200,7 +210,7 @@ const TourProductList = ({
                         <p className='mt-1 font-semibold tabular-nums text-blue-950'>
                           {formatReceptionMoney(
                             line.salePriceAtLoading.amountInCentimes,
-                          )} / {line.salePriceAtLoading.unit}
+                          )} / {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}
                         </p>
                         <p className='mt-2 text-xs text-slate-600'>
                           Valeur des marchandises chargées :{' '}
@@ -229,12 +239,11 @@ const TourProductList = ({
                     <TourReservationReleaseButton
                       productCode={line.productCode}
                       productDesignation={line.productDesignation}
-                      quantity={formatQuantity(line.quantityInBaseUnits)}
+                      quantity={formatQuantityInDisplayUnit(line.quantityInBaseUnits, getLineUnitOptions(line))}
                       reservationId={line.id}
                       tourId={tourId}
                       tourReference={tourReference}
                       delivererName={delivererName}
-                      unit={line.baseUnit}
                     />
                   )}
                 </div>

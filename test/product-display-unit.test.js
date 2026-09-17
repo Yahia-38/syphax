@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  formatQuantityInBaseUnit,
   formatQuantityInDisplayUnit,
   getDisplayUnitLabel,
   getDisplayUnitSalePrice,
+  getLineUnitOptions,
   getProductDisplayUnit,
   getQuantityInDisplayUnit,
 } from '../lib/product-display-unit.js';
@@ -58,4 +60,12 @@ test('retourne le prix du conditionnement par défaut ou le prix unitaire', () =
   assert.equal(getDisplayUnitSalePrice({ displayUnit: null, packagings, salePrice: null }), null);
   assert.equal(getDisplayUnitLabel({ baseUnitLabel: 'Bouteille', displayUnit: pack }), 'pack de 12');
   assert.equal(getDisplayUnitLabel({ baseUnitLabel: 'Bouteille', displayUnit: null }), 'bouteille');
+});
+
+test('formate une ligne de tournée avec son unité par défaut ou son unité de base', () => {
+  const line = { baseUnit: 'BOUTEILLE', baseUnitLabel: 'Bouteille', displayUnit: { id: 'pack', label: 'Pack de 6 bouteilles', quantity: 6 } };
+  assert.equal(formatQuantityInDisplayUnit(386, getLineUnitOptions(line)), '64 packs de 6 bouteilles + 2 bouteilles');
+  assert.equal(formatQuantityInBaseUnit(386, getLineUnitOptions(line)), '386 bouteilles');
+  assert.deepEqual(getLineUnitOptions({ baseUnit: 'BOUTEILLE' }), { baseUnitLabel: 'BOUTEILLE', displayUnit: null });
+  assert.equal(formatQuantityInDisplayUnit(12, getLineUnitOptions({ baseUnit: 'BOUTEILLE', baseUnitLabel: 'Bouteille' })), '12 bouteilles');
 });
