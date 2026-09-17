@@ -36,7 +36,7 @@ const { deleteProduct } = await import(
 const { updateProduct } = await import(
   '../app/(protected)/produits/[id]/product-actions.js'
 );
-const { addProductPackaging, removePackagingAction } = await import(
+const { addProductPackaging, removePackagingAction, updateDefaultSaleUnit } = await import(
   '../app/(protected)/produits/[id]/packaging-actions.js'
 );
 const { updateProductSalePrice } = await import(
@@ -617,4 +617,47 @@ test('création refondue : échec de persistance et réessai sans perte des cham
   const retried = await callWithSession(token, () => createProduct(failed, data));
   assert.ok(retried.product.id);
   assert.equal(await products.countDocuments({ code: 'CREATION-REESSAI' }), 1);
+});
+
+test('protège le conditionnement par défaut avec products.update et packaging.read', async () => {
+  const productId = new ObjectId();
+  const packId = new ObjectId();
+  const palletId = new ObjectId();
+  const permissions = ['products.read', 'products.update', 'packaging.read'];
+  const { token, userId } = await createUserSession('defaut-vente-autorise', permissions);
+  await database.collection('products').insertOne({
+    _id: productId, code: 'DEFAUT-VENTE-PROTEGE', designation: 'Eau', baseUnit: 'BOUTEILLE',
+    packagings: [
+      { _id: packId, label: 'Pack de 6', quantity: 6, usage: 'SALE' },
+      { _id: palletId, label: 'Palette', quantity: 240, usage: 'RECEPTION' },
+    ],
+  });
+  const formData = new FormData();
+  formData.set('defaultSaleUnit', packId.toString());
+  for (const missingPermission of ['products.update', 'packaging.read']) {
+    const denied = await createUserSession(`defaut-vente-sans-${missingPermission}`, permissions.filter((permission) => permission !== missingPermission));
+    await assert.rejects(callWithSession(denied.token, () => updateDefaultSaleUnit(productId.toString(), { revision: 0 }, formData)), isPermissionDenied(missingPermission));
+  }
+  assert.equal('defaultSaleUnit' in await database.collection('products').findOne({ _id: productId }), false);
+
+  const result = await callWithSession(token, () => updateDefaultSaleUnit(productId.toString(), { revision: 0 }, formData));
+  assert.equal(result.message, 'Le conditionnement par défaut a été mis à jour.');
+  const updated = await database.collection('products').findOne({ _id: productId });
+  assert.ok(updated.defaultSaleUnit.equals(packId));
+  assert.ok(updated.updatedBy.equals(userId));
+
+  const receptionFormData = new FormData();
+  receptionFormData.set('defaultSaleUnit', palletId.toString());
+  const refused = await callWithSession(token, () => updateDefaultSaleUnit(productId.toString(), { revision: 1 }, receptionFormData));
+  assert.ok(refused.errors.defaultSaleUnit);
+  assert.ok((await database.collection('products').findOne({ _id: productId })).defaultSaleUnit.equals(packId));
+
+  const baseUnitFormData = new FormData();
+  baseUnitFormData.set('defaultSaleUnit', '');
+  const reset = await callWithSession(token, () => updateDefaultSaleUnit(productId.toString(), { revision: 2 }, baseUnitFormData));
+  assert.equal(reset.message, 'Le conditionnement par défaut a été mis à jour.');
+  assert.equal((await database.collection('products').findOne({ _id: productId })).defaultSaleUnit, null);
+
+  const missing = await callWithSession(token, () => updateDefaultSaleUnit(new ObjectId().toString(), { revision: 0 }, formData));
+  assert.equal(missing.errors.form, 'Ce produit n’existe plus.');
 });

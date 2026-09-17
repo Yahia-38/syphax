@@ -5,6 +5,7 @@ import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import DeleteProductButton from '../delete-product-button.js';
+import DefaultSaleUnitForm from './default-sale-unit-form.js';
 import PackagingForm from './packaging-form.js';
 import PackPricing from './pack-pricing.js';
 import PriceHistory from './price-history.js';
@@ -198,8 +199,10 @@ const ProductPage = async ({ params, searchParams }) => {
             <section aria-label='Unité de stock' className={styles.unitBanner}>
               <ProductIcon name='box' /><div><strong>Unité de stock : 1 {baseUnitLabel.toLocaleLowerCase('fr')}</strong><p>Chaque conditionnement est converti directement en unités de base.</p></div>
             </section>
+            <DefaultSaleUnitForm baseUnitLabel={baseUnitLabel} canUpdateProduct={canUpdateProduct} defaultSaleUnit={product.defaultSaleUnit}
+              packagings={product.packagings} productId={product.id} />
             <PackagingForm baseUnitLabel={baseUnitLabel} canCreatePackaging={canReadPackaging && permissions.includes('packaging.create')}
-              canDeletePackaging={canReadPackaging && permissions.includes('packaging.delete')} packagings={product.packagings}
+              canDeletePackaging={canReadPackaging && permissions.includes('packaging.delete')} defaultSaleUnit={product.defaultSaleUnit} packagings={product.packagings}
               product={{ id: product.id, code: product.code, designation: product.designation }} />
           </div>}
         </div>

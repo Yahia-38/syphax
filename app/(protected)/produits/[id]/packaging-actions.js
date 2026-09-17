@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache.js';
 import {
   addProductPackaging as savePackaging,
   removeProductPackaging,
+  setProductDefaultSaleUnit,
 } from '../../../../lib/products.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 
@@ -109,6 +110,62 @@ export const removePackagingAction = async (
       error: 'Le retrait du conditionnement est momentanément indisponible.',
       revision,
       success: false,
+    };
+  }
+};
+
+export const updateDefaultSaleUnit = async (
+  productId,
+  previousState,
+  formData,
+) => {
+  const session = await requirePermission('products.update');
+  await requirePermission('packaging.read');
+  const values = { defaultSaleUnit: readTextField(formData, 'defaultSaleUnit') };
+  const previousRevision = Number.isSafeInteger(previousState?.revision)
+    ? previousState.revision
+    : 0;
+  const revision = previousRevision + 1;
+
+  try {
+    const result = await setProductDefaultSaleUnit({
+      productId,
+      packagingId: values.defaultSaleUnit || null,
+      updatedBy: session.userId,
+    });
+
+    if (result.errors) {
+      return { errors: result.errors, message: null, revision, values };
+    }
+
+    if (result.notFound) {
+      return {
+        errors: { form: 'Ce produit n’existe plus.' },
+        message: null,
+        revision,
+        values,
+      };
+    }
+
+    revalidatePath('/produits');
+    revalidatePath(`/produits/${productId}`);
+
+    return {
+      errors: {},
+      message: 'Le conditionnement par défaut a été mis à jour.',
+      revision,
+      values,
+    };
+  } catch (error) {
+    console.error('Échec de la modification du conditionnement par défaut :', error);
+
+    return {
+      errors: {
+        form: 'La modification du conditionnement par défaut est momentanément indisponible.',
+      },
+      message: null,
+      revision,
+      values,
     };
   }
 };

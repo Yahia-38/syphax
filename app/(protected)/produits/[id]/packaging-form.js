@@ -11,7 +11,7 @@ import {
 
 import { useEditingSession } from '../../components/editing-session.js';
 import EditableCard, { EditingButtons, useInlineSave } from '../../components/editable-card.js';
-import { getPackagingUsageLabel, PACKAGING_USAGES } from '../../../../lib/product-packaging.js';
+import { getPackagingUsageLabel, isPackagingEnabledForSale, PACKAGING_USAGES } from '../../../../lib/product-packaging.js';
 
 import {
   addProductPackaging,
@@ -173,6 +173,7 @@ const PackagingForm = ({
   baseUnitLabel,
   canCreatePackaging,
   canDeletePackaging,
+  defaultSaleUnit,
   packagings,
   product,
 }) => {
@@ -249,7 +250,7 @@ const PackagingForm = ({
           {filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Réinitialiser</button>}
         </div>
         {paginatedPackagings.length ? <ul>{paginatedPackagings.map((packaging) => <li className={styles.packRow} key={packaging.id}>
-          <div className={styles.packLabel}><span className={styles.packIcon}><ProductIcon name='box' /></span><div><strong>{packaging.label}</strong><small>{getPackagingUsageLabel(packaging.usage)}</small></div></div>
+          <div className={styles.packLabel}><span className={styles.packIcon}><ProductIcon name='box' /></span><div><strong>{packaging.label}</strong><small>{getPackagingUsageLabel(packaging.usage)}</small>{packaging.id === defaultSaleUnit && isPackagingEnabledForSale(packaging) && <span className={styles.defaultBadge}>Par défaut</span>}</div></div>
           <p className={styles.conversion}>1 {packaging.label.toLocaleLowerCase('fr')} = <strong>{new Intl.NumberFormat('fr-DZ').format(packaging.quantity)}</strong> {quantityUnitLabel}</p>
           <div>{canDeletePackaging && <PackagingRemovalButton packaging={packaging} product={product} />}</div>
         </li>)}</ul> : <div className={styles.empty}><ProductIcon name='box' /><h3>{packagings.length ? 'Aucun conditionnement trouvé' : 'Aucun conditionnement défini'}</h3><p>{packagings.length ? 'Modifiez la recherche ou les filtres.' : 'Aucun pack, carton ou autre conditionnement n’est encore défini pour ce produit.'}</p>{filtersActive && <button className={styles.reset} onClick={resetFilters} type='button'>Voir tous les conditionnements</button>}</div>}
