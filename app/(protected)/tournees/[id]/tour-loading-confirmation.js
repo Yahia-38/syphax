@@ -10,6 +10,7 @@ import ConfirmationDialog, {
 import {
   formatQuantityInBaseUnit,
   formatQuantityInDisplayUnit,
+  getLineSalePrices,
   getLineUnitOptions,
 } from '../../../../lib/product-display-unit.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
@@ -153,13 +154,13 @@ const TourLoadingConfirmation = ({ preview, tourId, embedded = false }) => {
                   </div>
                   <div className='sm:text-right'>
                     <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
-                      Prix unitaire TTC
+                      Prix de vente TTC
                     </p>
-                    <p className='mt-1 font-semibold tabular-nums text-slate-900'>
-                      {formatReceptionMoney(
-                        line.salePriceAtLoading.amountInCentimes,
-                      )} / {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}
-                    </p>
+                    {getLineSalePrices(line).map(({ amountInCentimes, label }, index) => (
+                      <p className={index === 0 ? 'mt-1 font-semibold tabular-nums text-slate-900' : 'mt-1 text-xs tabular-nums text-slate-600'} key={label}>
+                        {formatReceptionMoney(amountInCentimes)} / {label}
+                      </p>
+                    ))}
                   </div>
                   <div className='rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 sm:text-right'>
                     <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>

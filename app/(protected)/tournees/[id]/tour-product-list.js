@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import {
   formatQuantityInBaseUnit,
   formatQuantityInDisplayUnit,
+  getLineSalePrices,
   getLineUnitOptions,
 } from '../../../../lib/product-display-unit.js';
 import { calculateLoadedLineValue } from '../../../../lib/tour-counting-calculations.js';
@@ -205,13 +206,13 @@ const TourProductList = ({
                     line.salePriceAtLoading ? (
                       <div className='mt-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3'>
                         <p className='text-xs font-semibold uppercase tracking-wide text-blue-700'>
-                          Prix de vente unitaire TTC au chargement
+                          Prix de vente TTC au chargement
                         </p>
-                        <p className='mt-1 font-semibold tabular-nums text-blue-950'>
-                          {formatReceptionMoney(
-                            line.salePriceAtLoading.amountInCentimes,
-                          )} / {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}
-                        </p>
+                        {getLineSalePrices(line).map(({ amountInCentimes, label }, index) => (
+                          <p className={index === 0 ? 'mt-1 font-semibold tabular-nums text-blue-950' : 'text-xs tabular-nums text-slate-600'} key={label}>
+                            {formatReceptionMoney(amountInCentimes)} / {label}
+                          </p>
+                        ))}
                         <p className='mt-2 text-xs text-slate-600'>
                           Valeur des marchandises chargées :{' '}
                           {formatReceptionMoney(calculateLoadedValue(line))}

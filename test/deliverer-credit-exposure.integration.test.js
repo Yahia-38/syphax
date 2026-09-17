@@ -115,6 +115,7 @@ const insertCountedTour = async ({
 
 const insertLoadedTour = async ({
   delivererId,
+  packaging,
   priceInCentimes,
   quantityInBaseUnits,
   status = 'LOADED',
@@ -148,6 +149,7 @@ const insertLoadedTour = async ({
                 currency: 'DZD',
                 taxIncluded: true,
                 unit: 'PIECE',
+                ...(packaging ? { packaging } : {}),
               },
         }),
     status: 'LOADED',
@@ -236,6 +238,19 @@ test('additionne 40 000 DA dus et 90 000 DA chargés puis signale 5 000 DA de d�
   assert.equal(result.exposure.reliable, true);
   assert.equal('creditExposure' in storedDeliverer, false);
   assert.equal('engagementInCentimes' in storedDeliverer, false);
+});
+
+test('valorise les lignes chargées par pack au prix figé du pack', async () => {
+  const delivererId = await insertDeliverer({ limitInCentimes: 10_000_000 });
+  await insertLoadedTour({
+    delivererId,
+    packaging: { amountInCentimes: 52_000, currency: 'DZD', label: 'Pack de 6', quantity: 6, taxIncluded: true },
+    priceInCentimes: 9_000,
+    quantityInBaseUnits: 62,
+  });
+  const result = await readExposure(delivererId);
+  assert.equal(result.exposure.loadedValueInCentimes, 10 * 52_000 + 2 * 9_000);
+  assert.equal(result.exposure.reliable, true);
 });
 
 test('compare les engagements inférieur, égal et supérieur, y compris avec une limite zéro', () => {

@@ -9,6 +9,7 @@ import ConfirmationDialog, {
 } from '../../confirmation-dialog.js';
 import {
   formatQuantityInDisplayUnit,
+  getLineSalePrices,
   getLineUnitOptions,
 } from '../../../../lib/product-display-unit.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
@@ -248,7 +249,7 @@ const TourCountingSheet = ({
                           <p className='mt-1 text-sm text-slate-600'>{line.productCode} · retours en {getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}</p>
                           <p className='mt-1 text-xs text-slate-500'>
                             {calculation?.priceAvailable
-                              ? `Prix TTC figé : ${formatReceptionMoney(line.salePriceAtLoading.amountInCentimes)} / ${getLineUnitOptions(line).baseUnitLabel.toLocaleLowerCase('fr')}`
+                              ? `Prix TTC figé : ${getLineSalePrices(line).map(({ amountInCentimes, label }) => `${formatReceptionMoney(amountInCentimes)} / ${label}`).join(' · ')}`
                               : 'Prix historique manquant ou inexploitable'}
                           </p>
                         </div>

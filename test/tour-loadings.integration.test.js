@@ -112,7 +112,13 @@ const insertProduct = async ({
     baseUnit,
     code: `PRD-${productId.toHexString().slice(-6)}`,
     designation: `Produit ${productId.toHexString().slice(-4)}`,
-    packagings,
+    // Packs get a TTC sale price by default (14 000 centimes per unit); null leaves it unset.
+    packagings: packagings.map(({ salePriceInCentimes: packPrice, ...packaging }) => ({
+      ...packaging,
+      ...(packPrice !== null && Number.isSafeInteger(packPrice ?? packaging.quantity * 14_000)
+        ? { salePrice: { amountInCentimes: packPrice ?? packaging.quantity * 14_000, currency: 'DZD', taxIncluded: true, updatedAt: salePriceUpdatedAt, updatedBy: loaderId, versionId: new ObjectId() } }
+        : {}),
+    })),
     ...(Number.isSafeInteger(salePriceInCentimes)
       ? {
           salePrice: {
@@ -271,7 +277,7 @@ test('charge malgré une limite dépassée, conserve les autres réservations et
   assert.equal(loadingIndex.unique, true);
 });
 
-test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base', async () => {
+test('valorise 5 packs de 12 au prix du pack et fige ce prix au chargement', async () => {
   const packagingId = new ObjectId();
   const productId = await insertProduct({
     baseUnit: 'BOUTEILLE',
@@ -279,6 +285,7 @@ test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base',
       _id: packagingId,
       label: 'Pack de 12',
       quantity: 12,
+      salePriceInCentimes: 150_000,
       usage: 'SALE',
     }],
     physicalQuantity: 100,
@@ -300,8 +307,11 @@ test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base',
   assert.equal(preview.lines[0].quantityInBaseUnits, 60);
   assert.equal(preview.lines[0].salePriceAtLoading.amountInCentimes, 15000);
   assert.equal(preview.lines[0].salePriceAtLoading.unit, 'BOUTEILLE');
-  assert.equal(preview.lines[0].loadedValueInCentimes, 900000);
-  assert.equal(preview.totalValueInCentimes, 900000);
+  assert.equal(preview.lines[0].salePriceAtLoading.packaging.amountInCentimes, 150_000);
+  assert.equal(preview.lines[0].salePriceAtLoading.packaging.quantity, 12);
+  assert.equal(preview.lines[0].salePriceAtLoading.packaging.packagingId, packagingId.toString());
+  assert.equal(preview.lines[0].loadedValueInCentimes, 750_000);
+  assert.equal(preview.totalValueInCentimes, 750_000);
 
   const result = await load(tourId, preview.digest);
   const reservation = await database.collection('tourReservations').findOne({
@@ -312,6 +322,49 @@ test('valorise 60 bouteilles conditionnées à 150 DA dans leur unité de base',
   assert.ok(result.tourId);
   assert.equal(reservation.salePriceAtLoading.amountInCentimes, 15000);
   assert.equal(reservation.salePriceAtLoading.unit, 'BOUTEILLE');
+  assert.equal(reservation.salePriceAtLoading.packaging.amountInCentimes, 150_000);
+  assert.equal(reservation.salePriceAtLoading.packaging.label, 'Pack de 12');
+  assert.ok(reservation.salePriceAtLoading.packaging.packagingId.equals(packagingId));
+});
+
+test('garde le prix unitaire pour une quantité saisie directement', async () => {
+  const productId = await insertProduct({
+    baseUnit: 'BOUTEILLE',
+    packagings: [{ _id: new ObjectId(), label: 'Pack de 12', quantity: 12, salePriceInCentimes: 150_000, usage: 'SALE' }],
+    salePriceInCentimes: 15000,
+  });
+  const tourId = await insertTour();
+  await addReservation({ productId, quantity: 24, tourId });
+  const preview = await getPreview(tourId);
+  assert.equal(preview.lines[0].loadedValueInCentimes, 360_000);
+  assert.equal('packaging' in preview.lines[0].salePriceAtLoading, false);
+  assert.ok((await load(tourId, preview.digest)).tourId);
+  const reservation = await database.collection('tourReservations').findOne({ productId, tourId });
+  assert.equal(reservation.salePriceAtLoading.packaging, undefined);
+});
+
+test('refuse un conditionnement sans prix de vente et un prix de pack modifié après aperçu', async () => {
+  const packagingId = new ObjectId();
+  const productId = await insertProduct({
+    packagings: [{ _id: packagingId, label: 'Pack de 6', quantity: 6, salePriceInCentimes: null, usage: 'SALE' }],
+  });
+  const tourId = await insertTour();
+  await addReservation({ productId, tourId, quantityMode: 'PACKAGING', packagingId: packagingId.toString(), packagingCount: '2' });
+  assert.match((await getPreview(tourId)).errors.form, /prix de vente TTC du conditionnement « Pack de 6 » n’est pas renseigné/u);
+  assert.match((await load(tourId, 'a'.repeat(64))).errors.form, /conditionnement « Pack de 6 »/u);
+  assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
+
+  await database.collection('products').updateOne({ _id: productId }, { $set: {
+    'packagings.0.salePrice': { amountInCentimes: 80_000, currency: 'DZD', taxIncluded: true },
+  } });
+  const preview = await getPreview(tourId);
+  assert.equal(preview.totalValueInCentimes, 160_000);
+  await database.collection('products').updateOne({ _id: productId }, { $set: { 'packagings.0.salePrice.amountInCentimes': 85_000 } });
+  assert.match((await load(tourId, preview.digest)).errors.form, /tarifs applicables ont changé/u);
+  assert.equal(await database.collection('stockMovements').countDocuments({ sourceTourId: tourId }), 0);
+  const refreshed = await getPreview(tourId);
+  assert.equal(refreshed.totalValueInCentimes, 170_000);
+  assert.ok((await load(tourId, refreshed.digest)).tourId);
 });
 
 test('recontrôle les usages avant chargement et refuse les brouillons devenus inéligibles sans transition partielle', async () => {

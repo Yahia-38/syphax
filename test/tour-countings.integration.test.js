@@ -12,6 +12,7 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
+const { calculateTourCounting } = await import('../lib/tour-counting-calculations.js');
 const { seedValuedStockReceipt, seedValuedTourLoading } = await import('./helpers/stock-valuation-fixtures.js');
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
@@ -49,7 +50,7 @@ const createUser = async (permissions) => {
   return userId;
 };
 
-const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
+const insertLoadedTour = async ({ historicalPrice = true, packagingPrice = null } = {}) => {
   const delivererId = new ObjectId();
   const productId = new ObjectId();
   const reservationId = new ObjectId();
@@ -99,6 +100,9 @@ const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
               currency: 'DZD',
               taxIncluded: true,
               unit: 'BOUTEILLE',
+              ...(packagingPrice
+                ? { packaging: { amountInCentimes: packagingPrice, currency: 'DZD', label: 'Pack de 6', packagingId: new ObjectId(), quantity: 6, taxIncluded: true } }
+                : {}),
             },
           }
         : {}),
@@ -386,6 +390,31 @@ test('enregistre 60 chargées, 10 retournées et 7 500 DA dus atomiquement', asy
     movement.kind === TOUR_RETURN_INPUT_KIND).sourceTour.id, tourId.toString());
   assert.equal(hiddenHistory.find((movement) =>
     movement.kind === TOUR_RETURN_INPUT_KIND).sourceTour, null);
+});
+
+test('facture les packs vendus au prix figé du pack et les bouteilles restantes au prix unitaire', async () => {
+  const { reservationId, tourId } = await insertLoadedTour({ packagingPrice: 80_000 });
+  const sheet = await getTourCountingSheet({ tourId: tourId.toString(), userId: fullAccessUserId.toString() });
+  assert.equal(sheet.lines[0].salePriceAtLoading.packaging.amountInCentimes, 80_000);
+  assert.equal(sheet.lines[0].salePriceAtLoading.packaging.quantity, 6);
+  const preview = calculateTourCounting(sheet.lines, { [reservationId.toString()]: '3' });
+  assert.equal(preview.totalDueInCentimes, 9 * 80_000 + 3 * 15_000);
+  const result = await confirmTourCounting({
+    confirmationKey: randomUUID(),
+    countedBy: fullAccessUserId.toString(),
+    expectedSheetDigest: sheet.digest,
+    lines: [{ lineId: reservationId.toString(), returnedQuantity: '3' }],
+    tourId: tourId.toString(),
+  });
+  assert.deepEqual(result.errors ?? {}, {});
+  const counting = await database.collection('tourCountings').findOne({ tourId });
+  assert.equal(counting.lines[0].soldQuantityInBaseUnits, 57);
+  assert.equal(counting.lines[0].amountDueInCentimes, 765_000);
+  assert.equal(counting.totalDueInCentimes, preview.totalDueInCentimes);
+  assert.equal(counting.lines[0].salePriceAtLoading.packaging.amountInCentimes, 80_000);
+  const stored = await getTourCountingSheet({ tourId: tourId.toString(), userId: fullAccessUserId.toString() });
+  assert.equal(stored.totalDueInCentimes, 765_000);
+  assert.equal(stored.lines[0].salePriceAtLoading.packaging.label, 'Pack de 6');
 });
 
 test('enregistre les retours nul et complet sans mouvement de stock nul', async () => {

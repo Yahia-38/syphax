@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   calculateLoadedLineValue,
+  calculateSaleValueInCentimes,
   calculateTourCounting,
   calculateTourCountingLine,
 } from '../lib/tour-counting-calculations.js';
@@ -204,4 +205,38 @@ test('refuse les dépassements de ligne et de sous-total', () => {
   assert.equal(summary.subtotalOverflow, true);
   assert.equal(summary.knownSubtotalInCentimes, null);
   assert.equal(summary.totalDueInCentimes, null);
+});
+
+const packPrice = (fields = {}) => ({
+  amountInCentimes: 9_000,
+  currency: 'DZD',
+  taxIncluded: true,
+  unit: 'BOUTEILLE',
+  packaging: { amountInCentimes: 52_000, currency: 'DZD', label: 'Pack de 6', quantity: 6, taxIncluded: true, ...fields },
+});
+
+test('facture les packs complets au prix du pack et le reste au prix unitaire', () => {
+  assert.equal(calculateSaleValueInCentimes(60, packPrice()), 520_000);
+  assert.equal(calculateSaleValueInCentimes(57, packPrice()), 9 * 52_000 + 3 * 9_000);
+  assert.equal(calculateSaleValueInCentimes(5, packPrice()), 45_000);
+  assert.equal(calculateSaleValueInCentimes(0, packPrice()), 0);
+  assert.equal(calculateSaleValueInCentimes(60, { amountInCentimes: 9_000 }), 540_000);
+  assert.equal(calculateSaleValueInCentimes(Number.MAX_SAFE_INTEGER, packPrice()), null);
+});
+
+test('applique le prix du pack au chargement et au comptage d’une ligne conditionnée', () => {
+  const line = createLine({ salePriceAtLoading: packPrice() });
+  assert.equal(calculateLoadedLineValue(line).valueInCentimes, 520_000);
+  const counted = calculateTourCountingLine(line, '3');
+  assert.equal(counted.soldQuantityInBaseUnits, 57);
+  assert.equal(counted.amountDueInCentimes, 495_000);
+  assert.equal(calculateTourCountingLine(createLine({ amountInCentimes: 9_000 }), '3').amountDueInCentimes, 513_000);
+});
+
+test('rend le prix indisponible lorsque le prix figé du pack est invalide', () => {
+  for (const fields of [{ quantity: 0 }, { quantity: 1.5 }, { amountInCentimes: 0 }, { currency: 'EUR' }, { taxIncluded: false }]) {
+    const line = createLine({ salePriceAtLoading: packPrice(fields) });
+    assert.deepEqual(calculateLoadedLineValue(line), { error: null, priceAvailable: false, valueInCentimes: null });
+    assert.equal(calculateTourCountingLine(line, '0').priceAvailable, false);
+  }
 });
