@@ -12,6 +12,7 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
+const { seedValuedStockReceipt, seedValuedTourLoading } = await import('./helpers/stock-valuation-fixtures.js');
 const { PermissionDeniedError } = await import('../lib/access.js');
 const { closeMongoConnection, getDatabase } = await import('../lib/mongodb.js');
 const {
@@ -104,28 +105,10 @@ const insertLoadedTour = async ({ historicalPrice = true } = {}) => {
       status: 'LOADED',
       tourId,
     }),
-    database.collection('stockMovements').insertMany([
-      {
-        _id: new ObjectId(),
-        baseUnit: 'BOUTEILLE',
-        kind: 'TEST_IN',
-        occurredOn: new Date('2026-09-14T08:00:00.000Z'),
-        productId,
-        quantityDeltaInBaseUnits: 100,
-      },
-      {
-        _id: new ObjectId(),
-        baseUnit: 'BOUTEILLE',
-        kind: 'TOUR_LOADING_OUT',
-        occurredOn: new Date('2026-09-14T10:00:00.000Z'),
-        productId,
-        quantityDeltaInBaseUnits: -60,
-        sourceTourId: tourId,
-        sourceTourReservationId: reservationId,
-      },
-    ]),
   ]);
 
+  await seedValuedStockReceipt({ database, productId, baseUnit: 'BOUTEILLE', recordedBy: fullAccessUserId });
+  await seedValuedTourLoading({ database, productId, tourId, reservationId, baseUnit: 'BOUTEILLE', quantityInBaseUnits: 60, recordedBy: fullAccessUserId });
   return { delivererId, productId, reservationId, tourId };
 };
 
@@ -311,28 +294,10 @@ const addLoadedLine = async ({
       status: 'LOADED',
       tourId,
     }),
-    database.collection('stockMovements').insertMany([
-      {
-        _id: new ObjectId(),
-        baseUnit,
-        kind: 'TEST_IN',
-        occurredOn: new Date('2026-09-14T08:00:00.000Z'),
-        productId,
-        quantityDeltaInBaseUnits: quantityInBaseUnits,
-      },
-      {
-        _id: new ObjectId(),
-        baseUnit,
-        kind: 'TOUR_LOADING_OUT',
-        occurredOn: new Date('2026-09-14T10:00:00.000Z'),
-        productId,
-        quantityDeltaInBaseUnits: -quantityInBaseUnits,
-        sourceTourId: tourId,
-        sourceTourReservationId: reservationId,
-      },
-    ]),
   ]);
 
+  await seedValuedStockReceipt({ database, productId, baseUnit, quantityInBaseUnits, amountInCentimes: quantityInBaseUnits * 100, recordedBy: fullAccessUserId });
+  await seedValuedTourLoading({ database, productId, tourId, reservationId, baseUnit, quantityInBaseUnits, recordedBy: fullAccessUserId });
   return { productId, reservationId };
 };
 

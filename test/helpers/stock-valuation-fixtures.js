@@ -1,4 +1,6 @@
 import { ObjectId } from 'mongodb';
+import { getMongoClient } from '../../lib/mongodb.js';
+import { applyTourLoadingStockValuations, prepareTourLoadingStockValuations } from '../../lib/tour-loading-stock-valuations.js';
 
 import {
   calculateStockLoading,
@@ -40,6 +42,37 @@ export const seedValuedStockReceipt = async ({
   await database.collection('stockValuationEntries').insertOne(entry);
   await database.collection('stockValuations').insertOne(valuation);
   return { movement, entry, valuation };
+};
+
+export const seedValuedTourLoading = async ({
+  database, productId, tourId, reservationId, baseUnit = 'PIECE',
+  quantityInBaseUnits, recordedBy = new ObjectId(),
+}) => {
+  const client = await getMongoClient();
+  const session = client.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      await database.collection('products').updateOne({ _id: productId }, { $inc: { stockReferenceVersion: 1 } }, { session });
+      const lines = await prepareTourLoadingStockValuations({
+        database, session, lines: [{ _id: reservationId, productId, baseUnit, quantityInBaseUnits }],
+      });
+      const movement = {
+        _id: new ObjectId(), productId, baseUnit, kind: 'TOUR_LOADING_OUT',
+        quantityDeltaInBaseUnits: -quantityInBaseUnits, sourceTourId: tourId,
+        sourceTourReservationId: reservationId, recordedBy,
+        recordedAt: new Date('2026-09-14T10:00:00.000Z'),
+        occurredOn: new Date('2026-09-14T10:00:00.000Z'),
+      };
+      await applyTourLoadingStockValuations({ database, session, lines, movements: [movement] });
+      await database.collection('stockMovements').insertOne(movement, { session });
+      await database.collection('tourReservations').updateOne(
+        { _id: reservationId }, { $set: { purchaseCostAtLoading: lines[0].purchaseCostAtLoading } }, { session },
+      );
+      return { movement, purchaseCostAtLoading: lines[0].purchaseCostAtLoading };
+    });
+  } finally {
+    await session.endSession();
+  }
 };
 
 export const createValuationHistory = () => {

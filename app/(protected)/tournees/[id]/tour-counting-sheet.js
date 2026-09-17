@@ -9,6 +9,7 @@ import ConfirmationDialog, {
 } from '../../confirmation-dialog.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import { calculateTourCounting } from '../../../../lib/tour-counting-calculations.js';
+import { calculateCountingPurchaseCosts } from '../../../../lib/tour-counting-purchase-costs.js';
 import { countTour } from './actions.js';
 
 const LINES_PER_PAGE = 5;
@@ -71,6 +72,32 @@ const TourCountingSheet = ({
     () => new Map(summary.calculations.map((line) => [line.id, line])),
     [summary.calculations],
   );
+  const includeValuation = lines.some((line) => 'purchaseCostAtLoading' in line);
+  const purchaseSummary = useMemo(
+    () => calculateCountingPurchaseCosts(lines, summary.calculations),
+    [lines, summary.calculations],
+  );
+  const purchaseCostsById = useMemo(
+    () => new Map(purchaseSummary.lines.map((line) => [line.id, line])),
+    [purchaseSummary.lines],
+  );
+  const purchaseTotals = sheet?.recorded ? sheet : purchaseSummary;
+  const purchaseComplete = sheet?.recorded
+    ? Number.isSafeInteger(sheet.totalPurchaseCostInCentimes)
+      && Number.isSafeInteger(sheet.totalReturnedValueInCentimes)
+      && Number.isSafeInteger(sheet.totalCostOfGoodsSoldInCentimes)
+    : purchaseSummary.complete;
+  const renderPurchaseTotals = () => includeValuation && (
+    <div className='mt-3 text-sm leading-6 text-slate-700'>
+      {purchaseComplete ? (
+        <>
+          <p>Coût d’achat chargé : {formatReceptionMoney(purchaseTotals.totalPurchaseCostInCentimes)}</p>
+          <p>Valeur d’achat retournée : {formatReceptionMoney(purchaseTotals.totalReturnedValueInCentimes)}</p>
+          <p>Coût des marchandises vendues : {formatReceptionMoney(purchaseTotals.totalCostOfGoodsSoldInCentimes)}</p>
+        </>
+      ) : <p>{sheet?.recorded ? 'Coûts historiques incomplets · migration requise.' : 'La répartition du coût d’achat nécessite un retour valide pour chaque ligne.'}</p>}
+    </div>
+  );
   const normalizedQuery = query.trim().toLocaleLowerCase('fr');
   const availableUnits = useMemo(
     () => [...new Set(lines.map((line) => line.baseUnit))].sort(),
@@ -98,7 +125,8 @@ const TourCountingSheet = ({
   const confirmationUnavailable = sheet?.recorded
     || !canConfirm
     || !summary.complete
-    || !sheet?.digest;
+    || !sheet?.digest
+    || (includeValuation && !purchaseSummary.complete);
 
   return (
     <section
@@ -211,6 +239,7 @@ const TourCountingSheet = ({
                     const soldQuantityInBaseUnits = sheet?.recorded
                       ? line.soldQuantityInBaseUnits
                       : calculation?.soldQuantityInBaseUnits;
+                    const purchaseCost = sheet?.recorded ? line : purchaseCostsById.get(line.id);
                     const inputId = `returned-quantity-${line.id}`;
                     const errorId = `returned-quantity-error-${line.id}`;
 
@@ -242,6 +271,16 @@ const TourCountingSheet = ({
                           <div><p className='tour-counting-label'>{sheet?.recorded ? 'Ventes TTC' : 'Ventes TTC prévues'}</p><p className='font-semibold tabular-nums'>{Number.isSafeInteger(amountDueInCentimes) ? formatReceptionMoney(amountDueInCentimes) : '—'}<span className='sr-only'>{!Number.isSafeInteger(amountDueInCentimes) ? 'Non calculable' : ''}</span></p></div>
                         </div>
 
+                        {'purchaseCostAtLoading' in line && (
+                          <div className='text-sm leading-6 text-slate-700 sm:col-span-2'>
+                            {line.purchaseCostAtLoading ? (
+                              <p>Coût d’achat chargé : {formatReceptionMoney(line.purchaseCostAtLoading.valueInCentimes)}</p>
+                            ) : <p>Coût d’achat historique manquant · migration requise.</p>}
+                            {Number.isSafeInteger(purchaseCost?.returnedValueInCentimes) && (
+                              <p>Valeur d’achat retournée : {formatReceptionMoney(purchaseCost.returnedValueInCentimes)} · Coût des marchandises vendues : {formatReceptionMoney(purchaseCost.costOfGoodsSoldInCentimes)}</p>
+                            )}
+                          </div>
+                        )}
                         {calculation?.error ? (
                           <p className='mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800' id={errorId} role='alert' tabIndex={-1}>
                             {calculation.error}
@@ -332,6 +371,7 @@ const TourCountingSheet = ({
                       Aucun montant calculable pour le moment.
                     </p>
                   )}
+                  {renderPurchaseTotals()}
                   {!summary.complete && (
                     <p className='mt-3 text-sm leading-6 text-slate-600'>
                       Le total nécessite tous les retours et des prix historiques
@@ -404,6 +444,7 @@ const TourCountingSheet = ({
                             {formatReceptionMoney(summary.totalDueInCentimes)}
                           </p>
                         </div>
+                        {renderPurchaseTotals()}
                         <p>
                           Cette confirmation constate la restitution physique
                           des retours. Le comptage ne sera plus modifiable.

@@ -12,6 +12,7 @@ const testUri = new URL(sourceUri);
 testUri.pathname = `/${testDatabaseName}`;
 process.env.MONGODB_URI = testUri.toString();
 
+const { seedValuedStockReceipt, seedValuedTourLoading } = await import('./helpers/stock-valuation-fixtures.js');
 const { PermissionDeniedError } = await import('../lib/access.js');
 const {
   calculateDelivererCashAllocationPreview,
@@ -290,6 +291,8 @@ const insertLoadedTour = async ({ deliverer, totalDueInCentimes }) => {
     }),
   ]);
 
+  await seedValuedStockReceipt({ database, productId, quantityInBaseUnits: 1, amountInCentimes: 100, recordedBy: cashierId });
+  await seedValuedTourLoading({ database, productId, tourId, reservationId, quantityInBaseUnits: 1, recordedBy: cashierId });
   return { reservationId, tourId };
 };
 
@@ -310,6 +313,8 @@ beforeEach(async () => {
     database.collection('deliverers').deleteMany({}),
     database.collection('products').deleteMany({}),
     database.collection('stockMovements').deleteMany({}),
+    database.collection('stockValuations').deleteMany({}),
+    database.collection('stockValuationEntries').deleteMany({}),
     database.collection('tourCountings').deleteMany({}),
     database.collection('tourExpenses').deleteMany({}),
     database.collection('tourReservations').deleteMany({}),

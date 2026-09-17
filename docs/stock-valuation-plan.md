@@ -2,12 +2,14 @@
 
 Date: 2026-09-17.
 
-Status: phases 1 through 3 implemented on 2026-09-17. The user selected moving
-weighted average cost. New receptions and loadings now update valuation within
-their stock transactions. Loading previews enforce authorized cost visibility
-and stale valuation checks. Counting integration, product display, and historical
-migration remain planned. Existing unvalued history requires migration before
-loading. The valuation read permission is granted only to yahia's dedicated role.
+Status: phases 1 through 4 implemented on 2026-09-17. The user selected moving
+weighted average cost. Receptions, loadings, and counting returns now update
+valuation within their stock transactions. Counting preserves original loading
+costs and records the split between returned value and cost of goods sold.
+Loading and counting reads enforce authorized cost visibility and historical
+cost checks. Product display and historical migration remain planned. Existing
+unvalued history requires migration before loading or counting. The valuation
+read permission is granted only to yahia's dedicated role.
 
 ## Objective and scope
 
@@ -354,10 +356,87 @@ node --env-file-if-exists=.env.local --test --experimental-test-isolation=none -
 ./node_modules/.bin/eslint lib/tour-loadings.js lib/tour-loading-stock-valuations.js lib/permissions.js scripts/grant-stock-valuation-permission.js 'app/(protected)/tournees/[id]/tour-loading-confirmation.js' test/tour-loadings.integration.test.js test/tour-actions.authorization.integration.test.js test/helpers/stock-valuation-fixtures.js
 ```
 
-Next: phase 4 copies the original loading snapshots into counting records,
-splits returned value from cost of goods sold, and restores returned purchase
-value atomically with counting movements. Historical counting data still awaits
-the migration phase.
+### Phase 4 implementation
+
+- `lib/tour-counting-stock-valuations.js`: internal transactional preparation and
+  return writer. Reconciles each product's warehouse balance, physical movements,
+  and valuation ledger before counting. Validates each original loading snapshot
+  against its ledger source, product, tour, reservation, unit, quantity, and cost.
+  An existing return for the reservation prevents another transfer. Multiple
+  source lines of the same product restore their own assigned costs in stable
+  reservation order, with consecutive warehouse revisions.
+- Each counting line copies `purchaseCostAtLoading` and stores
+  `returnedValueInCentimes` and `costOfGoodsSoldInCentimes`. The original loaded
+  value equals those two allocations exactly. Totals are stored as
+  `totalPurchaseCostInCentimes`, `totalReturnedValueInCentimes`, and
+  `totalCostOfGoodsSoldInCentimes`. Exact BigInt arithmetic and the existing
+  half-up allocation rule apply; zero purchase costs and zero/full returns are
+  valid. Warehouse quantity/value and combined cost overflow reject counting.
+- `lib/tour-countings.js`: retains the existing product and cash coordination
+  locks. Counting records, original-cost return ledger entries, warehouse
+  balances, physical return movements, and tour status commit atomically.
+  Zero returns record the full sold cost without a zero physical movement or
+  ledger entry. Duplicate confirmations and transaction retries cannot apply a
+  return twice. Existing historical selling prices and loaded reservation/ledger
+  records remain unchanged; later receipts preserve recorded sold/returned costs.
+- Counting sheets read permissions, tour state, reservations, ledger, and balances
+  in one snapshot transaction. The approval digest includes the original loading
+  cost regardless of reader visibility. A later receipt or another reconciled
+  stock operation does not invalidate original-cost counting approval. Changed
+  historical snapshots invalidate it; incomplete current history still blocks
+  confirmation. Loading approvals continue to be invalidated by valued returns.
+- `lib/tour-counting-purchase-costs.js`: pure cost-preview helpers, whitelisted
+  snapshot serialization, safe totals, and validation of stored allocations.
+  Missing or inconsistent historical counting allocations/totals remain null;
+  readers do not silently reconstruct them or display unknown costs as zero.
+- The counting sheet, totals, styled confirmation dialog, and recorded read-only
+  sheet show original loaded costs, returned purchase value, and sold costs only
+  after the server checks `stock.valuation.read`. Readers without that permission
+  can count under the existing operation permissions and never receive cost
+  fields, including on replay. General tour/reservation readers and confirmation
+  responses do not expose stored costs. Existing search, unit filtering, and
+  pagination are preserved on desktop and mobile. No new permission or account
+  grant was needed.
+- Missing, malformed, incompatible, unlinked, unknown, or unreconciled loading
+  costs/history block the counting sheet and confirmation without partial writes,
+  including when all submitted returns are zero. Historical tours need phase 6
+  migration before counting; legacy recorded countings remain readable with an
+  explicit incomplete-cost state for authorized readers.
+
+Verification completed on 2026-09-17: 17 new counting valuation integration tests,
+13 existing counting integration tests, 14 calculation/preview tests, 13 tour
+Server Action/authorization tests, and one targeted cash-payment/counting
+concurrency test passed (58 targeted tests). Coverage includes differently priced
+later receipts, packaging, repeated product lines, empty warehouse stock,
+rounding, zero costs, original-source mismatches, missing/partial history,
+permission revocation, safe integer limits and overflow, concurrent
+countings/receptions/loadings, retries, immutable snapshots, and full rollback
+following ledger or physical movement failures. ESLint passed on all nine
+changed/new JavaScript files. Integration databases were isolated and removed.
+
+The webpack production build passed (`npm run build -- --webpack`). Browser
+checks at 1440px and 390px passed for cost visibility, explicit-input gating,
+search/unit filtering, pagination, totals and styled confirmation, no horizontal
+overflow, the legacy migration error, and recorded read-only costs. A mobile
+confirmation saved six immutable original-cost splits and matching return
+movements/ledger entries; all six warehouse balances reconciled completely. No
+browser exceptions occurred. The temporary server/browser and database were
+removed after verification; application data and account grants were unchanged.
+
+Run integration commands in separate processes:
+
+```bash
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/tour-counting-stock-valuations.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/tour-countings.integration.test.js
+node --test --experimental-test-isolation=none --test-reporter=spec test/tour-counting-purchase-costs.test.js test/tour-counting.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/tour-actions.authorization.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec --test-name-pattern='coordonne un nouveau comptage' test/cash-payments.integration.test.js
+./node_modules/.bin/eslint lib/tour-countings.js lib/tour-counting-stock-valuations.js lib/tour-counting-purchase-costs.js 'app/(protected)/tournees/[id]/tour-counting-sheet.js' test/helpers/stock-valuation-fixtures.js test/tour-countings.integration.test.js test/tour-counting-stock-valuations.integration.test.js test/tour-counting-purchase-costs.test.js test/cash-payments.integration.test.js
+```
+
+Next: phase 5 adds authorized product stock values, weighted average costs, and
+assigned movement values. Historical loading/counting data still awaits phase 6
+preview/apply migration.
 
 ## Targeted verification and acceptance criteria
 
