@@ -17,6 +17,7 @@
     "access:grant-tours": "node --env-file=.env.local scripts/grant-tour-permissions.js",
     "access:grant-stock-valuation": "node --env-file=.env.local scripts/grant-stock-valuation-permission.js",
     "stock:backfill": "node --env-file-if-exists=.env.local scripts/backfill-reception-stock.js",
+    "stock:valuation-migrate": "node --env-file-if-exists=.env.local scripts/migrate-stock-valuations.js",
     "packaging:classify": "node --env-file=.env.local scripts/classify-packaging-usage.js",
     "tour-reservations:migrate-indexes": "node --env-file-if-exists=.env.local scripts/migrate-tour-reservation-indexes.js",
     "user:create": "node --env-file=.env.local scripts/create-user.js"

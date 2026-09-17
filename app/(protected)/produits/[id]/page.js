@@ -13,6 +13,7 @@ import ProductEditForm from './product-edit-form.js';
 import ProductTabs from './product-tabs.js';
 import PurchaseCostCard, { PurchasePriceGap } from './purchase-cost-card.js';
 import StockMovementHistory from './stock-movement-history.js';
+import StockValuationSummary from './stock-valuation-summary.js';
 import { EditingLink, EditingSessionProvider } from '../../components/editing-session.js';
 import styles from './product-detail.module.css';
 import ProductIcon from './product-icon.js';
@@ -87,8 +88,9 @@ const StockSection = ({ baseUnitLabel, product }) => {
         </div>
       </dl>
       <p className={styles.formula}><ProductIcon name='info' /><span>Disponible = entrepôt − réservé. Une réservation n’est pas une sortie physique.</span></p>
+      <StockValuationSummary valuation={stock.valuation} baseUnitLabel={baseUnitLabel} />
       {available < 0 && <p className='mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'>Le disponible est négatif : les sorties physiques et réservations dépassent le stock en entrepôt.</p>}
-      <StockMovementHistory baseUnitLabel={baseUnitLabel} movements={stock.movements} movementCount={stock.movementCount} stock={stock} />
+      <StockMovementHistory baseUnitLabel={baseUnitLabel} movements={stock.movements} movementCount={stock.movementCount} stock={stock} includeValuation={Boolean(stock.valuation)} />
       <details className={styles.help}><summary>Comprendre les chiffres</summary><p>Les compteurs portent sur tous les mouvements physiques enregistrés pour ce produit, indépendamment des filtres. Un disponible nul ne signifie pas que l’entrepôt est vide : tout le stock peut être réservé. Le stock évolue lors des opérations métier.</p></details>
     </div>
   );
@@ -111,6 +113,8 @@ const ProductPage = async ({ params, searchParams }) => {
     includeStockMovements: activeSection === 'stock',
     includeTourSources: permissions.includes('tours.read'),
     includeReceptionSources: canReadPurchaseCosts,
+    includeValuation: activeSection === 'stock',
+    userId: session.userId,
   });
   if (!product) notFound();
   const canUpdateProduct = permissions.includes('products.update');

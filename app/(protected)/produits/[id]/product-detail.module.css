@@ -44,6 +44,11 @@
 .stockLabel svg { width: 17px; height: 17px; }
 .stockCard dd { margin: 14px 0 5px; font-size: 37px; letter-spacing: -1px; line-height: 1.2; font-weight: 650; font-variant-numeric: tabular-nums; }
 .stockCard small { color: var(--muted); font-size: 11px; }
+.valuation { margin-bottom: 22px; }
+.valuationGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.stockCard .valuationValue { font-size: 27px; overflow-wrap: anywhere; }
+.valuationHint { margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.valuationNotice { margin-top: 12px; padding: 13px 16px; border: 1px solid #fed7aa; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 13px; line-height: 1.7; }
 .reserved { background: #fffcf5; border-color: #efdfbc; }
 .reserved :is(dt,dd) { color: var(--amber); }
 .available { background: #edf8f3; border-color: #cce5d8; }
@@ -208,6 +213,7 @@
   .sectionHeading p { font-size: 11px; }
   .subnote { display: none; }
   .stockGrid { grid-template-columns: 1fr; gap: 10px; }
+  .valuationGrid { grid-template-columns: 1fr; gap: 10px; }
   .stockCard { padding: 18px; }
   .stockCard dd { font-size: 33px; margin: 10px 0 3px; }
   .stockLabel { font-size: 11px; }

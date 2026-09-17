@@ -2,12 +2,15 @@
 
 Date: 2026-09-17.
 
-Status: phases 1 through 4 implemented on 2026-09-17. The user selected moving
+Status: phases 1 through 6 implemented on 2026-09-17. The user selected moving
 weighted average cost. Receptions, loadings, and counting returns now update
 valuation within their stock transactions. Counting preserves original loading
 costs and records the split between returned value and cost of goods sold.
 Loading and counting reads enforce authorized cost visibility and historical
-cost checks. Product display and historical migration remain planned. Existing
+cost checks. Product stock displays now show reconciled warehouse values,
+weighted average costs, and assigned movement values for authorized readers.
+Historical preview/apply migration and checked cutover are implemented. The
+application database preview is clean and awaits reviewed application. Existing
 unvalued history requires migration before loading or counting. The valuation
 read permission is granted only to yahia's dedicated role.
 
@@ -434,9 +437,171 @@ node --env-file-if-exists=.env.local --test --experimental-test-isolation=none -
 ./node_modules/.bin/eslint lib/tour-countings.js lib/tour-counting-stock-valuations.js lib/tour-counting-purchase-costs.js 'app/(protected)/tournees/[id]/tour-counting-sheet.js' test/helpers/stock-valuation-fixtures.js test/tour-countings.integration.test.js test/tour-counting-stock-valuations.integration.test.js test/tour-counting-purchase-costs.test.js test/cash-payments.integration.test.js
 ```
 
-Next: phase 5 adds authorized product stock values, weighted average costs, and
-assigned movement values. Historical loading/counting data still awaits phase 6
-preview/apply migration.
+### Phase 5 implementation
+
+- `lib/products.js`: opt-in product valuation reads require `products.read` and
+  check `stock.valuation.read` on the server. Permissions, product/base unit,
+  physical stock, reservations, movement presentation, balance, and ledger are
+  read within one snapshot transaction. Transaction reads are sequential.
+  Ordinary product/catalogue reads keep their existing output, and readers
+  without valuation access receive no valuation or movement-cost fields.
+- `lib/product-stock-valuations.js`: internal transactional reader reconciles
+  warehouse quantity/value and the immutable movement ledger before serializing
+  whitelisted costs. Warehouse value includes reserved stock and excludes goods
+  held on tours. The average is derived from value and warehouse quantity; it
+  is never used to recalculate previously assigned movement values. Incomplete
+  or inconsistent history produces null values, including movement values,
+  rather than an unverified partial value or a replacement current-average cost.
+- Pristine products show zero warehouse value and no applicable average without
+  creating a stored balance. Net-zero legacy history and receptions without
+  physical movements remain explicitly unvalued. Recorded zero-cost stock is
+  valid and shows a zero average; fully emptied stock has zero value and no
+  applicable average. Read operations do not migrate or repair stored data.
+- The product stock tab shows `Valeur du stock en entrepôt` and
+  `Coût moyen pondéré` (TTC DZD per base unit, up to four average decimal places).
+  Incomplete history shows an explicit reconciliation/migration message. The
+  latest reception purchase cost remains separately labelled in pricing, with
+  its existing reception-read access rules.
+- The physical history shows signed assigned purchase values and explicit
+  unknown states for authorized readers. Existing search, entry/exit filters,
+  and eight-row pagination remain; a valuation-status filter is added for cost
+  readers. Desktop and mobile layouts remain free of horizontal overflow and
+  scrollable list/table containers. No permission or account grant was added.
+
+Verification completed on 2026-09-17: 12 new product valuation integration tests,
+23 existing product integration tests, four stock movement integration tests,
+and 20 product action/authorization tests passed (59 targeted tests). Coverage
+includes remaining-stock averages after loadings and differently priced receipts,
+original loading/return movement values, reserved quantities, base units,
+zero/empty stock, pristine products, missing/corrupt/unlinked/unknown history,
+net-zero legacy movements, permission revocation and inactive users, hidden cost
+fields, safe integer limits, and snapshot consistency during a later receipt.
+Each integration process used and removed an isolated temporary database.
+ESLint passed on all seven changed/new JavaScript files.
+
+The webpack production build passed (`npm run build -- --webpack`). Browser
+checks at 1440px and 390px passed for warehouse values, average precision, signed
+assigned costs, search, direction and valuation filters, pagination, zero and
+empty states, incomplete history, large totals without horizontal overflow,
+permission-filtered columns and server payloads, and the separate latest purchase
+cost in pricing. No browser exceptions occurred. The temporary UI database,
+server, and browser were removed; application data and account grants were
+unchanged.
+
+Run integration commands in separate processes:
+
+```bash
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/product-stock-valuations.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/products.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/stock-movements.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/product-actions.authorization.integration.test.js
+./node_modules/.bin/eslint lib/products.js lib/product-stock-valuations.js lib/stock-movements.js 'app/(protected)/produits/[id]/page.js' 'app/(protected)/produits/[id]/stock-movement-history.js' 'app/(protected)/produits/[id]/stock-valuation-summary.js' test/product-stock-valuations.integration.test.js
+```
+
+### Phase 6 implementation
+
+- `lib/stock-valuation-migration-plan.js`: pure deterministic replay of reception,
+  loading and counting source records against their existing physical movements.
+  Uses reception `createdAt`, tour/reservation `loadedAt`, and counting
+  `countedAt`; reporting reception dates never reorder operations. Historical
+  base-unit quantities and packaging snapshots are checked without substituting
+  current packaging definitions. Reception line order, stable reservation order
+  for combined loading allocations, and counting line order are retained.
+- Reconstructs versioned warehouse balances and ledger entries, original loading
+  snapshots, counting allocations/totals, goods held on uncounted tours, and sold
+  costs. Verifies physical reconciliation and exact purchase-value conservation
+  across warehouse, held goods, and sold goods. Zero costs and zero/full returns
+  remain valid; zero returns do not invent movements or ledger entries. Pristine
+  products require no stored balance or coordination write.
+- Equal recording times use existing immutable ledger revisions when they prove
+  operation order. Receipt/return additions commute. Loading ties are checked
+  across possible orders (up to six simultaneous operations); cost changes,
+  unproven causal order, or larger unproven loading groups are reported as
+  ambiguous and block application. Stable IDs/order do not silently resolve
+  cost-changing ambiguity.
+- Missing sources/movements/recording times/amounts, duplicates, incompatible
+  units or quantities, inconsistent tour/counting state, malformed history,
+  stock underflow and overflow, or conflicting known ledger/snapshot/totals
+  block apply. Valid partial ledgers may be extended without changing their
+  existing entries. Missing or explicitly null snapshots/allocations/totals can
+  be filled from checked history; conflicting known costs are never overwritten.
+  Unresolved products remain unchanged and explicitly unvalued in readers.
+- `lib/stock-valuation-migration.js`: snapshot preview with source fingerprints,
+  exact proposed changes, per-product balances and anomalies. Apply recomputes
+  the plan, checks database/report/source integrity, saves the complete original
+  BSON snapshot, and writes all changes in one transaction. Affected tours and
+  products share document locks with application operations; a concurrent write
+  forces retry and source revalidation. A stale reviewed plan cannot miss that
+  operation. Direct database writes and other maintenance scripts must be
+  suspended during cutover because they do not follow the application locks.
+- Before commit, compares every source document against the expected result:
+  only purchase-cost fields, valuation records, appended ledger entries and
+  coordination counters may differ. Reconciles each affected product again.
+  Original reception amounts, physical movements, selling prices, payments,
+  expenses and other source metadata are retained. An atomic migration audit
+  records source/result fingerprints; unchanged same-preview reruns are harmless.
+  Subsequent business operations require a fresh preview, which preserves their
+  recorded costs. Any backup/write/verification failure cancels the transaction.
+- `scripts/migrate-stock-valuations.js` and `npm run stock:valuation-migrate`:
+  private JSON/Markdown preview reports and explicit apply with a required BSON
+  backup. Files use exclusive creation and mode 0600; backups are synchronized
+  to disk before data changes. The JSON is a checked report, not an editable
+  mapping. No new permission or account grant is introduced; this is an
+  administrative CLI, with no public Server Action or client cost API.
+
+Verification completed on 2026-09-17: 17 replay/preview tests, 13 isolated
+migration integration tests, 27 calculation/record tests, six valuation
+persistence tests and 12 product valuation/access tests passed (75 targeted
+tests). Coverage includes original-cost returns after differently priced or
+earlier-dated receipts, repeated product lines and centime rounding, packaging,
+zero/full returns, unknown/net-zero/orphan history, partial immutable ledgers,
+equal-time ambiguity/proven order, numeric limits, exact BSON backups, private
+CLI files, preservation of financial history, stale/tampered/cross-database
+reports, backup/ledger failures, concurrent applications and receptions,
+subsequent counting/receptions, idempotency and rollback. ESLint passed on all
+six new JavaScript files. Temporary integration databases were removed.
+
+Browser checks against migrated isolated fixtures passed at 1440px and 390px:
+warehouse value and average, assigned loading/return values, original
+loaded/returned/sold counting totals, recorded read-only counting, authorized
+and unauthorized views/payloads, no horizontal overflow, and no browser
+exceptions. The temporary UI server/browser and database were removed. No
+application source records, costs, account permissions or financial history
+were changed during this verification.
+
+Application preview generated on 2026-09-17: eight products reconcile, with zero
+anomalies. Proposed additions are eight current valuations, 136 immutable ledger
+entries, 56 loading snapshots and seven counting allocations/totals. Proposed
+warehouse value is 211,560 DA; goods held on uncounted tours are zero; historical
+cost of goods sold is 1,913,880 DA. The private review files are
+`/tmp/syphax-stock-valuation-phase6-20260917.json` and `.md`. Preview made zero
+database writes. Live application awaits review and checked cutover; regenerate
+the preview if application source data changes.
+
+Migration runbook (use new output paths; keep reports/backups outside version
+control and retain the backup):
+
+```bash
+npm run stock:valuation-migrate -- --preview <report-prefix>
+# Review the Markdown and JSON; resolve source anomalies and regenerate if needed.
+npm run stock:valuation-migrate -- --apply <report-prefix>.json --backup <backup.ejson>
+# Generate a fresh preview after application: proposed changes should be zero.
+npm run stock:valuation-migrate -- --preview <verification-prefix>
+```
+
+Targeted test commands; run each integration command in a separate process:
+
+```bash
+node --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuation-migration-plan.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuation-migration.integration.test.js
+node --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuation-calculations.test.js test/stock-valuation-records.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/stock-valuations.integration.test.js
+node --env-file-if-exists=.env.local --test --experimental-test-isolation=none --test-reporter=spec test/product-stock-valuations.integration.test.js
+./node_modules/.bin/eslint lib/stock-valuation-migration-plan.js lib/stock-valuation-migration.js scripts/migrate-stock-valuations.js test/helpers/stock-migration-fixtures.js test/stock-valuation-migration-plan.test.js test/stock-valuation-migration.integration.test.js
+```
+
+Next: phase 7 completes reviewed application and reconciliation of the migrated
+application records. `/rentabilite` remains a subsequent feature.
 
 ## Targeted verification and acceptance criteria
 
