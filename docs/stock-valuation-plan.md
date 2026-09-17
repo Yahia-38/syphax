@@ -2,7 +2,7 @@
 
 Date: 2026-09-17.
 
-Status: phases 1 through 6 implemented on 2026-09-17. The user selected moving
+Status: phases 1 through 7 completed on 2026-09-17. The user selected moving
 weighted average cost. Receptions, loadings, and counting returns now update
 valuation within their stock transactions. Counting preserves original loading
 costs and records the split between returned value and cost of goods sold.
@@ -10,9 +10,11 @@ Loading and counting reads enforce authorized cost visibility and historical
 cost checks. Product stock displays now show reconciled warehouse values,
 weighted average costs, and assigned movement values for authorized readers.
 Historical preview/apply migration and checked cutover are implemented. The
-application database preview is clean and awaits reviewed application. Existing
-unvalued history requires migration before loading or counting. The valuation
-read permission is granted only to yahia's dedicated role.
+application database migration has been applied and reconciled: eight products,
+136 ledger entries, 56 loading snapshots and seven counting records. A fresh
+preview has zero anomalies and zero proposed changes. Future unvalued history
+requires reconciliation before loading or counting. The valuation read
+permission is granted only to yahia's dedicated role.
 
 ## Objective and scope
 
@@ -575,8 +577,8 @@ entries, 56 loading snapshots and seven counting allocations/totals. Proposed
 warehouse value is 211,560 DA; goods held on uncounted tours are zero; historical
 cost of goods sold is 1,913,880 DA. The private review files are
 `/tmp/syphax-stock-valuation-phase6-20260917.json` and `.md`. Preview made zero
-database writes. Live application awaits review and checked cutover; regenerate
-the preview if application source data changes.
+database writes. This checkpoint preceded the reviewed application and checked
+cutover completed in phase 7 below.
 
 Migration runbook (use new output paths; keep reports/backups outside version
 control and retain the backup):
@@ -600,8 +602,96 @@ node --env-file-if-exists=.env.local --test --experimental-test-isolation=none -
 ./node_modules/.bin/eslint lib/stock-valuation-migration-plan.js lib/stock-valuation-migration.js scripts/migrate-stock-valuations.js test/helpers/stock-migration-fixtures.js test/stock-valuation-migration-plan.test.js test/stock-valuation-migration.integration.test.js
 ```
 
-Next: phase 7 completes reviewed application and reconciliation of the migrated
-application records. `/rentabilite` remains a subsequent feature.
+### Phase 7 application and reconciliation
+
+Completed on 2026-09-17 against the configured `syphax` application database.
+The fresh preview matched the phase 6 proposal and had zero anomalies. The
+reviewed source fingerprint was checked against a new snapshot before cutover.
+Recorded purchase amounts reconcile exactly with warehouse, held and sold
+values; no source correction or replacement cost was needed.
+
+Before application, retained a private BSON backup of all 17 source collections
+and the reviewed JSON/Markdown reports. The migration CLI saved a second,
+exact BSON backup of its eight source collections, synchronized it to disk,
+and committed the checked changes atomically using application product/tour
+locks. Added `/.backups/` to `.gitignore` to keep these private operational
+files outside version control. Backup directories use mode 0700 and files
+use mode 0600.
+
+Applied eight current valuations, 136 immutable ledger entries, 56 original
+loading cost snapshots and seven counting cost allocations/totals. All eight
+products reconcile with physical movements. Authorized product reads return
+complete warehouse values and assigned movement costs; all seven recorded
+counting sheets return their checked original loaded, returned and sold costs.
+
+| Product | Warehouse base units | Warehouse value (DA) | Average cost (DA/base unit) |
+| --- | ---: | ---: | ---: |
+| HB-BLANCHE-1L | 390 | 28,080 | 72 |
+| HB-BLANCHE-2L | 209 | 25,080 | 120 |
+| HB-SELECTO-1L | 390 | 28,080 | 72 |
+| HB-SELECTO-2L | 204 | 24,480 | 120 |
+| HB-SLIM-ORANGE-1L | 390 | 28,080 | 72 |
+| HB-SLIM-ORANGE-2L | 210 | 25,200 | 120 |
+| HB-SLIM-CITRON-1L | 390 | 28,080 | 72 |
+| HB-SLIM-CITRON-2L | 204 | 24,480 | 120 |
+
+Exact purchase-value conservation after application:
+
+```text
+2,125,440 DA purchases = 211,560 DA warehouse
+                      +       0 DA held on uncounted tours
+                      + 1,913,880 DA cost of goods sold
+```
+
+Independent comparisons against the full pre-migration backup confirm that
+receptions and physical stock movements are unchanged. Product selling prices,
+tour metadata and reservation/counting fields other than the allowed costs and
+coordination counters are unchanged. All nine unrelated collections remain
+identical: `cashPayments`, `cashRegisters`, `cashWithdrawals`, `deliverers`,
+`roles`, `sessions`, `suppliers`, `tourExpenses` and `users`. No permission or
+account grant was introduced.
+
+A fresh post-application preview reports eight reconciled products, zero
+anomalies and zero proposed changes in every category. Reapplying the original
+reviewed report returns `replayed: true`, the same result fingerprint and no
+duplicate costs or ledger entries. The migration audit fingerprint matches the
+independently read post-migration source snapshot.
+
+Retained operational artifacts (outside version control):
+
+```text
+.backups/stock-valuation/20260917-phase7/
+  review.json             reviewed proposal and source fingerprints
+  review.md               human-readable proposal
+  database-before.ejson   full pre-migration source-document backup
+  migration-before.ejson exact migration source backup
+  after.json              post-migration preview; zero proposed changes
+  after.md                human-readable post-migration preview
+  verification.json       reconciliation and preservation results
+```
+
+The backups contain original BSON source documents; they are document backups,
+not MongoDB index/configuration dumps. Retain them before cleaning this checkout.
+
+Audit identifiers:
+
+```text
+Preview/audit: 421116a10791a135c6809e7b41b723dd5b2fd7e955356a7da9e5d4ac9388b5b0
+Before:        494915dee492c171fa0f5f92d2ace1d83063bc8a6cee849a5534f2eb08f0f1b7
+After:         be774d68438eaf956b77651b18ee50daf266d6f0f4516e56744aa47f120dff5e
+```
+
+Targeted verification rerun for cutover: 17 migration planner tests, 13 isolated
+migration integration tests and 12 isolated product valuation/access tests
+passed (42 tests). The migration tests exercise rollback, exact BSON backups,
+stale/tampered previews, concurrent applications/receptions, idempotency and
+new receptions/counting after cutover. The product tests exercise reconciled
+values, original costs, incomplete history, permission revocation and hidden
+cost fields. Integration databases were isolated and removed by their teardown.
+Live verification used read-only service calls and snapshot comparisons; no
+extra live reception, loading or counting was created for testing.
+
+Next: phase 8 builds `/rentabilite` using the reconciled historical sales costs.
 
 ## Targeted verification and acceptance criteria
 
