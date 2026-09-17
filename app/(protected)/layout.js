@@ -12,6 +12,7 @@ const ProtectedLayout = async ({ children }) => {
         canReadCash={permissions.includes('cash.read')}
         canReadDeliverers={permissions.includes('deliverers.read')}
         canReadProducts={permissions.includes('products.read')}
+        canReadProfitability={permissions.includes('profitability.read')}
         canReadReceptions={
           permissions.includes('receptions.read')
           || permissions.includes('suppliers.read')

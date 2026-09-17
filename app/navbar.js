@@ -7,6 +7,7 @@ const Navbar = ({
   canReadCash,
   canReadDeliverers,
   canReadProducts,
+  canReadProfitability,
   canReadReceptions,
   username,
 }) => {
@@ -61,6 +62,14 @@ const Navbar = ({
             >
               Caisse
             </Link>
+          )}
+          {canReadProfitability && (
+            <NavigationLink
+              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+              href='/rentabilite'
+            >
+              Rentabilité
+            </NavigationLink>
           )}
         </div>
 
