@@ -21,6 +21,7 @@
 .heroSummary dt { font-size: 11px; color: #65758b; margin-bottom: 5px; }
 .heroSummary dd { font-size: 21px; font-weight: 650; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
 .heroSummary dd span { margin-left: 4px; font-size: 11px; font-weight: 400; letter-spacing: 0; color: #65758b; }
+.heroSummary dd .quantityPart { margin-left: 0; font: inherit; letter-spacing: inherit; color: inherit; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
 .tabs { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 1px solid #dce3ed; position: sticky; top: 0; background: var(--surface); z-index: 20; padding-top: 3px; margin-bottom: 26px; }
@@ -44,6 +45,9 @@
 .stockLabel svg { width: 17px; height: 17px; }
 .stockCard dd { margin: 14px 0 5px; font-size: 37px; letter-spacing: -1px; line-height: 1.2; font-weight: 650; font-variant-numeric: tabular-nums; }
 .stockCard small { color: var(--muted); font-size: 11px; }
+.quantityPart { white-space: nowrap; }
+.quantityPart + .quantityPart::before { content: ' '; }
+.stockCard dd .quantityPart > span { margin-left: 5px; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
 .valuation { margin-bottom: 22px; }
 .valuationGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
 .stockCard .valuationValue { font-size: 27px; overflow-wrap: anywhere; }

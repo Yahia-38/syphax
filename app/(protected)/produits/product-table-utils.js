@@ -24,6 +24,11 @@ const compareText = (firstValue, secondValue) => String(firstValue).localeCompar
   { numeric: true, sensitivity: 'base' },
 );
 
+// Prices are compared per base unit so a pack price and a unit price stay comparable.
+const getPricePerBaseUnit = (product) => (
+  product.salePriceCentimes / (product.displayUnit?.quantity ?? 1)
+);
+
 const compareProducts = (firstProduct, secondProduct, sortKey, sortDir) => {
   const direction = sortDir === 'desc' ? -1 : 1;
 
@@ -44,7 +49,7 @@ const compareProducts = (firstProduct, secondProduct, sortKey, sortDir) => {
     }
 
     const priceComparison = (
-      firstProduct.salePriceCentimes - secondProduct.salePriceCentimes
+      getPricePerBaseUnit(firstProduct) - getPricePerBaseUnit(secondProduct)
     ) * direction;
 
     return priceComparison || compareText(

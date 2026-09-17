@@ -3,6 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  getDisplayQuantitySeparator,
+  getDisplayUnitLabel,
+  getQuantityInDisplayUnit,
+} from '../../../lib/product-display-unit.js';
 import styles from './product-table.module.css';
 import {
   BASE_UNIT_LABELS,
@@ -63,9 +68,25 @@ const getBaseUnitLabel = (baseUnit) => (
   BASE_UNIT_LABELS.get(baseUnit) ?? baseUnit
 );
 
-const getPriceUnitLabel = (baseUnit) => (
-  getBaseUnitLabel(baseUnit).toLocaleLowerCase('fr')
-);
+const DisplayQuantity = ({ product, quantity }) => {
+  const { negative, parts } = getQuantityInDisplayUnit(quantity, {
+    baseUnitLabel: getBaseUnitLabel(product.baseUnit),
+    displayUnit: product.displayUnit,
+  });
+
+  return (
+    <>
+      {negative && '−'}
+      {parts.map(({ count, label }, index) => (
+        <span className={styles.quantityPart} key={label}>
+          {index > 0 && `${getDisplayQuantitySeparator(negative).trim()} `}
+          {formatStockQuantity(count)}
+          <small>{label}</small>
+        </span>
+      ))}
+    </>
+  );
+};
 
 const getAvailability = (quantity) => {
   if (quantity < 0) {
@@ -87,7 +108,10 @@ const Availability = ({ product }) => {
   return (
     <span className={styles.availability} data-state={availability.state}>
       <strong>
-        {formatStockQuantity(product.availableQuantityInBaseUnits)}
+        <DisplayQuantity
+          product={product}
+          quantity={product.availableQuantityInBaseUnits}
+        />
       </strong>
       <span>{availability.label}</span>
     </span>
@@ -95,9 +119,10 @@ const Availability = ({ product }) => {
 };
 
 const Price = ({ product }) => {
-  const unitLabel = getPriceUnitLabel(product.baseUnit);
-  const priceLabel = Number.isSafeInteger(product.salePricePackagingQuantity)
-    ? `pack de ${product.salePricePackagingQuantity} ${unitLabel}s` : unitLabel;
+  const priceLabel = getDisplayUnitLabel({
+    baseUnitLabel: getBaseUnitLabel(product.baseUnit),
+    displayUnit: product.displayUnit,
+  });
   return (
     <span className={styles.price}>
       {Number.isSafeInteger(product.salePriceCentimes)
@@ -389,7 +414,7 @@ const ProductTable = ({
           <>
             <table className={styles.table}>
               <caption className={styles.srOnly}>
-                Produits et stocks exprimés dans leur unité de base
+                Produits et stocks exprimés dans leur conditionnement de vente par défaut
               </caption>
               <thead>
                 <tr>
@@ -469,7 +494,10 @@ const ProductTable = ({
                       data-label='Entrepôt'
                     >
                       <span>
-                        {formatStockQuantity(product.stockQuantityInBaseUnits)}
+                        <DisplayQuantity
+                          product={product}
+                          quantity={product.stockQuantityInBaseUnits}
+                        />
                       </span>
                     </td>
                     <td
@@ -477,7 +505,10 @@ const ProductTable = ({
                       data-label='Réservé'
                     >
                       <span data-muted={product.reservedQuantityInBaseUnits === 0}>
-                        {formatStockQuantity(product.reservedQuantityInBaseUnits)}
+                        <DisplayQuantity
+                          product={product}
+                          quantity={product.reservedQuantityInBaseUnits}
+                        />
                       </span>
                     </td>
                     <td
@@ -569,10 +600,14 @@ const ProductTable = ({
       <details className={styles.help}>
         <summary>Comment lire les stocks ?</summary>
         <p>
-          Disponible = stock en entrepôt − quantités réservées. Toutes les
-          quantités sont exprimées dans l’unité de base du produit. Un
-          disponible nul peut correspondre à un stock entièrement réservé.
-          Un disponible négatif est à vérifier.
+          Disponible = stock en entrepôt − quantités réservées. Les
+          quantités et le prix sont exprimés dans le conditionnement de vente
+          par défaut du produit, ou dans son unité de base s’il n’en a pas.
+          Une quantité qui ne remplit pas un conditionnement complet est
+          affichée en plus, en unités de base (par exemple 20 packs + 3
+          bouteilles). Les tris et les filtres restent calculés en unités de
+          base. Un disponible nul peut correspondre à un stock entièrement
+          réservé. Un disponible négatif est à vérifier.
         </p>
       </details>
     </section>

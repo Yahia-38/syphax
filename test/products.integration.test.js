@@ -209,53 +209,48 @@ test('liste le prix de vente en centimes ou null lorsqu’il est absent', async 
   );
 });
 
-test('le catalogue affiche le tarif du plus grand pack et le tarif unitaire sans pack', async () => {
+test('le catalogue affiche le tarif et le stock du conditionnement de vente par défaut', async () => {
   const authorId = new ObjectId();
-  const pack = (label, quantity, amountInCentimes) => ({
-    _id: new ObjectId(), label, quantity, usage: 'SALE',
+  const pack = (label, quantity, amountInCentimes, usage = 'SALE') => ({
+    _id: new ObjectId(), label, quantity, usage,
     ...(amountInCentimes === undefined ? {} : { salePrice: { amountInCentimes } }),
   });
+  const packA = [pack('Pack de 12', 12, 110000), pack('Pack de 24', 24, 200000), pack('Pack de 6', 6, 60000)];
+  const packC = [pack('Pack de 6', 6, 50000), pack('Pack de 24', 24)];
+  const palletD = pack('Palette', 240, 2000000, 'RECEPTION');
   await database.collection('products').insertMany([
-    { code: 'CAT-PRIX-A', designation: 'Grand pack tarifé', baseUnit: 'BOUTEILLE', createdBy: authorId,
-      salePrice: { amountInCentimes: 9000 }, packagings: [pack('Pack de 12', 12, 110000), pack('Pack de 24', 24, 200000), pack('Pack de 6', 6, 60000)] },
+    { code: 'CAT-PRIX-A', designation: 'Défaut pack de 12', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      salePrice: { amountInCentimes: 9000 }, packagings: packA, defaultSaleUnit: packA[0]._id },
     { code: 'CAT-PRIX-B', designation: 'Sans pack', baseUnit: 'BOUTEILLE', createdBy: authorId, salePrice: { amountInCentimes: 9900 } },
-    { code: 'CAT-PRIX-C', designation: 'Grand pack sans tarif', baseUnit: 'BOUTEILLE', createdBy: authorId,
-      salePrice: { amountInCentimes: 9500 }, packagings: [pack('Pack de 6', 6, 50000), pack('Pack de 24', 24)] },
-    { code: 'CAT-PRIX-D', designation: 'Pack sans tarif unitaire', baseUnit: 'BOUTEILLE', createdBy: authorId, packagings: [pack('Pack de 12', 12, 120000)] },
+    { code: 'CAT-PRIX-C', designation: 'Défaut pack sans tarif', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      salePrice: { amountInCentimes: 9500 }, packagings: packC, defaultSaleUnit: packC[1]._id },
+    { code: 'CAT-PRIX-D', designation: 'Défaut devenu réception', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      salePrice: { amountInCentimes: 8000 }, packagings: [palletD, pack('Pack de 12', 12, 120000)], defaultSaleUnit: palletD._id },
+    { code: 'CAT-PRIX-E', designation: 'Packs sans défaut', baseUnit: 'BOUTEILLE', createdBy: authorId,
+      packagings: [pack('Pack de 12', 12, 120000)] },
   ]);
-  const products = await listProducts({ query: 'CAT-PRIX-', includePricing: true, priceByLargestPack: true });
-  assert.deepEqual(products.map((product) => [product.code, product.salePriceCentimes, product.salePricePackagingQuantity]), [
-    ['CAT-PRIX-A', 200000, 24], ['CAT-PRIX-B', 9900, null], ['CAT-PRIX-C', null, 24], ['CAT-PRIX-D', 120000, 12],
+  const products = await listProducts({ query: 'CAT-PRIX-', includePricing: true, includeDisplayUnit: true });
+  assert.deepEqual(products.map((product) => [product.code, product.salePriceCentimes, product.displayUnit]), [
+    ['CAT-PRIX-A', 110000, { id: packA[0]._id.toString(), label: 'Pack de 12', quantity: 12 }],
+    ['CAT-PRIX-B', 9900, null],
+    ['CAT-PRIX-C', null, { id: packC[1]._id.toString(), label: 'Pack de 24', quantity: 24 }],
+    ['CAT-PRIX-D', 8000, null],
+    ['CAT-PRIX-E', null, null],
   ]);
-  assert.ok(products.every((product) => !('packagings' in product)));
+  assert.ok(products.every((product) => !('packagings' in product) && !('defaultSaleUnit' in product)));
   const legacy = await listProducts({ query: 'CAT-PRIX-A', includePricing: true });
   assert.equal(legacy[0].salePriceCentimes, 9000);
-  assert.equal('salePricePackagingQuantity' in legacy[0], false);
-  const hidden = await listProducts({ query: 'CAT-PRIX-', includePricing: false, priceByLargestPack: true });
-  assert.ok(hidden.every((product) => !('salePriceCentimes' in product) && !('salePricePackagingQuantity' in product)));
+  assert.equal('displayUnit' in legacy[0], false);
+  const hidden = await listProducts({ query: 'CAT-PRIX-', includePricing: false, includeDisplayUnit: true });
+  assert.ok(hidden.every((product) => !('salePriceCentimes' in product)));
+  assert.equal(hidden[0].displayUnit.quantity, 12);
+  const withPackagings = await listProducts({ query: 'CAT-PRIX-A', includePackagings: true, includePricing: true });
+  assert.ok(withPackagings[0].packagings.every((packaging) => !('salePrice' in packaging)));
   const { filterAndSortProducts } = await import('../app/(protected)/produits/product-table-utils.js');
   const options = { products, query: '', unit: 'ALL', stockStatus: 'ALL', sortKey: 'salePriceCentimes', sortDir: 'asc', onlyMissingPrice: false };
-  assert.deepEqual(filterAndSortProducts(options).map((product) => product.code), ['CAT-PRIX-B', 'CAT-PRIX-D', 'CAT-PRIX-A', 'CAT-PRIX-C']);
-  assert.deepEqual(filterAndSortProducts({ ...options, onlyMissingPrice: true }).map((product) => product.code), ['CAT-PRIX-C']);
-});
-
-test('le catalogue ignore les conditionnements réception et anciens pour choisir le tarif de vente', async () => {
-  const packagings = [
-    { _id: new ObjectId(), label: 'Palette', quantity: 240, usage: 'RECEPTION', salePrice: { amountInCentimes: 2000000 } },
-    { _id: new ObjectId(), label: 'Ancien carton', quantity: 100, salePrice: { amountInCentimes: 900000 } },
-    { _id: new ObjectId(), label: 'Pack', quantity: 6, usage: 'SALE', salePrice: { amountInCentimes: 50000 } },
-    { _id: new ObjectId(), label: 'Lot mixte', quantity: 12, usage: 'BOTH', salePrice: { amountInCentimes: 95000 } },
-  ];
-  await database.collection('products').insertMany([
-    { code: 'CAT-USAGE-A', designation: 'Vente mixte', baseUnit: 'BOUTEILLE', packagings, salePrice: { amountInCentimes: 9000 } },
-    { code: 'CAT-USAGE-B', designation: 'Réception seulement', baseUnit: 'BOUTEILLE', packagings: packagings.slice(0, 2), salePrice: { amountInCentimes: 9000 } },
-  ]);
-  const before = await database.collection('products').find({ code: /^CAT-USAGE-/u }).sort({ code: 1 }).toArray();
-  const products = await listProducts({ query: 'CAT-USAGE-', includePricing: true, priceByLargestPack: true });
-  assert.deepEqual(products.map(({ code, salePriceCentimes, salePricePackagingQuantity }) => [code, salePriceCentimes, salePricePackagingQuantity]), [
-    ['CAT-USAGE-A', 95000, 12], ['CAT-USAGE-B', 9000, null],
-  ]);
-  assert.deepEqual(await database.collection('products').find({ code: /^CAT-USAGE-/u }).sort({ code: 1 }).toArray(), before);
+  // Per bottle: D 80 DA, A 91.67 DA (pack of 12 at 1 100 DA), B 99 DA.
+  assert.deepEqual(filterAndSortProducts(options).map((product) => product.code), ['CAT-PRIX-D', 'CAT-PRIX-A', 'CAT-PRIX-B', 'CAT-PRIX-C', 'CAT-PRIX-E']);
+  assert.deepEqual(filterAndSortProducts({ ...options, onlyMissingPrice: true }).map((product) => product.code), ['CAT-PRIX-C', 'CAT-PRIX-E']);
 });
 
 test('omet les données tarifaires lorsque leur lecture est désactivée', async () => {

@@ -1,6 +1,14 @@
 import { notFound } from 'next/navigation';
 
 import { getUserPermissions } from '../../../../lib/access.js';
+import {
+  formatQuantityInDisplayUnit,
+  getDisplayQuantitySeparator,
+  getDisplayUnitLabel,
+  getDisplayUnitSalePrice,
+  getProductDisplayUnit,
+  getQuantityInDisplayUnit,
+} from '../../../../lib/product-display-unit.js';
 import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.js';
 import { requirePermission } from '../../../../lib/sessions.js';
@@ -57,6 +65,14 @@ const formatStockQuantity = (quantity) => new Intl.NumberFormat('fr-DZ', {
 
 const formatMoney = (value) => new Intl.NumberFormat('fr-DZ', { maximumFractionDigits: 2 }).format(value / 100);
 
+// Whole default units and any base-unit remainder, each number followed by its unit label.
+const DisplayQuantity = ({ quantity, unitOptions }) => {
+  const { negative, parts } = getQuantityInDisplayUnit(quantity, unitOptions);
+  return <>{negative && '−'}{parts.map(({ count, label }, index) => <span className={styles.quantityPart} key={label}>
+    {index > 0 && `${getDisplayQuantitySeparator(negative).trim()} `}{formatStockQuantity(count)}<span>{label}</span>
+  </span>)}</>;
+};
+
 const SectionHeading = ({ title, description, note = 'Quantités et montants par unité de base' }) => (
   <div className={styles.sectionHeading}>
     <div><h2>{title}</h2><p>{description}</p></div>
@@ -64,28 +80,32 @@ const SectionHeading = ({ title, description, note = 'Quantités et montants par
   </div>
 );
 
-const StockSection = ({ baseUnitLabel, product }) => {
+const StockSection = ({ baseUnitLabel, displayUnit, product }) => {
   const { stock } = product;
   const available = stock.availableQuantityInBaseUnits;
   const unit = baseUnitLabel.toLocaleLowerCase('fr');
+  const unitOptions = { baseUnitLabel, displayUnit };
+  // With a default packaging, the card figure is in packs and the base-unit figure goes underneath.
+  const baseFigure = (quantity) => (displayUnit ? `= ${formatQuantityInDisplayUnit(quantity, { baseUnitLabel, displayUnit: null })}` : unit);
   return (
     <div aria-labelledby='stock-tab' id='stock-panel'>
-      <SectionHeading title='Stock & disponibilité' description='Le stock physique, les réservations et ce qui reste disponible.' />
+      <SectionHeading title='Stock & disponibilité' description='Le stock physique, les réservations et ce qui reste disponible.'
+        note={displayUnit ? `Quantités en ${displayUnit.label.toLocaleLowerCase('fr')}, puis en unités de base` : undefined} />
       <dl className={styles.stockGrid}>
         <div className={styles.stockCard}>
           <dt className={styles.stockLabel}><ProductIcon name='stock' />En entrepôt</dt>
-          <dd>{formatStockQuantity(stock.quantityInBaseUnits)}</dd>
-          <small>{unit} · quantité physiquement en stock</small>
+          <dd><DisplayQuantity quantity={stock.quantityInBaseUnits} unitOptions={unitOptions} /></dd>
+          <small>{baseFigure(stock.quantityInBaseUnits)} · quantité physiquement en stock</small>
         </div>
         <div className={`${styles.stockCard} ${styles.reserved}`}>
           <dt className={styles.stockLabel}><ProductIcon name='reserved' />Réservé</dt>
-          <dd>{formatStockQuantity(stock.reservedQuantityInBaseUnits)}</dd>
-          <small>{unit} · quantité déjà réservée</small>
+          <dd><DisplayQuantity quantity={stock.reservedQuantityInBaseUnits} unitOptions={unitOptions} /></dd>
+          <small>{baseFigure(stock.reservedQuantityInBaseUnits)} · quantité déjà réservée</small>
         </div>
         <div className={`${styles.stockCard} ${styles.available} ${available < 0 ? styles.anomaly : available === 0 ? styles.zero : ''}`}>
           <dt className={styles.stockLabel}><ProductIcon name={available < 0 ? 'info' : 'check'} />Disponible</dt>
-          <dd>{formatStockQuantity(available)}</dd>
-          <small>{unit} · {available < 0 ? 'Disponible négatif · à vérifier' : available === 0 ? 'Aucune quantité disponible' : 'Disponible après réservations'}</small>
+          <dd><DisplayQuantity quantity={available} unitOptions={unitOptions} /></dd>
+          <small>{baseFigure(available)} · {available < 0 ? 'Disponible négatif · à vérifier' : available === 0 ? 'Aucune quantité disponible' : 'Disponible après réservations'}</small>
         </div>
       </dl>
       <p className={styles.formula}><ProductIcon name='info' /><span>Disponible = entrepôt − réservé. Une réservation n’est pas une sortie physique.</span></p>
@@ -121,6 +141,9 @@ const ProductPage = async ({ params, searchParams }) => {
   const canUpdateProduct = permissions.includes('products.update');
   const canUpdatePrice = canReadPricing && permissions.includes('pricing.update');
   const baseUnitLabel = BASE_UNITS.find((unit) => unit.code === product.baseUnit)?.label ?? product.baseUnit;
+  const displayUnit = getProductDisplayUnit(product);
+  const unitOptions = { baseUnitLabel, displayUnit };
+  const displaySalePrice = getDisplayUnitSalePrice({ displayUnit, packagings: product.packagings, salePrice: product.salePrice });
   const latestPriceChange = product.salePriceHistory[0] ?? (product.salePrice ? {
     changedAt: product.salePrice.updatedAt, changedBy: product.salePrice.updatedBy,
   } : null);
@@ -154,13 +177,13 @@ const ProductPage = async ({ params, searchParams }) => {
             </div>
           </div>
           <dl className={styles.heroSummary}>
-            <div><dt>Disponible</dt><dd className={product.stock.availableQuantityInBaseUnits > 0 ? styles.positive : product.stock.availableQuantityInBaseUnits < 0 ? styles.negative : ''}>{formatStockQuantity(product.stock.availableQuantityInBaseUnits)}<span>{baseUnitLabel.toLocaleLowerCase('fr')}</span></dd></div>
-            {canReadPricing && <div><dt>Prix de vente TTC</dt><dd>{product.salePrice ? `${formatMoney(product.salePrice.amountInCentimes)} DA` : 'À renseigner'}{product.salePrice && <span>/ {baseUnitLabel.toLocaleLowerCase('fr')}</span>}</dd></div>}
+            <div><dt>Disponible</dt><dd className={product.stock.availableQuantityInBaseUnits > 0 ? styles.positive : product.stock.availableQuantityInBaseUnits < 0 ? styles.negative : ''}><DisplayQuantity quantity={product.stock.availableQuantityInBaseUnits} unitOptions={unitOptions} /></dd></div>
+            {canReadPricing && <div><dt>Prix de vente TTC</dt><dd>{displaySalePrice !== null ? `${formatMoney(displaySalePrice)} DA` : 'À renseigner'}{displaySalePrice !== null && <span>/ {getDisplayUnitLabel(unitOptions)}</span>}</dd></div>}
           </dl>
         </header>
         <ProductTabs activeSection={activeSection} canReadPackaging={canReadPackaging} canReadPricing={canReadPricing} canReadPurchaseCosts={canReadPurchaseCosts} productId={product.id} />
         <div>
-          {activeSection === 'stock' && <StockSection baseUnitLabel={baseUnitLabel} product={product} />}
+          {activeSection === 'stock' && <StockSection baseUnitLabel={baseUnitLabel} displayUnit={displayUnit} product={product} />}
           {activeSection === 'identification' && <div aria-labelledby='identification-tab' id='identification-panel'>
             <SectionHeading title='Identification & traçabilité' description='Les informations du produit, sa création et sa dernière modification renseignée.' />
             <div className={styles.infoGrid}>

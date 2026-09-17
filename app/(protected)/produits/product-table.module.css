@@ -391,6 +391,22 @@
   font-weight: 500;
 }
 
+.quantityPart {
+  white-space: nowrap;
+}
+
+.quantityPart + .quantityPart::before {
+  content: ' ';
+}
+
+.quantityPart > small {
+  margin-left: 3px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #738198;
+}
+
 .reservedCell > span:not([data-muted='true']) {
   color: #965d10;
 }

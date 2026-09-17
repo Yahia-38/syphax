@@ -3,6 +3,7 @@
 import { useTourActionState, useTourDraft } from './tour-operation-context.js';
 
 import { useMemo, useState } from 'react';
+import { formatQuantityInDisplayUnit, getProductDisplayUnit } from '../../../../lib/product-display-unit.js';
 import { getSalePackagings } from '../../../../lib/product-packaging.js';
 
 import { addTourProduct } from './actions.js';
@@ -114,6 +115,10 @@ const TourProductForm = ({
     : false;
   const lowerBaseUnit = product?.baseUnit.toLocaleLowerCase('fr')
     ?? 'unité de base';
+  const stockUnitOptions = {
+    baseUnitLabel: lowerBaseUnit,
+    displayUnit: getProductDisplayUnit(product ?? undefined),
+  };
 
   const changeProduct = (nextProductId) => {
     const nextProduct = products.find((candidate) => candidate.id === nextProductId);
@@ -260,7 +265,7 @@ const TourProductForm = ({
                 En entrepôt
               </p>
               <p className='mt-2 text-xl font-bold text-slate-900'>
-                {formatQuantity(product.stockQuantityInBaseUnits)}
+                {formatQuantityInDisplayUnit(product.stockQuantityInBaseUnits, stockUnitOptions)}
               </p>
             </div>
             <div className='rounded-xl border border-amber-200 bg-amber-50 p-4'>
@@ -268,7 +273,7 @@ const TourProductForm = ({
                 Réservé
               </p>
               <p className='mt-2 text-xl font-bold text-amber-900'>
-                {formatQuantity(product.reservedQuantityInBaseUnits)}
+                {formatQuantityInDisplayUnit(product.reservedQuantityInBaseUnits, stockUnitOptions)}
               </p>
             </div>
             <div className='rounded-xl border border-emerald-200 bg-emerald-50 p-4'>
@@ -276,7 +281,7 @@ const TourProductForm = ({
                 Disponible
               </p>
               <p className='mt-2 text-xl font-bold text-emerald-900'>
-                {formatQuantity(product.availableQuantityInBaseUnits)}
+                {formatQuantityInDisplayUnit(product.availableQuantityInBaseUnits, stockUnitOptions)}
               </p>
             </div>
           </div>
