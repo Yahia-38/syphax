@@ -122,7 +122,8 @@ const TourProductForm = ({
 
   const changeProduct = (nextProductId) => {
     const nextProduct = products.find((candidate) => candidate.id === nextProductId);
-    const defaultPackaging = getSalePackagings(nextProduct?.packagings)[0];
+    // Preselect the product's default sale unit: its default pack, or the base unit.
+    const defaultPackaging = getProductDisplayUnit(nextProduct);
     setProductId(nextProductId);
     setQuantityMode(!nextProduct || defaultPackaging ? 'PACKAGING' : 'DIRECT');
     setDirectQuantity('');
@@ -317,7 +318,7 @@ const TourProductForm = ({
                 onChange={() => {
                   setQuantityMode('PACKAGING');
                   setDirectQuantity('');
-                  setPackagingId(salePackagings[0]?.id ?? '');
+                  setPackagingId(stockUnitOptions.displayUnit?.id ?? salePackagings[0]?.id ?? '');
                 }}
                 type='radio'
               />
