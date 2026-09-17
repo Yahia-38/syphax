@@ -8,7 +8,7 @@ const NavigationLink = ({ href, className = '', children }) => {
   const active = pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link href={href} aria-current={active ? 'location' : undefined}
-      className={`${className} min-h-11 ${active ? 'bg-blue-50 !text-blue-700' : ''}`}>
+      className={`${className} ${active ? 'bg-blue-50 !text-blue-700' : ''}`}>
       {children}
     </Link>
   );
