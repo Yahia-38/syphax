@@ -40,6 +40,7 @@ const {
   reactivateDeliverer,
   updateDeliverer,
   updateDelivererCreditLimit,
+  updateDelivererObjective,
 } = await import(
   '../app/(protected)/livreurs/[id]/actions.js'
 );
@@ -105,6 +106,38 @@ const callWithSession = async (token, callback) => {
   return workAsyncStorage.run(workStore, () =>
     workUnitAsyncStorage.run(requestStore, callback));
 };
+
+test('la définition d’objectif refuse un utilisateur sans permission dédiée', async () => {
+  const { token } = await createUserSession('objectif-lecture-seule', ['deliverers.read', 'deliverers.update', 'deliverers.objectives.read']);
+  const formData = new FormData();
+  formData.set('objectiveAmount', '100000');
+  formData.set('objectiveEffectiveMonth', '2099-01');
+  formData.set('objectiveExpectedVersion', '0');
+  await assert.rejects(
+    callWithSession(token, () => updateDelivererObjective(new ObjectId().toString(), { revision: 0 }, formData)),
+    (error) => error instanceof PermissionDeniedError && error.permission === 'deliverers.objectives.update',
+  );
+});
+
+test('la définition d’objectif détermine sa date et son auteur depuis la session', async () => {
+  const { token, userId } = await createUserSession('objectif-responsable', ['deliverers.objectives.update']);
+  const delivererId = new ObjectId();
+  await database.collection('deliverers').insertOne({ _id: delivererId, name: 'Livreur objectif action' });
+  const formData = new FormData();
+  formData.set('objectiveAmount', '100000');
+  formData.set('objectiveEffectiveMonth', '2099-01');
+  formData.set('objectiveExpectedVersion', '0');
+  formData.set('updatedBy', new ObjectId().toString());
+  formData.set('changedAt', '2000-01-01T00:00:00Z');
+  const startedAt = new Date();
+  const result = await callWithSession(token, () => updateDelivererObjective(delivererId.toString(), { revision: 0 }, formData));
+  assert.equal(result.message, 'L’objectif mensuel a été enregistré.');
+  assert.deepEqual(result.errors, {});
+  const stored = await database.collection('deliverers').findOne({ _id: delivererId });
+  assert.ok(stored.objectiveHistory[0].changedBy.equals(userId));
+  assert.ok(stored.objectiveHistory[0].changedAt >= startedAt);
+  await database.collection('deliverers').deleteOne({ _id: delivererId });
+});
 
 test('autorise la consultation avec deliverers.read', async () => {
   const { token, userId } = await createUserSession(

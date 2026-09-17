@@ -11,12 +11,18 @@ import {
   getDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
 import { getDelivererSections, readDelivererSection } from '../../../../lib/deliverer-detail-navigation.js';
+import { getDelivererMonthlyAchievement } from '../../../../lib/deliverer-monthly-achievement.js';
+import { readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
+import { DELIVERER_OBJECTIVE_READ_PERMISSION, DELIVERER_OBJECTIVE_UPDATE_PERMISSION, getDelivererObjectives } from '../../../../lib/deliverer-objectives.js';
 import { formatDelivererCreatedAt, getDelivererById, requireDelivererEditPermission, validateDelivererListHref } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
 import { buildDelivererToursHref, formatTourDateInput, listToursByDeliverer, readDelivererTourListState } from '../../../../lib/tours.js';
 import { EditingLink, EditingSessionProvider } from '../../components/editing-session.js';
 import DelivererEditForm from './deliverer-edit-form.js';
 import DelivererCreditLimitForm from './deliverer-credit-limit-form.js';
+import DelivererObjectiveForm from './deliverer-objective-form.js';
+import DelivererObjectiveHistory from './deliverer-objective-history.js';
+import DelivererMonthlyAchievement from './deliverer-monthly-achievement.js';
 import { DelivererCashSummary, DelivererExposure } from './deliverer-overview.js';
 import DelivererStatusButton from './deliverer-status-button.js';
 import DelivererTourList from './deliverer-tour-list.js';
@@ -36,16 +42,19 @@ const DelivererPage = async ({ params, searchParams }) => {
   const canReadCash = permissions.includes(CASH_READ_PERMISSION);
   const canReadCompleteCreditExposure = canReadCreditLimit && canReadCash && permissions.includes('pricing.read');
   const canReadTours = permissions.includes('tours.read');
+  const canReadObjectives = permissions.includes(DELIVERER_OBJECTIVE_READ_PERMISSION);
+  const canUpdateObjectives = permissions.includes(DELIVERER_OBJECTIVE_UPDATE_PERMISSION);
   const editing = (Array.isArray(query.modifier) ? query.modifier[0] : query.modifier) === '1';
   await requireDelivererEditPermission({ editing, userId: session.userId });
   const deliverer = await getDelivererById(id, { userId: session.userId });
   if (!deliverer) notFound();
 
-  const sections = getDelivererSections({ canReadCash, canReadCreditLimit, canReadTours });
+  const sections = getDelivererSections({ canReadCash, canReadCreditLimit, canReadObjectives, canReadTours });
   const section = readDelivererSection(query, sections);
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
-  const [standaloneCashSummary, creditLimitResult, tourList] = await Promise.all([
+  const objectiveHistoryState = readObjectiveHistoryState(query);
+  const [standaloneCashSummary, creditLimitResult, tourList, objectives, achievement] = await Promise.all([
     section === 'ensemble' && canReadCash && !canReadCompleteCreditExposure
       ? getDelivererCashSummary({ delivererId: deliverer.id, userId: session.userId }) : null,
     section === 'ensemble' && canReadCompleteCreditExposure
@@ -54,9 +63,13 @@ const DelivererPage = async ({ params, searchParams }) => {
         ? getDelivererCreditLimit({ delivererId: deliverer.id, userId: session.userId }) : null,
     section === 'tournees' && canReadTours
       ? listToursByDeliverer({ delivererId: deliverer.id, ...tourListState, userId: session.userId }) : null,
+    section === 'objectifs' && canReadObjectives
+      ? getDelivererObjectives({ delivererId: deliverer.id, ...objectiveHistoryState, userId: session.userId }) : null,
+    section === 'objectifs' && canReadObjectives
+      ? getDelivererMonthlyAchievement({ delivererId: deliverer.id, userId: session.userId }) : null,
   ]);
   const cashSummary = creditLimitResult?.cashSummary ?? standaloneCashSummary;
-  const hrefForSection = (nextSection) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), returnHref, section: nextSection });
+  const hrefForSection = (nextSection) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveHistoryState, returnHref, section: nextSection });
   const currentHref = hrefForSection(section);
   const latestStatusChange = deliverer.statusHistory.at(-1);
   const trace = [
@@ -89,6 +102,11 @@ const DelivererPage = async ({ params, searchParams }) => {
           {canReadTours && <EditingLink className={styles.overviewLink} href={hrefForSection('tournees')}>Consulter les tournées ↗</EditingLink>}
         </div>}
         {section === 'tournees' && tourList && <><DelivererTourList delivererId={deliverer.id} delivererName={deliverer.name} returnHref={returnHref} {...tourList} /><p className={styles.scope}>Le statut décrit l’avancement de la tournée. Il ne représente pas son état de paiement.</p></>}
+        {section === 'objectifs' && objectives && <div className={styles.overview}>
+          <DelivererObjectiveForm canUpdate={canUpdateObjectives} objectives={objectives} delivererId={deliverer.id} />
+          {achievement && <DelivererMonthlyAchievement achievement={achievement} />}
+          <DelivererObjectiveHistory objectives={objectives} delivererId={deliverer.id} returnHref={returnHref} />
+        </div>}
         {section === 'identification' && <>
           <div className={styles.identityGrid}>
             <DelivererEditForm deliverer={deliverer} canUpdate={canUpdateDeliverer} initiallyOpen={editing} returnHref={currentHref} />

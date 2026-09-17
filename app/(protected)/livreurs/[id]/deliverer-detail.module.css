@@ -99,6 +99,8 @@
 .table td { padding:18px 22px; border-bottom:1px solid #edf0f5; vertical-align:middle; overflow-wrap:anywhere; }
 .table th:first-child { width:40%; }
 .table th:last-child { width:15%; }
+.objectiveTable th:first-child { width:23%; }
+.objectiveTable th:last-child { width:20%; }
 .tourRef { font-family:monospace; font-weight:600; color:var(--blue); }
 .openLink { color:var(--blue); font-size:11px; }
 .tourState { display:inline-flex; border-radius:5px; padding:4px 8px; font-size:10px; font-weight:600; }

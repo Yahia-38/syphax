@@ -4,6 +4,11 @@ import { revalidatePath } from 'next/cache.js';
 import { redirect } from 'next/navigation.js';
 
 import {
+  DELIVERER_OBJECTIVE_UPDATE_PERMISSION,
+  updateDelivererObjective as saveDelivererObjective,
+} from '../../../../lib/deliverer-objectives.js';
+
+import {
   DELIVERER_CREDIT_LIMIT_UPDATE_PERMISSION,
   updateDelivererCreditLimit as saveDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
@@ -22,6 +27,33 @@ import {
 const readTextField = (formData, name) => {
   const value = formData.get(name);
   return typeof value === 'string' ? value : '';
+};
+
+export const updateDelivererObjective = async (delivererId, previousState, formData) => {
+  const session = await requirePermission(DELIVERER_OBJECTIVE_UPDATE_PERMISSION);
+  const values = {
+    amount: readTextField(formData, 'objectiveAmount'),
+    effectiveMonth: readTextField(formData, 'objectiveEffectiveMonth'),
+  };
+  const rawVersion = readTextField(formData, 'objectiveExpectedVersion');
+  const expectedVersion = /^\d+$/u.test(rawVersion) ? Number(rawVersion) : null;
+  const revision = Number.isSafeInteger(previousState?.revision) ? previousState.revision + 1 : 1;
+  try {
+    const result = await saveDelivererObjective({ ...values, delivererId, expectedVersion, updatedBy: session.userId });
+    if (result.stale || (!result.errors && !result.notFound)) revalidatePath(`/livreurs/${delivererId}`);
+    return {
+      errors: result.notFound ? { form: 'Ce livreur n’existe plus.' } : result.errors ?? {},
+      message: result.errors || result.notFound ? null : result.changed
+        ? 'L’objectif mensuel a été enregistré.' : 'L’objectif applicable à ce mois est déjà identique.',
+      revision, stale: Boolean(result.stale), values,
+    };
+  } catch (error) {
+    console.error('Échec de la modification de l’objectif mensuel :', error);
+    return {
+      errors: { form: 'La modification de l’objectif est momentanément indisponible.' },
+      message: null, revision, stale: false, values,
+    };
+  }
 };
 
 const buildDelivererHref = (delivererId, returnHref) => {

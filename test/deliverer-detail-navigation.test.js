@@ -22,7 +22,7 @@ test('sections et choix initial suivent les lectures indépendantes', () => {
 });
 
 test('les retours de tournée conservent chaque section, les filtres et la liste validée', () => {
-  for (const section of ['ensemble', 'tournees', 'identification']) {
+  for (const section of ['ensemble', 'objectifs', 'tournees', 'identification']) {
     const href = buildDelivererToursHref({ delivererId: id, section, query: 'TRN ABC', plannedDate: '2026-09-14', page: 3, returnHref: '/livreurs?q=Atlas&statut=all&page=2' });
     assert.equal(validateTourReturnHref(href, id), href);
     const url = new URL(href, 'http://syphax.local');
@@ -30,6 +30,14 @@ test('les retours de tournée conservent chaque section, les filtres et la liste
     assert.equal(url.searchParams.get('tourneePage'), '3');
     assert.equal(url.searchParams.get('retour'), '/livreurs?q=Atlas&statut=all&page=2');
   }
+});
+
+test('la section objectifs suit sa permission et conserve les filtres dans les retours', () => {
+  assert.deepEqual(getDelivererSections({ canReadObjectives: true }), [['objectifs', 'Objectifs'], ['identification', 'Identification']]);
+  assert.equal(readDelivererSection({ section: 'objectifs' }, getDelivererSections({})), 'identification');
+  const href = buildDelivererToursHref({ delivererId: id, section: 'objectifs', objectiveQuery: 'yahia', objectiveMonth: '2026-10', objectivePage: 2 });
+  assert.equal(validateTourReturnHref(href, id), href);
+  assert.equal(new URL(href, 'http://syphax.local').searchParams.get('objectifPage'), '2');
 });
 
 test('les retours restent fermés aux destinations et paramètres arbitraires', () => {
