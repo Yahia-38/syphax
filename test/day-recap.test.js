@@ -140,7 +140,7 @@ test('the attention list names what blocks the day, worst first', () => {
   const record = (overrides) => ({
     deliverer: { name: 'Brahim' },
     expenseDeclarationStatus: 'MISSING',
-    href: '/tournees/1',
+    id: '1',
     reference: 'TRN-1',
     remainingDueInCentimes: null,
     ...overrides,
@@ -152,11 +152,14 @@ test('the attention list names what blocks the day, worst first', () => {
     record({ anomaly: 'OVERPAID', reference: 'TRN-4', status: 'CLOSED' }),
     record({ reference: 'TRN-5', status: 'CANCELLED' }),
     record({ expenseDeclarationStatus: 'DECLARED', reference: 'TRN-6', remainingDueInCentimes: 0, status: 'COUNTED' }),
-  ], { date: '2026-09-16', today });
+  ], { date: '2026-09-16', returnHref: '/?jour=2026-09-16&jourEtat=impayes', today });
   assert.deepEqual(alerts.map(({ code }) => code), [
     'ANOMALY', 'NOT_RETURNED', 'REMAINING_DUE', 'MISSING_EXPENSES', 'TO_CLOSE',
   ]);
   assert.match(alerts[0].label, /versements supérieurs/u);
+  const attention = new URL(alerts[0].href, 'https://syphax.invalid');
+  assert.equal(attention.pathname, '/tournees/1');
+  assert.equal(attention.searchParams.get('retour'), '/?jour=2026-09-16&jourEtat=impayes');
   // A tour still out on the current day is expected, not an alert.
   const runningDay = buildDayAlerts([record({ reference: 'TRN-3', status: 'LOADED' })], { date: today, today });
   assert.deepEqual(runningDay, []);

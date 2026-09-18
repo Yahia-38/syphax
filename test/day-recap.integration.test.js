@@ -244,7 +244,9 @@ test('each row carries its stages and the number that matters', async () => {
   assert.deepEqual(brahim.stages, [true, true, false, true]);
   assert.equal(brahim.headline.label, 'Reste à encaisser');
   assert.equal(brahim.headline.amountInCentimes, (90 * 9_000) - 20_000 - 700_000);
-  assert.equal(brahim.href, `/tournees/${brahim.id}`);
+  const opened = new URL(brahim.href, 'https://syphax.invalid');
+  assert.equal(opened.pathname, `/tournees/${brahim.id}`);
+  assert.equal(opened.searchParams.get('retour'), `/?jour=${DAY}`);
   assert.deepEqual(oussama.stages, [true, false, null, false]);
   assert.equal(oussama.headline.label, 'En tournée');
   assert.equal(oussama.headline.amountInCentimes, 40 * SALE_PRICE.amountInCentimes);

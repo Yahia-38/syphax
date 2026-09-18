@@ -40,6 +40,7 @@ import {
   formatTourDate,
   formatTourStatus,
   getTourById,
+  describeTourReturn,
   validateTourReturnHref,
 } from '../../../../lib/tours.js';
 import TourDetail from './tour-detail.js';
@@ -142,6 +143,7 @@ const TourPage = async ({ params, searchParams }) => {
     ? await getTourClosurePreview({ tourId: tour.id, userId: session.userId })
     : null;
   const returnHref = validateTourReturnHref(query.retour, tour.delivererId);
+  const back = describeTourReturn(returnHref);
   // Quantities are shown in each product's default sale unit, with base-unit labels for remainders.
   const displayUnits = permissions.includes('packaging.read')
     ? await getProductDisplayUnits([
@@ -184,7 +186,7 @@ const TourPage = async ({ params, searchParams }) => {
 
   return <TourDetail tourId={tour.id} returnHref={returnHref} defaultView={readTourView(query.vue, tour.status)} priority={priority}
     header={<header>
-      {canReadDeliverer && <EditingLink className={styles.back} href={returnHref}>← Retour à la fiche livreur</EditingLink>}
+      {(back.target === 'dayRecap' || canReadDeliverer) && <EditingLink className={styles.back} href={returnHref}>{back.label}</EditingLink>}
       <p className={styles.eyebrow}>Fiche tournée</p>
       <h1>{tour.reference}</h1>
       <p className={styles.meta}><span className={styles.badge} data-status={tour.status}>{formatTourStatus(tour.status)}</span><span>{tour.delivererName} · {tour.delivererCode}</span><span>Prévue le {formatTourDate(tour.plannedDate)}</span></p>
