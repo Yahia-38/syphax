@@ -70,10 +70,10 @@ const ProfitabilityFilters = ({ delivererOptions, filtered, resetHref, shortcuts
           <label htmlFor='profitability-deliverer'>Livreur</label>
           <select defaultValue={state.delivererId} id='profitability-deliverer' name='livreur'>
             <option value=''>Tous les livreurs</option>
-            {state.delivererId && !selectedDeliverer && <option value={state.delivererId}>Livreur sans tournée comptée</option>}
             {delivererOptions.map((deliverer) => (
               <option key={deliverer.id} value={deliverer.id}>{deliverer.name}{deliverer.code && ` · ${deliverer.code}`}</option>
             ))}
+            {state.delivererId && !selectedDeliverer && <option value={state.delivererId}>Livreur sans tournée comptée</option>}
           </select>
         </div>
         <div>
@@ -89,7 +89,7 @@ const ProfitabilityFilters = ({ delivererOptions, filtered, resetHref, shortcuts
         </div>
         <div className={styles.filterActions}>
           <button className={styles.primary} type='submit'>Appliquer</button>
-          {(filtered || draft) && <Link href={resetHref} onClick={discardDraft}>Réinitialiser</Link>}
+          {filtered && <Link href={resetHref} onClick={discardDraft}>Réinitialiser</Link>}
         </div>
       </form>
       <p aria-live='polite' className={styles.draftNote}>

@@ -68,14 +68,16 @@ const TotalValue = ({ total }) => total.state === PROFITABILITY_TOTAL_STATES.UNK
   ? 'Non calculable'
   : <Amount value={total.amountInCentimes} />;
 
-const describeTotalGap = (total) => {
-  if (total.state === PROFITABILITY_TOTAL_STATES.PARTIAL) {
-    return countLabel(total.unknownCount, 'montant inconnu', 'montants inconnus');
-  }
+const TOTAL_GAPS = {
+  OVERFLOW: () => 'Capacité numérique dépassée',
+  PARTIAL: ({ unknownCount }) => countLabel(unknownCount, 'montant inconnu', 'montants inconnus'),
+  UNKNOWN: () => 'Aucun montant connu',
+};
 
-  return total.state === PROFITABILITY_TOTAL_STATES.OVERFLOW
-    ? 'Capacité de calcul dépassée : consultez les montants par tournée'
-    : null;
+const RESULT_WARNINGS = {
+  OVERFLOW: () => 'Le total dépasse la capacité numérique de calcul. Consultez les montants individuels.',
+  PARTIAL: ({ unknownCount }) => `${countLabel(unknownCount, 'tournée')} sans résultat calculable. Ce montant couvre uniquement les autres tournées.`,
+  UNKNOWN: () => 'Aucun résultat ne peut être calculé pour cette sélection.',
 };
 
 const ResultCard = ({ total }) => {
@@ -89,19 +91,12 @@ const ResultCard = ({ total }) => {
       </div>
       <p className={styles.resultValue}><TotalValue total={total} /></p>
       <p className={styles.resultExact}>
-        {total.state === PROFITABILITY_TOTAL_STATES.UNKNOWN && 'Aucune tournée de la sélection n’a encore de résultat connu.'}
-        {total.state === PROFITABILITY_TOTAL_STATES.OVERFLOW && 'Le total dépasse la capacité de calcul : consultez les montants par tournée.'}
-        {total.amountInCentimes !== null && <ExactAmountLine fallback='Marge brute moins frais déclarés' value={total.amountInCentimes} />}
+        {total.state === PROFITABILITY_TOTAL_STATES.UNKNOWN
+          ? 'Les données nécessaires ne sont pas toutes disponibles.'
+          : <ExactAmountLine fallback='Marge brute moins frais déclarés' value={total.amountInCentimes} />}
       </p>
       <p className={styles.coverage}>{formatProfitabilityCoverage(total)}</p>
-      {total.state === PROFITABILITY_TOTAL_STATES.PARTIAL && (
-        <p className={styles.resultWarning}>
-          {total.unknownCount > 1
-            ? `${total.unknownCount} tournées n’ont pas de résultat connu : ce montant ne couvre que les autres.`
-            : '1 tournée n’a pas de résultat connu : ce montant ne couvre que les autres.'}
-          {' '}Aucun montant inconnu n’est estimé.
-        </p>
-      )}
+      {RESULT_WARNINGS[total.state] && <p className={styles.resultWarning}>{RESULT_WARNINGS[total.state](total)}</p>}
     </article>
   );
 };
@@ -118,7 +113,7 @@ const Summary = ({ totals }) => {
           {METRICS.map(({ key, label }) => {
             const total = describeProfitabilityTotal(totals[key], tourCount);
             const partial = total.state !== PROFITABILITY_TOTAL_STATES.COMPLETE && total.state !== PROFITABILITY_TOTAL_STATES.EMPTY;
-            const gap = describeTotalGap(total);
+            const gap = TOTAL_GAPS[total.state]?.(total);
 
             return (
               <div className={`${styles.card} ${styles.metric} ${partial ? styles.partial : ''}`} key={key}>
@@ -134,10 +129,10 @@ const Summary = ({ totals }) => {
       <div className={styles.formulaStrip}>
         <p>
           {areProfitabilityTotalsComplete(totals)
-            ? 'Marge brute = ventes − coût des ventes. Résultat après frais = marge brute − frais déclarés.'
+            ? 'Résultat après frais = ventes − coût des ventes − frais déclarés.'
             : 'Les indicateurs partiels peuvent couvrir des tournées différentes : ne soustrayez pas leurs totaux entre eux.'}
         </p>
-        {rate !== null && <p className={styles.rate}>Marge brute : {formatRate(rate)} % des ventes</p>}
+        <p className={styles.rate}>{rate === null ? 'Marge brute = ventes − coût des ventes' : `Marge brute : ${formatRate(rate)} % des ventes`}</p>
       </div>
     </>
   );
@@ -149,13 +144,11 @@ const Notice = ({ counts }) => (
     <div>
       <strong>Une partie des données reste à compléter</strong>
       <p>
-        {counts.pendingExpenses === 1 && '1 tournée attend sa déclaration de frais : son résultat n’est pas encore connu. '}
-        {counts.pendingExpenses > 1 && `${counts.pendingExpenses} tournées attendent leur déclaration de frais : leur résultat n’est pas encore connu. `}
-        {counts.incomplete === 1 && '1 tournée porte une donnée manquante ou incohérente, indiquée dans sa ligne. '}
-        {counts.incomplete > 1 && `${counts.incomplete} tournées portent une donnée manquante ou incohérente, indiquée dans leur ligne. `}
-        Les montants connus restent affichés ; un montant inconnu n’est jamais compté comme zéro.
+        {countLabel(counts.pendingExpenses, 'tournée')} {counts.pendingExpenses > 1 ? 'attendent' : 'attend'} une déclaration de frais ;
+        {' '}{countLabel(counts.incomplete, 'tournée')} {counts.incomplete > 1 ? 'ont' : 'a'} des données manquantes ou incohérentes.
+        {' '}Un montant inconnu n’est jamais assimilé à zéro.
       </p>
-      {counts.incomplete > 0 && <p>Une tournée sans date de comptage fiable reste visible, en tête de liste, et son problème est signalé dans sa ligne.</p>}
+      {counts.incomplete > 0 && <p>Les tournées sans date de comptage fiable restent visibles et sont signalées dans leur ligne.</p>}
     </div>
   </div>
 );
@@ -164,29 +157,21 @@ const PaginationLink = ({ children, disabled, href }) => disabled
   ? <span aria-disabled='true' className={styles.disabled}>{children}</span>
   : <Link href={href}>{children}</Link>;
 
-// The current month says it has no counted tour yet; a narrower selection
-// offers to widen it.
-const Empty = ({ allPeriodsHref, onCurrentMonth, state }) => {
-  const narrowed = Boolean((!onCurrentMonth && (state.dateFrom || state.dateTo)) || state.delivererId || state.status || state.query);
-
-  if (narrowed) {
-    return (
-      <div className={styles.empty}>
-        <h3>Aucune tournée pour ces critères</h3>
-        <p>Élargissez la période ou retirez un filtre.</p>
-        <Link href={PROFITABILITY_PATHNAME}>Réinitialiser les filtres</Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.empty}>
-      <h3>{onCurrentMonth ? 'Aucune tournée comptée ce mois-ci' : 'Aucune tournée comptée'}</h3>
-      <p>La rentabilité d’une tournée apparaît ici dès que son comptage est enregistré.</p>
-      {onCurrentMonth && <Link href={allPeriodsHref}>Voir toutes les périodes</Link>}
-    </div>
-  );
-};
+// The default selection says it has no counted tour yet; any other offers to
+// go back to it.
+const Empty = ({ allPeriodsHref, filtered }) => filtered ? (
+  <div className={styles.empty}>
+    <h3>Aucune tournée pour ces critères</h3>
+    <p>Élargissez la période ou retirez un filtre.</p>
+    <Link href={PROFITABILITY_PATHNAME}>Réinitialiser les filtres</Link>
+  </div>
+) : (
+  <div className={styles.empty}>
+    <h3>Aucune tournée comptée ce mois-ci</h3>
+    <p>La rentabilité apparaît ici dès que le comptage est enregistré.</p>
+    <Link href={allPeriodsHref}>Voir toutes les périodes</Link>
+  </div>
+);
 
 const Method = () => (
   <>
@@ -195,23 +180,23 @@ const Method = () => (
       <div className={styles.methodGrid}>
         <div>
           <h3>Ventes et coût des ventes</h3>
-          <p>Montants enregistrés au comptage, à partir des prix et des coûts figés au chargement. Les coûts actuels du catalogue ne servent pas à recalculer ces tournées.</p>
+          <p>Montants enregistrés au comptage, à partir des prix et coûts figés lors du chargement. Les coûts actuels du catalogue ne sont pas utilisés pour recalculer ces tournées.</p>
         </div>
         <div>
           <h3>Marge et résultat après frais</h3>
-          <p>Marge brute = ventes − coût des ventes. Résultat après frais = marge brute − frais déclarés de la tournée. Les versements et les retraits de caisse n’entrent pas dans ce résultat.</p>
+          <p>Marge brute = ventes − coût des ventes. Résultat après frais = marge brute − frais déclarés de la tournée. Les versements et retraits de caisse n’entrent pas dans ce calcul.</p>
         </div>
         <div>
           <h3>Lecture courante et dinars exacts</h3>
-          <p>À partir de 10 000 DA, la lecture courante compte en millions : 1 million = 10 000 DA. « Dinars exacts » écrit tous les montants en DA ; les détails d’une tournée les donnent toujours en DA.</p>
+          <p>À partir de 10 000 DA, la lecture courante utilise les millions : 1 million = 10 000 DA. Le bouton « Dinars exacts » affiche les montants en DA. Les détails d’une ligne les présentent aussi en DA.</p>
         </div>
         <div>
-          <h3>Totaux, dates et qualité des données</h3>
-          <p>Les totaux couvrent toute la sélection, toutes pages confondues, et n’additionnent que les montants connus. La période porte sur la date de comptage, à l’heure d’Algérie. « Définitif » décrit le calcul de rentabilité ; « Terminée » décrit le statut de la tournée.</p>
+          <h3>Date et qualité des données</h3>
+          <p>La période porte sur la date de comptage, à l’heure d’Algérie. Une tournée sans date fiable reste visible. « Définitif » décrit le calcul de rentabilité ; « Terminée » décrit le statut de la tournée.</p>
         </div>
       </div>
     </details>
-    <p className={styles.bottomNote}>Seules les tournées comptées ou terminées sont incluses. Les données inconnues sont signalées ; des frais déclarés à zéro restent un montant connu.</p>
+    <p className={styles.bottomNote}>Seules les tournées comptées ou terminées sont incluses. Les données inconnues sont signalées ; les déclarations de frais à zéro restent des montants connus.</p>
   </>
 );
 
@@ -288,36 +273,24 @@ const ProfitabilityReport = ({ currentHref, currentMonth, report, state, today }
             <h2 id='profitability-title'>Détail par tournée</h2>
             <p>{countLabel(totalItems, 'tournée')} · Totaux sur toute la sélection, toutes pages confondues</p>
           </div>
-          {counts.tours > 0 && (
-            <ul aria-label='États de rentabilité de la sélection' className={styles.counts}>
-              <li className={`${styles.badge} ${styles.positive}`}>{countLabel(counts.final, 'définitive')}</li>
-              <li className={`${styles.badge} ${styles.warning}`}>{counts.pendingExpenses} frais à déclarer</li>
-              <li className={`${styles.badge} ${styles.danger}`}>{countLabel(counts.incomplete, 'incomplète')}</li>
-            </ul>
-          )}
+          <ul aria-label='États de rentabilité de la sélection' className={styles.counts}>
+            <li className={`${styles.badge} ${styles.positive}`}>{countLabel(counts.final, 'définitive')}</li>
+            <li className={`${styles.badge} ${styles.warning}`}>{counts.pendingExpenses} frais à déclarer</li>
+            <li className={`${styles.badge} ${styles.danger}`}>{countLabel(counts.incomplete, 'incomplète')}</li>
+          </ul>
         </div>
 
-        {rows.length > 0 ? (
-          <>
-            <ProfitabilityTours caption={`Rentabilité par tournée, page ${page} sur ${totalPages}`} key={currentHref} tours={rows} />
-            <div className={styles.footer}>
-              <p>{firstItem}–{lastItem} sur {countLabel(totalItems, 'tournée')}{state.query && <> pour « {state.query} »</>}</p>
-              {totalPages > 1 && (
-                <nav aria-label='Pagination de la rentabilité' className={styles.pagination}>
-                  <PaginationLink disabled={page === 1} href={href({ page: page - 1 })}><span aria-hidden='true'>←</span> Précédent</PaginationLink>
-                  <span>Page {page} sur {totalPages}</span>
-                  <PaginationLink disabled={page === totalPages} href={href({ page: page + 1 })}>Suivant <span aria-hidden='true'>→</span></PaginationLink>
-                </nav>
-              )}
-            </div>
-          </>
-        ) : (
-          <Empty
-            allPeriodsHref={buildProfitabilityHref(allPeriods)}
-            onCurrentMonth={onCurrentMonth}
-            state={state}
-          />
-        )}
+        {rows.length > 0
+          ? <ProfitabilityTours caption='Ventes, coûts, marge, frais et résultat des tournées de la page' key={currentHref} tours={rows} />
+          : <Empty allPeriodsHref={buildProfitabilityHref(allPeriods)} filtered={filtered} />}
+        <div className={styles.footer}>
+          <p>{totalItems > 0 ? `${firstItem}–${lastItem} sur ${countLabel(totalItems, 'tournée')}` : '0 tournée'}</p>
+          <nav aria-label='Pagination de la rentabilité' className={styles.pagination}>
+            <PaginationLink disabled={page <= 1} href={href({ page: page - 1 })}><span aria-hidden='true'>←</span> Précédent</PaginationLink>
+            <span>Page {page} sur {totalPages}</span>
+            <PaginationLink disabled={page >= totalPages} href={href({ page: page + 1 })}>Suivant <span aria-hidden='true'>→</span></PaginationLink>
+          </nav>
+        </div>
       </section>
 
       <Method />

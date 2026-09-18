@@ -25,7 +25,7 @@ const AMOUNTS = [
   { field: 'costOfGoodsSoldInCentimes', label: 'Coût des ventes' },
   { field: 'marginInCentimes', label: 'Marge brute' },
   { field: 'expensesInCentimes', label: 'Frais déclarés' },
-  { field: 'resultInCentimes', label: 'Résultat après frais', result: true },
+  { field: 'resultInCentimes', heading: 'Résultat', label: 'Résultat après frais', result: true },
 ];
 
 const declared = (tour) => tour.expenseDeclarationStatus === 'DECLARED';
@@ -40,15 +40,9 @@ const AmountCell = ({ field, label, result, tour }) => (
   </td>
 );
 
-const ExactAmount = ({ field, tour }) => {
-  if (field === 'expensesInCentimes' && !declared(tour)) return <span className={styles.unknown}>{expenseState(tour)}</span>;
-
-  const exact = formatProfitabilityExactAmount(tour[field]);
-
-  return exact
-    ? <span className={tour[field] < 0 ? styles.negative : undefined}>{exact}</span>
-    : <span className={styles.unknown}>Inconnu</span>;
-};
+const exactAmount = (field, tour) => field === 'expensesInCentimes' && !declared(tour)
+  ? expenseState(tour)
+  : formatProfitabilityExactAmount(tour[field]) ?? 'Non calculable';
 
 const DetailNote = ({ tour }) => {
   if (tour.issues.length > 0) {
@@ -58,7 +52,7 @@ const DetailNote = ({ tour }) => {
   return (
     <p className={styles.detailNote}>
       {tour.profitabilityStatus === 'PENDING_EXPENSES'
-        ? 'Les frais de cette tournée restent à déclarer : son résultat après frais n’est pas encore connu.'
+        ? 'Les frais restent à déclarer. Le résultat après frais n’est pas encore connu.'
         : 'Résultat après frais = marge brute − frais déclarés.'}
     </p>
   );
@@ -83,7 +77,7 @@ const ProfitabilityTours = ({ caption, tours }) => {
       <thead>
         <tr>
           <th scope='col'>Tournée / comptage</th>
-          {AMOUNTS.map(({ field, label }) => <th className={styles.numeric} key={field} scope='col'>{label}</th>)}
+          {AMOUNTS.map(({ field, heading, label }) => <th className={styles.numeric} key={field} scope='col'>{heading ?? label}</th>)}
           <th scope='col'>État de rentabilité</th>
         </tr>
       </thead>
@@ -101,7 +95,7 @@ const ProfitabilityTours = ({ caption, tours }) => {
                   <Link href={tour.countingHref}>{tour.reference}</Link>
                   <span>{tour.delivererName}</span>
                   <small>{[tour.delivererCode, tour.statusLabel].filter(Boolean).join(' · ')}</small>
-                  <small className={tour.countedAtLabel ? undefined : styles.unknown}>{tour.countedAtLabel ?? 'Date de comptage inconnue'}</small>
+                  <small className={styles.countedDate}>{tour.countedAtLabel ?? 'Date inconnue'}</small>
                 </th>
                 {AMOUNTS.map((amount) => <AmountCell key={amount.field} tour={tour} {...amount} />)}
                 <td className={styles.state}>
@@ -133,7 +127,7 @@ const ProfitabilityTours = ({ caption, tours }) => {
                         {AMOUNTS.map(({ field, label }) => (
                           <div key={field}>
                             <dt>{label}</dt>
-                            <dd><ExactAmount field={field} tour={tour} /></dd>
+                            <dd className={tour[field] < 0 ? styles.negative : undefined}>{exactAmount(field, tour)}</dd>
                           </div>
                         ))}
                       </dl>

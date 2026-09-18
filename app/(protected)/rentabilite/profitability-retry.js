@@ -11,7 +11,7 @@ const ProfitabilityRetry = () => {
   const [pending, startTransition] = useTransition();
 
   return (
-    <button className={styles.primary} disabled={pending} onClick={() => startTransition(() => router.refresh())} type='button'>
+    <button className={styles.button} disabled={pending} onClick={() => startTransition(() => router.refresh())} type='button'>
       {pending ? 'Lecture en cours…' : 'Réessayer'}
     </button>
   );

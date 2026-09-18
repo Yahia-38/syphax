@@ -84,7 +84,7 @@ const ProfitabilityPage = async ({ searchParams }) => {
     if (missingPermissions.length > 0) {
       return (
         <Access title='Des droits de lecture sont nécessaires'>
-          <p>La rentabilité réunit des données protégées par d’autres droits : aucun chiffre n’est affiché sans l’ensemble de ces autorisations. Il vous manque :</p>
+          <p>Aucun chiffre de rentabilité n’est affiché sans l’ensemble des autorisations.</p>
           <ul>{missingPermissions.map((permission) => <li key={permission}>{describePermission(permission)}</li>)}</ul>
         </Access>
       );
@@ -93,7 +93,7 @@ const ProfitabilityPage = async ({ searchParams }) => {
     if (readError) {
       return (
         <Access title='La rentabilité n’a pas pu être chargée'>
-          <p>Vos critères sont conservés. Réessayez dans un instant.</p>
+          <p>Vos critères sont conservés.</p>
           <ProfitabilityRetry />
         </Access>
       );

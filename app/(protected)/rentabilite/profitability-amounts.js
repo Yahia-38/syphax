@@ -31,21 +31,19 @@ export const AmountModeToggle = () => {
   );
 };
 
-export const Amount = ({ unknownLabel = 'Inconnu', value }) => {
+export const Amount = ({ value }) => {
   const exact = useExactAmounts();
   const formatted = exact ? formatProfitabilityExactAmount(value) : formatProfitabilityAmount(value);
 
   return formatted
-    ? <span className={value < 0 ? styles.negative : undefined} title={exact ? undefined : formatProfitabilityExactAmount(value)}>{formatted}</span>
-    : <span className={styles.unknown}>{unknownLabel}</span>;
+    ? <span className={value < 0 ? styles.negative : undefined} title={formatProfitabilityExactAmount(value)}>{formatted}</span>
+    : <span>Non calculable</span>;
 };
 
-// The exact amount stays readable without hovering, next to the usual reading.
+// The usual reading keeps the exact amount readable without hovering.
 export const ExactAmountLine = ({ fallback, value }) => {
   const exact = useExactAmounts();
   const formatted = formatProfitabilityExactAmount(value);
-  // Below 10 000 DA the usual reading is already exact.
-  const differs = formatted && formatted !== formatProfitabilityAmount(value);
 
-  return <>{!exact && differs ? `Soit ${formatted}` : fallback}</>;
+  return <>{!exact && formatted ? formatted : fallback}</>;
 };

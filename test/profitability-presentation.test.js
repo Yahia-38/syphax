@@ -32,8 +32,8 @@ test('sans montant connu, le total n’est pas lu comme zéro', () => {
 
   assert.equal(unknown.state, 'UNKNOWN');
   assert.equal(unknown.amountInCentimes, null);
-  assert.equal(formatProfitabilityCoverage(unknown), '0 / 4 tournées · aucun montant connu');
-  assert.equal(getProfitabilityResultTone(unknown), 'neutral');
+  assert.equal(formatProfitabilityCoverage(unknown), '0 / 4 tournées · partiel');
+  assert.equal(getProfitabilityResultTone(unknown), 'partial');
 });
 
 test('un zéro connu reste un montant, une sélection vide et un dépassement se distinguent', () => {
@@ -43,16 +43,17 @@ test('un zéro connu reste un montant, une sélection vide et un dépassement se
 
   assert.equal(zero.state, 'COMPLETE');
   assert.equal(zero.amountInCentimes, 0);
-  assert.equal(getProfitabilityResultTone(zero), 'neutral');
+  assert.equal(getProfitabilityResultTone(zero), 'positive');
   assert.equal(empty.state, 'EMPTY');
   assert.equal(formatProfitabilityCoverage(empty), 'Aucune tournée dans la sélection');
+  assert.equal(getProfitabilityResultTone(empty), 'positive');
   assert.equal(overflow.state, 'OVERFLOW');
   assert.equal(overflow.amountInCentimes, null);
-  assert.equal(formatProfitabilityCoverage(overflow), '3 / 3 tournées · total non calculable');
-  assert.equal(getProfitabilityResultTone(overflow), 'neutral');
+  assert.equal(formatProfitabilityCoverage(overflow), 'Total non calculable · capacité numérique dépassée');
+  assert.equal(getProfitabilityResultTone(overflow), 'partial');
 });
 
-test('le résultat garde sa couleur : perte en rouge, partiel en ambre, gain complet en vert', () => {
+test('le résultat garde sa couleur : perte en rouge, partiel en ambre, sinon en vert', () => {
   assert.equal(getProfitabilityResultTone(describeProfitabilityTotal(total(-50_000), 2)), 'negative');
   assert.equal(getProfitabilityResultTone(describeProfitabilityTotal(total(-50_000, 1), 2)), 'negative');
   assert.equal(getProfitabilityResultTone(describeProfitabilityTotal(total(50_000, 1), 2)), 'partial');
