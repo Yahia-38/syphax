@@ -9,6 +9,7 @@ import {
   formatDayRecapDate,
   formatDayTourReference,
   normalizeDayRecapDate,
+  projectDayAlerts,
   readDayRecapState,
   readDayTourStages,
   shiftDayRecapDate,
@@ -175,4 +176,59 @@ test('long tour references are shortened to their distinctive tail', () => {
 
 test('the financial filter is only offered with the cash permissions', () => {
   assert.deepEqual(Object.keys(DAY_RECAP_FILTERS), ['', 'tournee', 'rentres', 'impayes', 'terminees']);
+});
+
+test('the alerts only keep what the reader may see, several per tour', () => {
+  const record = (overrides) => ({
+    deliverer: { name: 'Brahim' },
+    expenseDeclarationStatus: 'MISSING',
+    id: '1',
+    reference: 'TRN-6AAA3768542F593F7C689492',
+    remainingDueInCentimes: null,
+    ...overrides,
+  });
+  const alerts = buildDayAlerts([
+    record({ anomaly: 'OVERPAID', id: '2', status: 'CLOSED' }),
+    record({ anomaly: 'MISSING_COUNTING', id: '3', status: 'COUNTED' }),
+    record({ remainingDueInCentimes: 3_216_300, status: 'COUNTED' }),
+    record({ expenseDeclarationStatus: 'DECLARED', id: '4', remainingDueInCentimes: 0, status: 'COUNTED' }),
+  ], { date: today, today });
+  const full = projectDayAlerts(alerts, { canReadCash: true, canReadExpenses: true });
+  assert.deepEqual(full.map(({ code }) => code), [
+    'ANOMALY', 'ANOMALY', 'REMAINING_DUE', 'MISSING_EXPENSES', 'TO_CLOSE',
+  ]);
+  // One tour can raise several points: the count is of points, not tours.
+  assert.equal(full.filter(({ href }) => href.startsWith('/tournees/1?')).length, 2);
+  assert.equal(new Set(full.map(({ id }) => id)).size, full.length);
+  assert.deepEqual(Object.keys(full[0]).sort(), [
+    'code', 'deliverer', 'href', 'id', 'label', 'reference', 'shortReference', 'type',
+  ]);
+  assert.equal(full[0].shortReference, 'TRN-…689492');
+  assert.equal(full[0].type, 'Données à vérifier');
+  assert.match(full[0].label, /versements supérieurs/u);
+
+  const operations = projectDayAlerts(alerts);
+  assert.deepEqual(operations.map(({ code }) => code), ['ANOMALY', 'ANOMALY']);
+  assert.equal(operations[0].label, 'données à vérifier');
+  assert.match(operations[1].label, /comptage définitif introuvable/u);
+
+  const cashOnly = projectDayAlerts(alerts, { canReadCash: true });
+  assert.deepEqual(cashOnly.map(({ code }) => code), ['ANOMALY', 'ANOMALY']);
+  assert.equal(cashOnly[0].label, 'données à vérifier');
+
+  const expensesOnly = projectDayAlerts(alerts, { canReadExpenses: true });
+  assert.deepEqual(expensesOnly.map(({ code }) => code), [
+    'ANOMALY', 'ANOMALY', 'MISSING_EXPENSES', 'TO_CLOSE',
+  ]);
+});
+
+test('a closed tour that still owes keeps its settlement pending', () => {
+  assert.deepEqual(
+    readDayTourStages({ amountPaidInCentimes: 100, remainingDueInCentimes: 50, status: 'CLOSED' }),
+    [true, true, false, true],
+  );
+  assert.deepEqual(
+    readDayTourStages({ amountPaidInCentimes: 100, financialsVisible: false, remainingDueInCentimes: 50, status: 'CLOSED' }),
+    [true, true, null, true],
+  );
 });
