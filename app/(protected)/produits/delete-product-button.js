@@ -7,12 +7,12 @@ import { useEditingSession } from '../components/editing-session.js';
 
 const INITIAL_STATE = { error: null };
 
-const DeleteProductButton = ({ compact = false, product }) => {
+const DeleteProductButton = ({ compact = false, product, returnHref }) => {
   const dialogRef = useRef(null);
   const editingSession = useEditingSession();
   const triggerRef = useRef(null);
   const titleId = useId();
-  const deleteProductWithId = deleteProduct.bind(null, product.id);
+  const deleteProductWithId = deleteProduct.bind(null, product.id, returnHref);
   const [state, formAction, pending] = useActionState(
     deleteProductWithId,
     INITIAL_STATE,

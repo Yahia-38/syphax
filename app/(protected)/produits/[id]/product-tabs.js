@@ -1,3 +1,4 @@
+import { buildProductHref } from '../../../../lib/product-list-navigation.js';
 import { EditingLink } from '../../components/editing-session.js';
 import ProductIcon from './product-icon.js';
 import styles from './product-detail.module.css';
@@ -15,6 +16,7 @@ const ProductTabs = ({
   canReadPricing,
   canReadPurchaseCosts,
   productId,
+  returnHref,
 }) => (
   <nav
     aria-label='Sections de la fiche produit'
@@ -35,7 +37,11 @@ const ProductTabs = ({
         return (
           <EditingLink
             aria-current={isActive ? 'page' : undefined}
-            href={`/produits/${productId}?section=${tab.section}`}
+            href={buildProductHref({
+              productId,
+              returnHref,
+              section: tab.section,
+            })}
             id={`${tab.section}-tab`}
             key={tab.section}
           >

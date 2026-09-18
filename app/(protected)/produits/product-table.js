@@ -8,6 +8,11 @@ import {
   getDisplayUnitLabel,
   getQuantityInDisplayUnit,
 } from '../../../lib/product-display-unit.js';
+import {
+  buildNewProductHref,
+  buildProductHref,
+  buildProductListHref,
+} from '../../../lib/product-list-navigation.js';
 import styles from './product-table.module.css';
 import {
   BASE_UNIT_LABELS,
@@ -157,17 +162,19 @@ const SortableHeader = ({
 const ProductTable = ({
   canCreateProduct,
   canReadPricing,
-  initialQuery,
+  initialState,
   products,
 }) => {
   const searchRef = useRef(null);
-  const [query, setQuery] = useState(initialQuery);
-  const [stockStatus, setStockStatus] = useState('ALL');
-  const [unit, setUnit] = useState('ALL');
-  const [onlyMissingPrice, setOnlyMissingPrice] = useState(false);
-  const [sortKey, setSortKey] = useState('designation');
-  const [sortDir, setSortDir] = useState('asc');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [query, setQuery] = useState(initialState.query);
+  const [stockStatus, setStockStatus] = useState(initialState.stock);
+  const [unit, setUnit] = useState(initialState.unit);
+  const [onlyMissingPrice, setOnlyMissingPrice] = useState(
+    initialState.missingPrice,
+  );
+  const [sortKey, setSortKey] = useState(initialState.sortKey);
+  const [sortDir, setSortDir] = useState(initialState.sortDir);
+  const [currentPage, setCurrentPage] = useState(initialState.page);
 
   const usedUnits = useMemo(() => {
     const usedUnitCodes = new Set(products.map((product) => product.baseUnit));
@@ -215,6 +222,26 @@ const ProductTable = ({
     pageProducts,
     totalPages,
   } = paginateProducts(filteredProducts, currentPage);
+  const listHref = buildProductListHref({
+    missingPrice: onlyMissingPrice,
+    page: activePage,
+    query,
+    sortDir,
+    sortKey,
+    stock: stockStatus,
+    unit,
+  });
+
+  // The address bar follows the table, so a fiche return, a refresh and the
+  // browser back button all land on the view that was left.
+  useEffect(() => {
+    window.history.replaceState(
+      { syphaxEditingIndex: window.history.state?.syphaxEditingIndex },
+      '',
+      listHref,
+    );
+  }, [listHref]);
+
   const sortOptions = canReadPricing
     ? [
         ...BASE_SORT_OPTIONS,
@@ -464,7 +491,10 @@ const ProductTable = ({
                     <td className={styles.identityCell}>
                       <Link
                         className={styles.productLink}
-                        href={`/produits/${product.id}`}
+                        href={buildProductHref({
+                          productId: product.id,
+                          returnHref: listHref,
+                        })}
                       >
                         <span aria-hidden='true' className={styles.productIcon}>
                           <svg
@@ -526,7 +556,10 @@ const ProductTable = ({
                       <Link
                         aria-label={`Voir la fiche de ${product.designation}`}
                         className={styles.detailsLink}
-                        href={`/produits/${product.id}`}
+                        href={buildProductHref({
+                          productId: product.id,
+                          returnHref: listHref,
+                        })}
                       >
                         <span>Fiche</span>
                         <span aria-hidden='true'>↗</span>
@@ -589,7 +622,7 @@ const ProductTable = ({
                 Voir tous les produits
               </button>
             ) : canCreateProduct ? (
-              <Link className={styles.primaryButton} href='/produits/nouveau'>
+              <Link className={styles.primaryButton} href={buildNewProductHref(listHref)}>
                 Créer un produit
               </Link>
             ) : null}

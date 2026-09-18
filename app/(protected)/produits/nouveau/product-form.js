@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getPackagingUsageLabel, PACKAGING_USAGES } from '../../../../lib/product-packaging.js';
+import { buildProductHref } from '../../../../lib/product-list-navigation.js';
 
 import { EditingButtons, useInlineSave } from '../../components/editable-card.js';
 import { EditingLink, useEditingSession } from '../../components/editing-session.js';
@@ -160,11 +161,11 @@ const CreationForm = ({ baseUnits, onCreated, returnHref }) => {
   );
 };
 
-const ProductForm = ({ baseUnits, canReadProducts }) => {
+const ProductForm = ({ baseUnits, canReadProducts, listHref = '/produits' }) => {
   const [created, setCreated] = useState(null);
   const [formRevision, setFormRevision] = useState(0);
   const successRef = useRef(null);
-  const returnHref = canReadProducts ? '/produits' : '/';
+  const returnHref = canReadProducts ? listHref : '/';
   useEffect(() => {
     if (created) successRef.current?.focus();
     else if (formRevision) document.getElementById('designation')?.focus();
@@ -187,7 +188,7 @@ const ProductForm = ({ baseUnits, canReadProducts }) => {
             <p className={styles.successNote}>Le produit a été ajouté au catalogue. Aucun stock ni prix n’a été ajouté.</p>
             {!canReadProducts && <p className={styles.successNote}>La consultation de la fiche nécessite un droit de lecture.</p>}
             <div className={styles.successActions}>
-              {canReadProducts && <EditingLink className={styles.primaryLink} href={`/produits/${created.id}`}>Ouvrir la fiche produit <ProductIcon name='arrow' /></EditingLink>}
+              {canReadProducts && <EditingLink className={styles.primaryLink} href={buildProductHref({ productId: created.id, returnHref: listHref })}>Ouvrir la fiche produit <ProductIcon name='arrow' /></EditingLink>}
               <button onClick={() => { setCreated(null); setFormRevision((revision) => revision + 1); }} type='button'><ProductIcon name='plus' />Créer un autre produit</button>
             </div>
           </div>

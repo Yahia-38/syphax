@@ -1,17 +1,12 @@
-import Link from 'next/link';
-
 import { getUserPermissions } from '../../../lib/access.js';
+import { readProductListState } from '../../../lib/product-list-navigation.js';
 import { listProducts } from '../../../lib/products.js';
 import { requirePermission } from '../../../lib/sessions.js';
+import NewProductLink from './new-product-link.js';
 import ProductTable from './product-table.js';
 
 export const metadata = {
   title: 'Produits | Syphax',
-};
-
-const readQuery = (value) => {
-  const query = Array.isArray(value) ? value[0] : value;
-  return typeof query === 'string' ? query.trim().slice(0, 100) : '';
 };
 
 const ProductsPage = async ({ searchParams }) => {
@@ -21,7 +16,7 @@ const ProductsPage = async ({ searchParams }) => {
     searchParams,
     getUserPermissions(session.userId),
   ]);
-  const query = readQuery(resolvedSearchParams?.q);
+  const listState = readProductListState(resolvedSearchParams ?? {});
   const productDeleted = resolvedSearchParams?.deleted === '1';
   const canCreateProduct = permissions.includes('products.create');
   const canReadPricing = permissions.includes('pricing.read');
@@ -46,13 +41,10 @@ const ProductsPage = async ({ searchParams }) => {
         </div>
 
         {canCreateProduct && (
-          <Link
-            className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href='/produits/nouveau'
-          >
+          <NewProductLink className='inline-flex w-fit items-center justify-center rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'>
             <span aria-hidden='true' className='mr-1 text-lg leading-none'>＋</span>
             Nouveau produit
-          </Link>
+          </NewProductLink>
         )}
       </div>
 
@@ -69,7 +61,7 @@ const ProductsPage = async ({ searchParams }) => {
         canCreateProduct={canCreateProduct}
         canReadPricing={canReadPricing}
         products={products}
-        initialQuery={query}
+        initialState={listState}
       />
     </main>
   );

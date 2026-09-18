@@ -9,6 +9,7 @@ import {
   getProductDisplayUnit,
   getQuantityInDisplayUnit,
 } from '../../../../lib/product-display-unit.js';
+import { validateProductListHref } from '../../../../lib/product-list-navigation.js';
 import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.js';
 import { requirePermission } from '../../../../lib/sessions.js';
@@ -125,6 +126,7 @@ const ProductPage = async ({ params, searchParams }) => {
   const canReadPurchaseCosts = permissions.includes('receptions.read');
   const canReadTarification = canReadPricing || canReadPurchaseCosts;
   const requestedSection = typeof query.section === 'string' ? query.section : '';
+  const returnHref = validateProductListHref(query.retour);
   const activeSection = SECTIONS.has(requestedSection)
     && (requestedSection !== 'conditionnements' || canReadPackaging)
     && (requestedSection !== 'tarification' || canReadTarification) ? requestedSection : 'identification';
@@ -166,7 +168,7 @@ const ProductPage = async ({ params, searchParams }) => {
     <EditingSessionProvider key={product.id}>
       <main className={`${styles.page} mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 sm:py-9`}>
         <nav aria-label='Fil d’Ariane' className={styles.breadcrumb}>
-          <EditingLink href='/produits'>Produits</EditingLink>
+          <EditingLink href={returnHref}>Produits</EditingLink>
           <span aria-hidden='true'>/</span><span>Fiche produit</span>
         </nav>
         <header className={styles.hero}>
@@ -181,7 +183,7 @@ const ProductPage = async ({ params, searchParams }) => {
             {canReadPricing && <div><dt>Prix de vente TTC</dt><dd>{displaySalePrice !== null ? `${formatMoney(displaySalePrice)} DA` : 'À renseigner'}{displaySalePrice !== null && <span>/ {getDisplayUnitLabel(unitOptions)}</span>}</dd></div>}
           </dl>
         </header>
-        <ProductTabs activeSection={activeSection} canReadPackaging={canReadPackaging} canReadPricing={canReadPricing} canReadPurchaseCosts={canReadPurchaseCosts} productId={product.id} />
+        <ProductTabs activeSection={activeSection} canReadPackaging={canReadPackaging} canReadPricing={canReadPricing} canReadPurchaseCosts={canReadPurchaseCosts} productId={product.id} returnHref={returnHref} />
         <div>
           {activeSection === 'stock' && <StockSection baseUnitLabel={baseUnitLabel} displayUnit={displayUnit} product={product} />}
           {activeSection === 'identification' && <div aria-labelledby='identification-tab' id='identification-panel'>
@@ -200,7 +202,7 @@ const ProductPage = async ({ params, searchParams }) => {
             </div>
             {permissions.includes('products.delete') && <details className={styles.dangerZone}>
               <summary>Actions sensibles</summary>
-              <div><p>La suppression dépend des références et des règles métier du produit.</p><DeleteProductButton product={{ id: product.id, code: product.code, designation: product.designation }} /></div>
+              <div><p>La suppression dépend des références et des règles métier du produit.</p><DeleteProductButton product={{ id: product.id, code: product.code, designation: product.designation }} returnHref={returnHref} /></div>
             </details>}
           </div>}
           {activeSection === 'tarification' && <div aria-labelledby='tarification-tab' id='tarification-panel'>

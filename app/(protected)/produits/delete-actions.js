@@ -3,10 +3,11 @@
 import { revalidatePath } from 'next/cache.js';
 import { redirect } from 'next/navigation.js';
 
+import { buildProductDeletionHref } from '../../../lib/product-list-navigation.js';
 import { deleteProduct as removeProduct } from '../../../lib/products.js';
 import { requirePermission } from '../../../lib/sessions.js';
 
-export const deleteProduct = async (productId) => {
+export const deleteProduct = async (productId, returnHref) => {
   await requirePermission('products.delete');
 
   let result;
@@ -36,5 +37,5 @@ export const deleteProduct = async (productId) => {
   }
 
   revalidatePath('/produits');
-  redirect('/produits?deleted=1');
+  redirect(buildProductDeletionHref(returnHref));
 };
