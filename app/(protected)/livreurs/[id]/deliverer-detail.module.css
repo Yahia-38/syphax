@@ -15,6 +15,30 @@
 .active, .settled { background:#eaf6ef; color:#137457; }
 .inactive { background:#edf0f5; color:#65758b; }
 .outstanding { background:#fff1d8; color:#976415; }
+.statusBar { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:24px; }
+.statusTile { position:relative; min-width:0; padding:15px 17px 16px; border:1px solid var(--line); border-radius:11px; background:white; box-shadow:0 2px 4px #1b304103; }
+.statusTile::before { content:''; position:absolute; top:15px; bottom:16px; left:0; width:3px; border-radius:0 3px 3px 0; background:transparent; }
+.statusTile dt { padding-right:70px; font-size:11px; font-weight:600; color:var(--muted); }
+.statusTile dd { display:flex; flex-direction:column; align-items:flex-start; gap:5px; margin-top:7px; }
+.statusTile small { font-size:11px; line-height:1.55; color:var(--muted); }
+.statusTile small strong { font-weight:600; color:var(--ink); }
+.statusTile small a { color:var(--blue); }
+.statusTile code { font-size:10px; }
+.statusTile .meter { align-self:stretch; height:5px; margin:3px 0 2px; }
+.statusValue { font-size:23px; font-weight:650; line-height:1.25; letter-spacing:-.5px; font-variant-numeric:tabular-nums; }
+.statusQuiet { color:#9aa6b8; }
+.statusLink { position:absolute; top:11px; right:11px; padding:3px 7px; border-radius:6px; font-size:11px; font-weight:600; color:var(--blue); }
+.statusLink:hover { background:#edf2ff; text-decoration:none; }
+.statusPreparation { color:#976415; }
+.statusLoaded { color:#7250b0; }
+.statusCounted { color:#3154b6; }
+.statusWarning::before { background:#d5a44b; }
+.statusWarning .statusValue { color:#976415; }
+.statusDanger { border-color:#f2cfd5; background:#fff9f9; }
+.statusDanger::before { background:#cc5263; }
+.statusDanger .statusValue, .statusDanger small strong { color:#b33344; }
+.statusSuccess::before { background:#5fa384; }
+.statusSuccess .statusValue { color:#137457; }
 .inactiveBanner { display:flex; align-items:center; flex-wrap:wrap; gap:16px; border:1px solid var(--line); background:#eef1f6; border-radius:10px; padding:17px 20px; margin-bottom:20px; font-size:12px; }
 .inactiveBanner > div { flex:1 1 280px; }
 .inactiveBanner p { margin-top:5px; color:var(--muted); line-height:1.7; }
@@ -132,6 +156,11 @@
 @media(max-width:720px) {
   .heroMain { flex-basis:100%; gap:12px; }
   .hero h1 { font-size:24px; letter-spacing:-.6px; }
+  .statusBar { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
+  .statusTile { padding:13px 14px 14px; }
+  .statusTile dt { padding-right:0; }
+  .statusValue { font-size:19px; }
+  .statusLink { position:static; margin:2px 0 0 -7px; }
   .avatar { width:50px; height:50px; border-radius:13px; font-size:19px; }
   .tabs { gap:0; }
   .tabs a { flex:1 1 auto; padding:12px 9px; font-size:11px; text-align:center; }

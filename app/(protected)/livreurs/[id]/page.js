@@ -11,12 +11,12 @@ import {
   getDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
 import { getDelivererTabs, readDelivererTab } from '../../../../lib/deliverer-detail-navigation.js';
-import { getDelivererObjectiveDashboard } from '../../../../lib/deliverer-monthly-achievement.js';
-import { readObjectiveAchievementState, readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
+import { getDelivererMonthlyAchievement, getDelivererObjectiveDashboard } from '../../../../lib/deliverer-monthly-achievement.js';
+import { getObjectiveCurrentMonth, readObjectiveAchievementState, readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
 import { DELIVERER_OBJECTIVE_READ_PERMISSION, DELIVERER_OBJECTIVE_UPDATE_PERMISSION, getDelivererObjectives } from '../../../../lib/deliverer-objectives.js';
 import { formatDelivererCreatedAt, getDelivererById, requireDelivererEditPermission, validateDelivererListHref } from '../../../../lib/deliverers.js';
 import { requirePermission } from '../../../../lib/sessions.js';
-import { buildDelivererToursHref, formatTourDateInput, listToursByDeliverer, readDelivererTourListState } from '../../../../lib/tours.js';
+import { buildDelivererToursHref, formatTourDateInput, getDelivererOpenTours, listToursByDeliverer, readDelivererTourListState } from '../../../../lib/tours.js';
 import { EditingLink, EditingSessionProvider } from '../../components/editing-session.js';
 import Tabs from '../../components/tabs.js';
 import DelivererEditForm from './deliverer-edit-form.js';
@@ -26,6 +26,7 @@ import DelivererObjectiveHistory from './deliverer-objective-history.js';
 import DelivererMonthlyAchievement from './deliverer-monthly-achievement.js';
 import DelivererMonthlyHistory from './deliverer-monthly-history.js';
 import { DelivererCashSummary, DelivererExposure } from './deliverer-overview.js';
+import DelivererStatusBar from './deliverer-status-bar.js';
 import DelivererStatusButton from './deliverer-status-button.js';
 import DelivererTourList from './deliverer-tour-list.js';
 import TourCreateButton from './tour-create-button.js';
@@ -57,10 +58,13 @@ const DelivererPage = async ({ params, searchParams }) => {
   const tourListState = readDelivererTourListState(query);
   const objectiveHistoryState = readObjectiveHistoryState(query);
   const achievementState = readObjectiveAchievementState(query);
-  const [standaloneCashSummary, creditLimitResult, tourList, objectives, dashboard] = await Promise.all([
-    activeTab === 'ensemble' && canReadCash && !canReadCompleteCreditExposure
+  // The status bar shows the current month on every tab; the objectives tab
+  // already reads it when it is the month on display.
+  const showsCurrentAchievement = activeTab === 'objectifs' && achievementState.achievementMonth === getObjectiveCurrentMonth();
+  const [standaloneCashSummary, creditLimitResult, tourList, objectives, dashboard, openTours, currentAchievement] = await Promise.all([
+    canReadCash && !canReadCompleteCreditExposure
       ? getDelivererCashSummary({ delivererId: deliverer.id, userId: session.userId }) : null,
-    activeTab === 'ensemble' && canReadCompleteCreditExposure
+    canReadCompleteCreditExposure
       ? getDelivererCreditExposure({ delivererId: deliverer.id, userId: session.userId })
       : activeTab === 'ensemble' && canReadCreditLimit
         ? getDelivererCreditLimit({ delivererId: deliverer.id, userId: session.userId }) : null,
@@ -70,11 +74,15 @@ const DelivererPage = async ({ params, searchParams }) => {
       ? getDelivererObjectives({ delivererId: deliverer.id, ...objectiveHistoryState, userId: session.userId }) : null,
     activeTab === 'objectifs' && canReadObjectives
       ? getDelivererObjectiveDashboard({ delivererId: deliverer.id, userId: session.userId, searchParams: query }) : null,
+    canReadTours ? getDelivererOpenTours({ delivererId: deliverer.id, userId: session.userId }) : null,
+    canReadObjectives && !showsCurrentAchievement
+      ? getDelivererMonthlyAchievement({ delivererId: deliverer.id, userId: session.userId }) : null,
   ]);
   const cashSummary = creditLimitResult?.cashSummary ?? standaloneCashSummary;
   const objectiveNavigationState = { ...objectiveHistoryState, ...(dashboard?.monthlyHistory ?? achievementState) };
   const hrefForTab = (nextTab) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveNavigationState, returnHref, tab: nextTab });
   const currentHref = hrefForTab(activeTab);
+  const tourHref = (tourId) => `/tournees/${tourId}?${new URLSearchParams({ retour: currentHref })}`;
   const latestStatusChange = deliverer.statusHistory.at(-1);
   const trace = [
     ['Création du livreur', deliverer.createdAt, deliverer.createdBy],
@@ -95,6 +103,8 @@ const DelivererPage = async ({ params, searchParams }) => {
           </div>
           {deliverer.active && canCreateTour && <TourCreateButton key={currentHref} creationKey={randomUUID()} deliverer={{ code: deliverer.code, id: deliverer.id, name: deliverer.name }} initialPlannedDate={formatTourDateInput(new Date())} returnHref={currentHref} />}
         </header>
+        <DelivererStatusBar achievement={currentAchievement ?? (showsCurrentAchievement ? dashboard?.achievement : null)} cashSummary={cashSummary}
+          creditLimit={creditLimitResult?.exposure ? creditLimitResult.creditLimit : null} exposure={creditLimitResult?.exposure} hrefForTab={hrefForTab} openTours={openTours} tourHref={tourHref} />
         {!deliverer.active && <div className={styles.inactiveBanner}><div><strong>Livreur désactivé</strong><p>La création de nouvelles tournées est indisponible. La fiche, les tournées et les montants dus sont conservés.</p></div>{canUpdateDelivererStatus && <DelivererStatusButton key={currentHref} deliverer={deliverer} returnHref={currentHref} />}</div>}
         <Tabs activeTab={activeTab} buildHref={hrefForTab} label='Sections de la fiche livreur' tabs={tabs} />
         {activeTab === 'ensemble' && <div className={styles.overview}>

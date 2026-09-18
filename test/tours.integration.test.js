@@ -20,6 +20,7 @@ const {
   buildDelivererToursHref,
   createTour,
   formatTourDateInput,
+  getDelivererOpenTours,
   getTourById,
   listToursByDeliverer,
   readDelivererTourListState,
@@ -282,6 +283,57 @@ test('consulte une tournée après désactivation et protège lecture et absence
   assert.equal(detail.createdBy, 'lecteur-tournees');
   assert.equal(list.totalItems, 1);
   assert.equal(list.tours[0].id, creation.tour.id);
+});
+
+test('résume les tournées ouvertes du livreur à partir de la plus récente', async () => {
+  const delivererId = await insertDeliverer();
+  const create = async (plannedDate) => (await createTour({
+    createdBy: readerId.toString(),
+    creationKey: randomUUID(),
+    delivererId: delivererId.toString(),
+    plannedDate,
+  })).tour;
+  const counted = await create('2026-09-15');
+  const loaded = await create('2026-09-16');
+  const closed = await create('2026-09-17');
+  const cancelled = await create('2026-09-18');
+  const setStatus = (tour, status) => database.collection('tours').updateOne(
+    { _id: new ObjectId(tour.id) },
+    { $set: { status } },
+  );
+
+  await Promise.all([
+    setStatus(counted, 'COUNTED'),
+    setStatus(loaded, 'LOADED'),
+    setStatus(closed, 'CLOSED'),
+    setStatus(cancelled, 'CANCELLED'),
+  ]);
+
+  assert.deepEqual(
+    await getDelivererOpenTours({ delivererId: delivererId.toString(), userId: readerId.toString() }),
+    {
+      count: 2,
+      latest: { id: loaded.id, plannedDate: '2026-09-16', reference: loaded.reference, status: 'LOADED' },
+    },
+  );
+  assert.deepEqual(
+    await getDelivererOpenTours({ delivererId: (await insertDeliverer()).toString(), userId: readerId.toString() }),
+    { count: 0, latest: null },
+  );
+  assert.equal(await getDelivererOpenTours({ delivererId: 'invalide', userId: readerId.toString() }), null);
+
+  const unauthorizedId = new ObjectId();
+
+  await database.collection('users').insertOne({
+    _id: unauthorizedId,
+    active: true,
+    roleIds: [],
+    username: 'sans-tournees-ouvertes',
+  });
+  await assert.rejects(
+    getDelivererOpenTours({ delivererId: delivererId.toString(), userId: unauthorizedId.toString() }),
+    (error) => error instanceof PermissionDeniedError && error.permission === 'tours.read',
+  );
 });
 
 test('préserve recherche, filtre de date et pagination dans les liens de fiche', () => {
