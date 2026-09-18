@@ -103,7 +103,7 @@ const DelivererPage = async ({ params, searchParams }) => {
             <DelivererCreditLimitForm canUpdate={canUpdateCreditLimit} creditLimit={creditLimitResult.creditLimit} delivererId={deliverer.id} />
             {creditLimitResult.exposure && <DelivererExposure exposure={creditLimitResult.exposure} creditLimit={creditLimitResult.creditLimit} />}
           </div>}
-          {canReadTours && <EditingLink className={styles.overviewLink} href={hrefForSection('tournees')}>Consulter les tournées ↗</EditingLink>}
+          {canReadTours && <EditingLink className={styles.overviewLink} href={hrefForTab('tournees')}>Consulter les tournées ↗</EditingLink>}
         </div>}
         {activeTab === 'tournees' && tourList && <><DelivererTourList delivererId={deliverer.id} delivererName={deliverer.name} returnHref={returnHref} {...tourList} /><p className={styles.scope}>Le statut décrit l’avancement de la tournée. Il ne représente pas son état de paiement.</p></>}
         {activeTab === 'objectifs' && objectives && <div className={styles.overview}>
