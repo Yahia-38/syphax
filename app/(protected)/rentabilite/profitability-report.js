@@ -6,7 +6,7 @@ import {
   buildProfitabilityCountingHref,
   buildProfitabilityHref,
 } from '../../../lib/profitability-navigation.js';
-import { formatReceptionMoney } from '../../../lib/receptions.js';
+import { formatProfitabilityAmount, formatProfitabilityExactAmount } from '../../../lib/profitability-format.js';
 import { formatTourStatus } from '../../../lib/tours.js';
 import styles from './profitability.module.css';
 
@@ -29,15 +29,6 @@ const EXPENSE_STATES = {
   MISSING: 'À déclarer',
   HISTORICAL_MISSING: 'Jamais déclarés',
   INVALID: 'Incohérents',
-};
-
-// Margins and results can be negative: the sign is kept, never hidden.
-const money = (amountInCentimes) => {
-  if (!Number.isSafeInteger(amountInCentimes)) return null;
-
-  return amountInCentimes < 0
-    ? `−${formatReceptionMoney(-amountInCentimes)}`
-    : formatReceptionMoney(amountInCentimes);
 };
 
 const countLabel = (count, singular, plural = `${singular}s`) =>
@@ -79,10 +70,10 @@ const marginRate = ({ margin, sales }) => margin.complete && sales.complete && s
   : null;
 
 const Amount = ({ value }) => {
-  const formatted = money(value);
+  const formatted = formatProfitabilityAmount(value);
 
   return formatted
-    ? <span className={value < 0 ? styles.negative : undefined}>{formatted}</span>
+    ? <span className={value < 0 ? styles.negative : undefined} title={formatProfitabilityExactAmount(value)}>{formatted}</span>
     : <span className={styles.unknown}>Inconnu</span>;
 };
 
@@ -164,12 +155,12 @@ const ProfitabilityReport = ({ currentHref, currentMonth, report, state }) => {
       <dl className={styles.indicators}>
         {INDICATORS.map(({ emphasis, hint, key, label }) => {
           const total = totals[key];
-          const formatted = money(total.amountInCentimes);
+          const formatted = formatProfitabilityAmount(total.amountInCentimes);
 
           return (
             <div className={`${styles.indicator} ${emphasis ? styles.emphasis : ''} ${total.complete ? '' : styles.partial}`} key={key}>
               <dt>{label}</dt>
-              <dd className={`${styles.indicatorValue} ${total.amountInCentimes < 0 ? styles.negative : ''}`}>
+              <dd className={`${styles.indicatorValue} ${total.amountInCentimes < 0 ? styles.negative : ''}`} title={formatProfitabilityExactAmount(total.amountInCentimes) ?? undefined}>
                 {formatted ?? 'Non calculable'}
               </dd>
               <dd className={styles.indicatorHint}>
@@ -266,6 +257,7 @@ const ProfitabilityReport = ({ currentHref, currentMonth, report, state }) => {
       )}
 
       <p className={styles.footnote}>
+        À partir de 10 000 DA, les montants sont exprimés en millions : 1 million = 10 000 DA. Le montant exact en dinars s’affiche au survol.
         Montants enregistrés au comptage et à la déclaration de frais, sans recalcul depuis les coûts actuels. Les versements et les retraits de caisse n’y entrent pas.
         La période porte sur la date de comptage, à l’heure d’Algérie ; une tournée sans date de comptage fiable reste affichée. Les totaux couvrent toute la sélection, toutes pages confondues.
       </p>
