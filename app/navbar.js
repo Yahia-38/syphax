@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { logout } from './actions.js';
 import NavigationLink from './navigation-link.js';
 
+const linkClassName = 'rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700';
+
 const Navbar = ({
   canReadCash,
   canReadDeliverers,
@@ -25,49 +27,31 @@ const Navbar = ({
         </Link>
 
         <div className='order-3 flex w-full flex-wrap items-center gap-1 sm:order-none sm:w-auto sm:flex-1'>
-          <Link
-            className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-            href='/'
-          >
+          <NavigationLink className={linkClassName} href='/'>
             Tableau de bord
-          </Link>
+          </NavigationLink>
           {canReadProducts && (
-            <Link
-              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/produits'
-            >
+            <NavigationLink className={linkClassName} href='/produits'>
               Produits
-            </Link>
+            </NavigationLink>
           )}
           {canReadReceptions && (
-            <Link
-              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/receptions'
-            >
+            <NavigationLink className={linkClassName} href='/receptions'>
               Réceptions
-            </Link>
+            </NavigationLink>
           )}
           {canReadDeliverers && (
-            <NavigationLink
-              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/livreurs'
-            >
+            <NavigationLink className={linkClassName} href='/livreurs'>
               Livreurs
             </NavigationLink>
           )}
           {canReadCash && (
-            <Link
-              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/caisse'
-            >
+            <NavigationLink className={linkClassName} href='/caisse'>
               Caisse
-            </Link>
+            </NavigationLink>
           )}
           {canReadProfitability && (
-            <NavigationLink
-              className='rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
-              href='/rentabilite'
-            >
+            <NavigationLink className={linkClassName} href='/rentabilite'>
               Rentabilité
             </NavigationLink>
           )}
