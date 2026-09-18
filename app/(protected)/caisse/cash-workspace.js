@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { buildCashFilterHref, buildCashViewHref, readCashView } from '../../../lib/cash-navigation.js';
+import { buildCashFilterHref, buildCashTabHref, CASH_TABS, readCashTab } from '../../../lib/cash-navigation.js';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
+import Tabs from '../components/tabs.js';
 import { EditingLink, EditingSessionProvider, useEditingSession } from '../components/editing-session.js';
 import EditableCard from '../components/editable-card.js';
 import CashWithdrawalPreview from './cash-withdrawal-preview.js';
@@ -29,12 +31,12 @@ export const CashResetLink = ({ children = 'Réinitialiser', view, ...props }) =
 export const CashPageLink = ({ view, page, children, ...props }) => {
   const parameters = new URLSearchParams(useSearchParams().toString());
   parameters.set(view === 'restes' ? 'restePage' : 'page', String(page));
-  return <EditingLink {...props} href={buildCashViewHref(parameters, view)}>{children}</EditingLink>;
+  return <EditingLink {...props} href={buildCashTabHref(parameters, view)}>{children}</EditingLink>;
 };
 
 const CashNavigation = ({ canCreatePayment, withdrawalEditing }) => {
   const parameters = useSearchParams();
-  const view = readCashView(parameters.get('vue'));
+  const view = readCashTab(parameters.get(TAB_PARAMETER));
   const session = useEditingSession();
   const [focusRequested, setFocusRequested] = useState(false);
   useEffect(() => {
@@ -48,13 +50,12 @@ const CashNavigation = ({ canCreatePayment, withdrawalEditing }) => {
       <p>Consultez les tournées comptées ou terminées, puis encaissez un livreur ou une tournée précise.</p></div>
       <button type='button' onClick={() => session.request(() => {
         setFocusRequested(true);
-        session.router.push(buildCashViewHref(parameters.toString(), 'restes'), { scroll: false });
+        session.router.push(buildCashTabHref(parameters.toString(), 'restes'), { scroll: false });
         if (view === 'restes') document.getElementById('cash-remainder-search')?.focus();
       })}>{canCreatePayment ? 'Choisir un livreur' : 'Consulter les restes'} <span aria-hidden='true'>→</span></button>
     </div>
-    <nav className={styles.tabs} aria-label='Vues de la caisse'>
-      {['journal', 'restes'].map((target) => <EditingLink key={target} href={buildCashViewHref(parameters.toString(), target)} aria-current={view === target ? 'page' : undefined}>{target === 'journal' ? 'Journal' : 'À encaisser'}</EditingLink>)}
-    </nav>
+    <Tabs activeTab={view} buildHref={(tab) => buildCashTabHref(parameters.toString(), tab)}
+      className={styles.tabsPlacement} label='Vues de la caisse' tabs={CASH_TABS} />
   </>;
 };
 

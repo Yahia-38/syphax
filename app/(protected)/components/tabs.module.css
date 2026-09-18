@@ -1,0 +1,6 @@
+.tabs { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 1px solid #dce3ed; margin-bottom: 24px; }
+.tabs a { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: #65758b; font-size: 13px; font-weight: 500; }
+.tabs svg { width: 17px; height: 17px; }
+.tabs a[aria-current='page'] { color: #3154d6; border-bottom-color: #3154d6; font-weight: 650; }
+.tabs a:hover { color: #3154d6; background: #edf2fc; text-decoration: none; }
+.sticky { position: sticky; top: 0; z-index: 20; background: var(--surface, #fff); padding-top: 3px; }

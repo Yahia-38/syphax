@@ -39,9 +39,7 @@
 .choose > div > p:last-child { color: #62728a; font-size: 12px; margin-top: 7px; max-width: 320px; }
 .choose button { background: #2855dd; color: white; border: 1px solid #2855dd; border-radius: 8px; padding: 9px 13px; font-weight: 600; min-height: 42px; cursor: pointer; }
 .choose button:hover { background: #2047c3; }
-.tabs { grid-column: 1 / -1; display: flex; gap: 23px; border-bottom: 1px solid #dfe6ef; margin: 5px 0 22px; }
-.tabs a { padding: 12px 1px; color: #62728a; font-size: 13px; border-bottom: 2px solid transparent; }
-.tabs a[aria-current] { color: #2855dd; border-color: #2855dd; font-weight: 650; }
+.tabsPlacement { grid-column: 1 / -1; margin-top: 5px; }
 .journal, .remainders { min-width: 0; }
 .journal { background: white; border: 1px solid #dfe6ef; border-radius: 13px; overflow: hidden; box-shadow: 0 2px 3px #18304b03; }
 .sectionHeading { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 18px; }

@@ -2,26 +2,28 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { EditingSessionProvider, EditingLink, useEditingSession } from '../../components/editing-session.js';
-import { buildTourViewHref, readTourView } from '../../../../lib/tour-detail-navigation.js';
+import { EditingSessionProvider, useEditingSession } from '../../components/editing-session.js';
+import { readTab } from '../../../../lib/tab-navigation.js';
+import { buildTourTabHref, TOUR_TABS } from '../../../../lib/tour-detail-navigation.js';
+import Tabs from '../../components/tabs.js';
 import styles from './tour-detail.module.css';
 
-const TourNavigation = ({ tourId, returnHref, defaultView, header, operations, products, history, financial, shortcuts, priority }) => {
+const TourNavigation = ({ tourId, returnHref, defaultTab, header, operations, products, history, financial, shortcuts, priority }) => {
   const query = useSearchParams();
-  const [initialView] = useState(defaultView);
-  const view = query.has('vue') ? readTourView(query.get('vue'), defaultView === 'produits' ? 'PREPARATION' : undefined) : initialView;
+  const [initialTab] = useState(defaultTab);
+  const tab = readTab(query, TOUR_TABS, initialTab);
   const session = useEditingSession();
   const destinationRef = useRef(null);
   useEffect(() => {
     const destination = destinationRef.current;
     if (!destination) return;
     destinationRef.current = null;
-    if (destination.view === view && destination.tourId === tourId) destination.focus();
-  }, [view, tourId]);
-  const href = (nextView) => buildTourViewHref({ tourId, returnHref, view: nextView });
-  const go = ({ target, view: nextView, edit = false }) => {
+    if (destination.tab === tab && destination.tourId === tourId) destination.focus();
+  }, [tab, tourId]);
+  const href = (nextTab) => buildTourTabHref({ tourId, returnHref, tab: nextTab });
+  const go = ({ target, tab: nextTab, edit = false }) => {
     const existing = document.getElementById(target);
-    if (view === nextView && (!edit || existing?.querySelector('form'))) {
+    if (tab === nextTab && (!edit || existing?.querySelector('form'))) {
       existing?.scrollIntoView({ block: 'start', behavior: 'instant' });
       if (edit) (existing?.querySelector('[data-autofocus]') ?? existing?.querySelector('input:not([type="hidden"]), textarea, select'))?.focus();
       else if (existing) { existing.tabIndex = -1; existing.focus({ preventScroll: true }); }
@@ -36,20 +38,16 @@ const TourNavigation = ({ tourId, returnHref, defaultView, header, operations, p
         if (edit) action?.click(); else { card.tabIndex = -1; card.focus({ preventScroll: true }); }
         return true;
       };
-      if (view === nextView) { focusTarget(); return; }
-      destinationRef.current = { view: nextView, tourId, focus: focusTarget };
-      session.router.push(href(nextView), { scroll: false });
+      if (tab === nextTab) { focusTarget(); return; }
+      destinationRef.current = { tab: nextTab, tourId, focus: focusTarget };
+      session.router.push(href(nextTab), { scroll: false });
     });
   };
   return (
     <main className={styles.page}>
       <div className={styles.hero}>{header}{priority && <button className={styles.primary} onClick={() => go({ ...priority, edit: true })} type='button'>{priority.label}</button>}</div>
-      <nav className={styles.tabs} aria-label='Vues de la tournée'>
-        {[['operations', 'Opérations'], ['produits', 'Produits & chargement'], ['historique', 'Traçabilité']].map(([key, label]) => (
-          <EditingLink key={key} href={href(key)} aria-current={view === key ? 'page' : undefined}>{label}</EditingLink>
-        ))}
-      </nav>
-      {view === 'operations' && <>
+      <Tabs activeTab={tab} buildHref={href} label='Vues de la tournée' tabs={TOUR_TABS} />
+      {tab === 'operations' && <>
         <nav className={styles.shortcuts} aria-label='Accès aux opérations'>
           {shortcuts.map((shortcut, index) => {
             const complete = ['Confirmé', 'Enregistré', 'Déclarés', 'Soldée'].includes(shortcut.state);
@@ -58,8 +56,8 @@ const TourNavigation = ({ tourId, returnHref, defaultView, header, operations, p
         </nav>
         <div className={styles.layout}><div className={styles.operations}>{operations}</div>{financial}</div>
       </>}
-      {view === 'produits' && <div className={styles.operations}>{products}</div>}
-      {view === 'historique' && history}
+      {tab === 'produits' && <div className={styles.operations}>{products}</div>}
+      {tab === 'historique' && history}
     </main>
   );
 };

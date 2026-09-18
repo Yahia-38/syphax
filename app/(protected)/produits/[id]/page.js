@@ -10,6 +10,7 @@ import {
   getQuantityInDisplayUnit,
 } from '../../../../lib/product-display-unit.js';
 import { validateProductListHref } from '../../../../lib/product-list-navigation.js';
+import { readTab } from '../../../../lib/tab-navigation.js';
 import { BASE_UNITS, getProductById } from '../../../../lib/products.js';
 import { getLatestProductPurchaseCost } from '../../../../lib/reception-records.js';
 import { requirePermission } from '../../../../lib/sessions.js';
@@ -20,7 +21,7 @@ import PackPricing from './pack-pricing.js';
 import PriceHistory from './price-history.js';
 import PricingForm from './pricing-form.js';
 import ProductEditForm from './product-edit-form.js';
-import ProductTabs from './product-tabs.js';
+import ProductTabs, { getProductTabs } from './product-tabs.js';
 import PurchaseCostCard, { PurchasePriceGap } from './purchase-cost-card.js';
 import StockMovementHistory from './stock-movement-history.js';
 import StockValuationSummary from './stock-valuation-summary.js';
@@ -31,13 +32,6 @@ import ProductIcon from './product-icon.js';
 export const metadata = {
   title: 'Fiche produit | Syphax',
 };
-
-const SECTIONS = new Set([
-  'identification',
-  'stock',
-  'tarification',
-  'conditionnements',
-]);
 
 const formatDate = (value) => {
   if (!value) {
@@ -125,18 +119,16 @@ const ProductPage = async ({ params, searchParams }) => {
   const canReadPricing = permissions.includes('pricing.read');
   const canReadPurchaseCosts = permissions.includes('receptions.read');
   const canReadTarification = canReadPricing || canReadPurchaseCosts;
-  const requestedSection = typeof query.section === 'string' ? query.section : '';
   const returnHref = validateProductListHref(query.retour);
-  const activeSection = SECTIONS.has(requestedSection)
-    && (requestedSection !== 'conditionnements' || canReadPackaging)
-    && (requestedSection !== 'tarification' || canReadTarification) ? requestedSection : 'identification';
+  const tabs = getProductTabs({ canReadPackaging, canReadTarification });
+  const activeTab = readTab(query, tabs, 'identification');
   const product = await getProductById(id, {
     includePricing: canReadPricing,
     includePackagings: canReadPackaging,
-    includeStockMovements: activeSection === 'stock',
+    includeStockMovements: activeTab === 'stock',
     includeTourSources: permissions.includes('tours.read'),
     includeReceptionSources: canReadPurchaseCosts,
-    includeValuation: activeSection === 'stock',
+    includeValuation: activeTab === 'stock',
     userId: session.userId,
   });
   if (!product) notFound();
@@ -149,7 +141,7 @@ const ProductPage = async ({ params, searchParams }) => {
   const latestPriceChange = product.salePriceHistory[0] ?? (product.salePrice ? {
     changedAt: product.salePrice.updatedAt, changedBy: product.salePrice.updatedBy,
   } : null);
-  const latestPurchaseCost = activeSection === 'tarification' && canReadPurchaseCosts
+  const latestPurchaseCost = activeTab === 'tarification' && canReadPurchaseCosts
     ? await getLatestProductPurchaseCost({ baseUnit: product.baseUnit, productId: product.id, userId: session.userId }) : null;
   const unitPricing = <div>
     <PricingForm baseUnitLabel={baseUnitLabel} canUpdatePrice={canUpdatePrice} title={`Prix par ${baseUnitLabel.toLocaleLowerCase('fr')}`}
@@ -183,10 +175,10 @@ const ProductPage = async ({ params, searchParams }) => {
             {canReadPricing && <div><dt>Prix de vente TTC</dt><dd>{displaySalePrice !== null ? `${formatMoney(displaySalePrice)} DA` : 'À renseigner'}{displaySalePrice !== null && <span>/ {getDisplayUnitLabel(unitOptions)}</span>}</dd></div>}
           </dl>
         </header>
-        <ProductTabs activeSection={activeSection} canReadPackaging={canReadPackaging} canReadPricing={canReadPricing} canReadPurchaseCosts={canReadPurchaseCosts} productId={product.id} returnHref={returnHref} />
+        <ProductTabs activeTab={activeTab} productId={product.id} returnHref={returnHref} tabs={tabs} />
         <div>
-          {activeSection === 'stock' && <StockSection baseUnitLabel={baseUnitLabel} displayUnit={displayUnit} product={product} />}
-          {activeSection === 'identification' && <div aria-labelledby='identification-tab' id='identification-panel'>
+          {activeTab === 'stock' && <StockSection baseUnitLabel={baseUnitLabel} displayUnit={displayUnit} product={product} />}
+          {activeTab === 'identification' && <div aria-labelledby='identification-tab' id='identification-panel'>
             <SectionHeading title='Identification & traçabilité' description='Les informations du produit, sa création et sa dernière modification renseignée.' />
             <div className={styles.infoGrid}>
               <ProductEditForm baseUnits={BASE_UNITS} baseUnitLabel={baseUnitLabel} canUpdateProduct={canUpdateProduct}
@@ -205,7 +197,7 @@ const ProductPage = async ({ params, searchParams }) => {
               <div><p>La suppression dépend des références et des règles métier du produit.</p><DeleteProductButton product={{ id: product.id, code: product.code, designation: product.designation }} returnHref={returnHref} /></div>
             </details>}
           </div>}
-          {activeSection === 'tarification' && <div aria-labelledby='tarification-tab' id='tarification-panel'>
+          {activeTab === 'tarification' && <div aria-labelledby='tarification-tab' id='tarification-panel'>
             <SectionHeading title='Tarification' note='Montants TTC en DA' description={canReadPricing ? 'Prix de vente à l’unité et par pack, dernier coût d’achat renseigné et historique.' : 'Dernier coût d’achat renseigné et réception source.'} />
             <div className={`${styles.priceGrid} ${canReadPricing && canReadPurchaseCosts ? '' : styles.priceSingle}`}>
               {canReadPricing && <section aria-labelledby='sale-pricing-title' className={`${styles.card} ${styles.priceCurrent}`}>
@@ -219,7 +211,7 @@ const ProductPage = async ({ params, searchParams }) => {
             {canReadPricing && canReadPurchaseCosts && <PurchasePriceGap baseUnitLabel={baseUnitLabel} purchaseCost={latestPurchaseCost} salePriceInCentimes={product.salePrice?.amountInCentimes ?? null} />}
             {canReadPurchaseCosts && <details className={styles.help}><summary>Comment lire le coût d’achat ?</summary><p>Il provient de la dernière ligne de réception compatible dont le montant TTC et la quantité permettent un calcul. Ce n’est pas un coût moyen ni une valorisation FIFO. L’écart vente − dernier achat est uniquement une comparaison de montants unitaires.</p></details>}
           </div>}
-          {activeSection === 'conditionnements' && <div aria-labelledby='conditionnements-tab' id='conditionnements-panel'>
+          {activeTab === 'conditionnements' && <div aria-labelledby='conditionnements-tab' id='conditionnements-panel'>
             <SectionHeading title='Conditionnements' description='Des conversions claires pour les achats et les réceptions.' />
             <section aria-label='Unité de stock' className={styles.unitBanner}>
               <ProductIcon name='box' /><div><strong>Unité de stock : 1 {baseUnitLabel.toLocaleLowerCase('fr')}</strong><p>Chaque conditionnement est converti directement en unités de base.</p></div>

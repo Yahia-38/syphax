@@ -46,7 +46,8 @@ import {
 import TourDetail from './tour-detail.js';
 import TourOperationCard from './tour-operation-card.js';
 import { EditingLink } from '../../components/editing-session.js';
-import { readTourView } from '../../../../lib/tour-detail-navigation.js';
+import { TAB_PARAMETER } from '../../../../lib/tab-navigation.js';
+import { readTourTab } from '../../../../lib/tour-detail-navigation.js';
 import { formatReceptionMoney } from '../../../../lib/receptions.js';
 import styles from './tour-detail.module.css';
 import TourProductList from './tour-product-list.js';
@@ -169,9 +170,9 @@ const TourPage = async ({ params, searchParams }) => {
   const canDeclare = canDeclareTourExpenses && expensePreview && !expensePreview.errors?.form && !expensePreview.declaration && expensePreview.declarationStatus !== 'HISTORICAL_MISSING' && !cancelled;
   const canCount = countingSheet && !countingSheet.recorded && !countingSheet.errors?.form && tour.status === TOUR_STATUS_LOADED;
   const priority = canCount
-    ? { target: 'comptage', view: 'operations', label: canConfirmCounting ? 'Saisir les retours' : 'Prévisualiser les retours' }
-    : canDeclare ? { target: 'frais', view: 'operations', label: 'Déclarer les frais' }
-    : canPay ? { target: 'versements', view: 'operations', label: 'Encaisser' } : null;
+    ? { target: 'comptage', tab: 'operations', label: canConfirmCounting ? 'Saisir les retours' : 'Prévisualiser les retours' }
+    : canDeclare ? { target: 'frais', tab: 'operations', label: 'Déclarer les frais' }
+    : canPay ? { target: 'versements', tab: 'operations', label: 'Encaisser' } : null;
   const countingProps = { canConfirm: canConfirmCounting, initialConfirmationKey: randomUUID(), sheet: countingSheet ? { ...withLineDisplayUnits(countingSheet), tourReference: tour.reference, deliverer: { code: tour.delivererCode, name: tour.delivererName } } : null, tourId: tour.id };
   const expenseProps = { canDeclareExpenses: canDeclareTourExpenses, initialConfirmationKey: randomUUID(), preview: expensePreview, tourId: tour.id };
   const paymentProps = { canCreatePayment: canCreateCashPayment, initialConfirmationKey: randomUUID(), preview: paymentPreview, tourId: tour.id };
@@ -184,7 +185,7 @@ const TourPage = async ({ params, searchParams }) => {
     ...(cancelled ? [['Annulée par', tour.cancelledBy ?? 'Compte indisponible'], ['Annulée le', formatTourCreatedAt(tour.cancelledAt)], ['Motif d’annulation', tour.cancellationReason]] : []),
   ];
 
-  return <TourDetail tourId={tour.id} returnHref={returnHref} defaultView={readTourView(query.vue, tour.status)} priority={priority}
+  return <TourDetail tourId={tour.id} returnHref={returnHref} defaultTab={readTourTab(query[TAB_PARAMETER], tour.status)} priority={priority}
     header={<header>
       {(back.target === 'dayRecap' || canReadDeliverer) && <EditingLink className={styles.back} href={returnHref}>{back.label}</EditingLink>}
       <p className={styles.eyebrow}>Fiche tournée</p>
@@ -192,10 +193,10 @@ const TourPage = async ({ params, searchParams }) => {
       <p className={styles.meta}><span className={styles.badge} data-status={tour.status}>{formatTourStatus(tour.status)}</span><span>{tour.delivererName} · {tour.delivererCode}</span><span>Prévue le {formatTourDate(tour.plannedDate)}</span></p>
     </header>}
     shortcuts={[
-      { label: 'Chargement', state: cancelled ? 'Annulée' : preparation ? 'En préparation' : 'Confirmé', target: 'chargement', view: 'produits' },
-      { label: 'Comptage', state: counted ? 'Enregistré' : tour.status === TOUR_STATUS_LOADED ? 'À saisir' : cancelled ? 'Non réalisé' : 'Après chargement', target: 'comptage', view: 'operations' },
-      { label: 'Frais', state: expenseState === 'DECLARED' ? 'Déclarés' : expenseState === 'HISTORICAL_MISSING' ? 'Absence historique' : counted ? expenseState === 'MISSING' ? 'À déclarer' : 'Selon vos droits' : cancelled ? 'Non déclarés' : 'Après comptage', target: 'frais', view: 'operations' },
-      { label: 'Versements', state: Number.isSafeInteger(remaining) ? remaining === 0 ? 'Soldée' : 'Reste à encaisser' : counted ? 'Selon vos droits' : 'Après comptage', target: 'versements', view: 'operations' },
+      { label: 'Chargement', state: cancelled ? 'Annulée' : preparation ? 'En préparation' : 'Confirmé', target: 'chargement', tab: 'produits' },
+      { label: 'Comptage', state: counted ? 'Enregistré' : tour.status === TOUR_STATUS_LOADED ? 'À saisir' : cancelled ? 'Non réalisé' : 'Après chargement', target: 'comptage', tab: 'operations' },
+      { label: 'Frais', state: expenseState === 'DECLARED' ? 'Déclarés' : expenseState === 'HISTORICAL_MISSING' ? 'Absence historique' : counted ? expenseState === 'MISSING' ? 'À déclarer' : 'Selon vos droits' : cancelled ? 'Non déclarés' : 'Après comptage', target: 'frais', tab: 'operations' },
+      { label: 'Versements', state: Number.isSafeInteger(remaining) ? remaining === 0 ? 'Soldée' : 'Reste à encaisser' : counted ? 'Selon vos droits' : 'Après comptage', target: 'versements', tab: 'operations' },
     ]}
     financial={<aside className={styles.financial} aria-label='Situation financière de cette tournée'>
       <h2>Reste à payer</h2>

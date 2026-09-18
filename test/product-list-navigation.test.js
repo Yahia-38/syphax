@@ -53,9 +53,9 @@ test('les valeurs par défaut restent hors de l’adresse', () => {
 
 test('la liste filtrée survit à un aller-retour par la fiche', () => {
   const listHref = buildProductListHref({ page: 2, query: 'lait', sortDir: 'desc', sortKey: 'salePriceCentimes', stock: 'POSITIVE' });
-  const href = new URL(buildProductHref({ productId, returnHref: listHref, section: 'stock' }), 'https://syphax.invalid');
+  const href = new URL(buildProductHref({ productId, returnHref: listHref, tab: 'stock' }), 'https://syphax.invalid');
   assert.equal(href.pathname, `/produits/${productId}`);
-  assert.equal(href.searchParams.get('section'), 'stock');
+  assert.equal(href.searchParams.get('onglet'), 'stock');
   assert.equal(validateProductListHref(href.searchParams.get('retour')), listHref);
   assert.equal(new URL(buildNewProductHref(listHref), 'https://syphax.invalid').searchParams.get('retour'), listHref);
 });

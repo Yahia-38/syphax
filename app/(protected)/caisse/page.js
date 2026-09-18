@@ -18,7 +18,8 @@ import { requirePermission } from '../../../lib/sessions.js';
 import CashJournal from './cash-journal.js';
 import CashRemainders from './cash-remainders.js';
 import CashWorkspace from './cash-workspace.js';
-import { readCashView, formatCashSignedAmount } from '../../../lib/cash-navigation.js';
+import { readCashTab, formatCashSignedAmount } from '../../../lib/cash-navigation.js';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
 import styles from './cash.module.css';
 
 export const metadata = {
@@ -28,7 +29,7 @@ export const metadata = {
 const CashPage = async ({ searchParams }) => {
   const session = await requirePermission('cash.read');
   const resolvedSearchParams = await searchParams;
-  const view = readCashView(resolvedSearchParams.vue);
+  const view = readCashTab(resolvedSearchParams[TAB_PARAMETER]);
   const listState = readCashJournalState(resolvedSearchParams);
   const remainderState = readCashRemaindersState(resolvedSearchParams);
   const permissions = await getUserPermissions(session.userId);

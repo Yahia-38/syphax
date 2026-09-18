@@ -60,9 +60,6 @@
 .secondary { color: #19283e; }
 .quiet { color: #62728a; border-color: transparent; background: transparent; }
 .danger { color: #b02e44; border-color: transparent; background: transparent; }
-.tabs { display: flex; gap: 23px; border-bottom: 1px solid #dfe6ef; margin-bottom: 22px; }
-.tabs a { padding: 12px 1px; border-bottom: 2px solid transparent; font-size: 13px; color: #62728a; }
-.tabs a[aria-current='page'] { color: #2855dd; border-color: #2855dd; font-weight: 650; }
 .card { min-width: 0; border: 1px solid #dfe6ef; border-radius: 13px; background: white; box-shadow: 0 2px 3px #18304b03; overflow: hidden; scroll-margin-top: 22px; }
 .cardHeader { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 18px 22px; border-bottom: 1px solid #dfe6ef; }
 .cardHeader .badge { flex-shrink: 0; white-space: nowrap; }

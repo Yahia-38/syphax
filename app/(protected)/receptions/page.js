@@ -6,7 +6,9 @@ import { listReceptions } from '../../../lib/reception-records.js';
 import {
   formatReceptionDateInput,
   getMissingReceptionFormPermissions,
+  getReceptionTabs,
 } from '../../../lib/receptions.js';
+import { readTab } from '../../../lib/tab-navigation.js';
 import { requireSession } from '../../../lib/sessions.js';
 import { listSuppliers } from '../../../lib/suppliers.js';
 import ReceptionWorkspace from './reception-workspace.js';
@@ -15,11 +17,6 @@ import styles from './receptions.module.css';
 
 export const metadata = {
   title: 'Réceptions | Syphax',
-};
-
-const readTab = (value) => {
-  const tab = Array.isArray(value) ? value[0] : value;
-  return tab === 'fournisseurs' ? 'fournisseurs' : 'receptions';
 };
 
 const ReceptionsPage = async ({ searchParams }) => {
@@ -38,12 +35,11 @@ const ReceptionsPage = async ({ searchParams }) => {
     throw new PermissionDeniedError('receptions.read');
   }
 
-  const requestedTab = readTab(query?.onglet);
-  const activeTab = requestedTab === 'fournisseurs' && canReadSuppliers
-    ? 'fournisseurs'
-    : canReadReceptions
-      ? 'receptions'
-      : 'fournisseurs';
+  const activeTab = readTab(
+    query ?? {},
+    getReceptionTabs({ canReadReceptions, canReadSuppliers }),
+    'receptions',
+  );
   let suppliers = [];
   let products = [];
   let receptions = [];

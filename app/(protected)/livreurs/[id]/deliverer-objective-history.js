@@ -10,7 +10,7 @@ import styles from './deliverer-detail.module.css';
 const DelivererObjectiveHistory = ({ objectives, delivererId, returnHref, navigationState }) => {
   const { history, objectiveQuery, objectiveMonth, objectivePage, totalItems, totalPages } = objectives;
   const href = (changes = {}) => buildDelivererToursHref({
-    delivererId, returnHref, section: 'objectifs', ...navigationState, objectiveQuery, objectiveMonth, objectivePage, ...changes,
+    delivererId, returnHref, tab: 'objectifs', ...navigationState, objectiveQuery, objectiveMonth, objectivePage, ...changes,
   });
   return (
     <section className={styles.card} aria-labelledby='objective-history-title'>

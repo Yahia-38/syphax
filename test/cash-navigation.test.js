@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildCashFilterHref, buildCashViewHref, formatCashSignedAmount, readCashView } from '../lib/cash-navigation.js';
+import { buildCashFilterHref, buildCashTabHref, formatCashSignedAmount, readCashTab } from '../lib/cash-navigation.js';
 import { buildCashJournalHref, buildCashRemaindersHref, validateCashJournalHref } from '../lib/cash-payments.js';
 
 const search = 'q=note&livreur=6aa73924f609544f68c37666&du=2026-09-01&au=2026-09-16&page=3&resteRecherche=amine&restePage=2&source=fiche';
 
-test('whitelists the view and preserves both independent selections when switching', () => {
-  assert.equal(readCashView('unknown'), 'journal');
-  assert.equal(readCashView(['restes', 'journal']), 'restes');
-  const result = new URL(buildCashViewHref(search, 'restes'), 'https://syphax.invalid');
-  assert.equal(result.searchParams.get('vue'), 'restes');
+test('whitelists the tab and preserves both independent selections when switching', () => {
+  assert.equal(readCashTab('unknown'), 'journal');
+  assert.equal(readCashTab('restes'), 'restes');
+  assert.equal(readCashTab(['restes', 'journal']), 'journal');
+  const result = new URL(buildCashTabHref(search, 'restes'), 'https://syphax.invalid');
+  assert.equal(result.searchParams.get('onglet'), 'restes');
   for (const [key, value] of new URLSearchParams(search)) assert.equal(result.searchParams.get(key), value);
 });
 
@@ -38,10 +39,10 @@ test('remainder apply/reset preserves journal filters and pagination', () => {
 test('legacy cash links stay compatible and validated view links remain local', () => {
   assert.equal(buildCashJournalHref(), '/caisse');
   assert.equal(buildCashRemaindersHref(), '/caisse');
-  assert.equal(buildCashRemaindersHref({ view: 'restes', query: 'amine' }), '/caisse?resteRecherche=amine&vue=restes');
-  assert.equal(validateCashJournalHref('/caisse?page=2&vue=restes'), '/caisse?page=2&vue=restes');
-  assert.equal(validateCashJournalHref('/caisse?vue=https://outside.invalid'), '/caisse?vue=journal');
-  assert.equal(validateCashJournalHref('//outside.invalid/caisse?vue=restes'), '/caisse');
+  assert.equal(buildCashRemaindersHref({ view: 'restes', query: 'amine' }), '/caisse?resteRecherche=amine&onglet=restes');
+  assert.equal(validateCashJournalHref('/caisse?page=2&onglet=restes'), '/caisse?page=2&onglet=restes');
+  assert.equal(validateCashJournalHref('/caisse?onglet=https://outside.invalid'), '/caisse?onglet=journal');
+  assert.equal(validateCashJournalHref('//outside.invalid/caisse?onglet=restes'), '/caisse');
   assert.equal(validateCashJournalHref('/caisse?retour=https://outside.invalid'), '/caisse');
 });
 

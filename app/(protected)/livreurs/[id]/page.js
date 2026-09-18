@@ -10,7 +10,7 @@ import {
   getDelivererCreditExposure,
   getDelivererCreditLimit,
 } from '../../../../lib/deliverer-credit-limits.js';
-import { getDelivererSections, readDelivererSection } from '../../../../lib/deliverer-detail-navigation.js';
+import { getDelivererTabs, readDelivererTab } from '../../../../lib/deliverer-detail-navigation.js';
 import { getDelivererObjectiveDashboard } from '../../../../lib/deliverer-monthly-achievement.js';
 import { readObjectiveAchievementState, readObjectiveHistoryState } from '../../../../lib/deliverer-objective-calculations.js';
 import { DELIVERER_OBJECTIVE_READ_PERMISSION, DELIVERER_OBJECTIVE_UPDATE_PERMISSION, getDelivererObjectives } from '../../../../lib/deliverer-objectives.js';
@@ -18,6 +18,7 @@ import { formatDelivererCreatedAt, getDelivererById, requireDelivererEditPermiss
 import { requirePermission } from '../../../../lib/sessions.js';
 import { buildDelivererToursHref, formatTourDateInput, listToursByDeliverer, readDelivererTourListState } from '../../../../lib/tours.js';
 import { EditingLink, EditingSessionProvider } from '../../components/editing-session.js';
+import Tabs from '../../components/tabs.js';
 import DelivererEditForm from './deliverer-edit-form.js';
 import DelivererCreditLimitForm from './deliverer-credit-limit-form.js';
 import DelivererObjectiveForm from './deliverer-objective-form.js';
@@ -50,30 +51,30 @@ const DelivererPage = async ({ params, searchParams }) => {
   const deliverer = await getDelivererById(id, { userId: session.userId });
   if (!deliverer) notFound();
 
-  const sections = getDelivererSections({ canReadCash, canReadCreditLimit, canReadObjectives, canReadTours });
-  const section = readDelivererSection(query, sections);
+  const tabs = getDelivererTabs({ canReadCash, canReadCreditLimit, canReadObjectives, canReadTours });
+  const activeTab = readDelivererTab(query, tabs);
   const returnHref = validateDelivererListHref(query.retour);
   const tourListState = readDelivererTourListState(query);
   const objectiveHistoryState = readObjectiveHistoryState(query);
   const achievementState = readObjectiveAchievementState(query);
   const [standaloneCashSummary, creditLimitResult, tourList, objectives, dashboard] = await Promise.all([
-    section === 'ensemble' && canReadCash && !canReadCompleteCreditExposure
+    activeTab === 'ensemble' && canReadCash && !canReadCompleteCreditExposure
       ? getDelivererCashSummary({ delivererId: deliverer.id, userId: session.userId }) : null,
-    section === 'ensemble' && canReadCompleteCreditExposure
+    activeTab === 'ensemble' && canReadCompleteCreditExposure
       ? getDelivererCreditExposure({ delivererId: deliverer.id, userId: session.userId })
-      : section === 'ensemble' && canReadCreditLimit
+      : activeTab === 'ensemble' && canReadCreditLimit
         ? getDelivererCreditLimit({ delivererId: deliverer.id, userId: session.userId }) : null,
-    section === 'tournees' && canReadTours
+    activeTab === 'tournees' && canReadTours
       ? listToursByDeliverer({ delivererId: deliverer.id, ...tourListState, userId: session.userId }) : null,
-    section === 'objectifs' && canReadObjectives
+    activeTab === 'objectifs' && canReadObjectives
       ? getDelivererObjectives({ delivererId: deliverer.id, ...objectiveHistoryState, userId: session.userId }) : null,
-    section === 'objectifs' && canReadObjectives
+    activeTab === 'objectifs' && canReadObjectives
       ? getDelivererObjectiveDashboard({ delivererId: deliverer.id, userId: session.userId, searchParams: query }) : null,
   ]);
   const cashSummary = creditLimitResult?.cashSummary ?? standaloneCashSummary;
   const objectiveNavigationState = { ...objectiveHistoryState, ...(dashboard?.monthlyHistory ?? achievementState) };
-  const hrefForSection = (nextSection) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveNavigationState, returnHref, section: nextSection });
-  const currentHref = hrefForSection(section);
+  const hrefForTab = (nextTab) => buildDelivererToursHref({ delivererId: deliverer.id, ...(tourList ?? tourListState), ...objectiveNavigationState, returnHref, tab: nextTab });
+  const currentHref = hrefForTab(activeTab);
   const latestStatusChange = deliverer.statusHistory.at(-1);
   const trace = [
     ['Création du livreur', deliverer.createdAt, deliverer.createdBy],
@@ -95,8 +96,8 @@ const DelivererPage = async ({ params, searchParams }) => {
           {deliverer.active && canCreateTour && <TourCreateButton key={currentHref} creationKey={randomUUID()} deliverer={{ code: deliverer.code, id: deliverer.id, name: deliverer.name }} initialPlannedDate={formatTourDateInput(new Date())} returnHref={currentHref} />}
         </header>
         {!deliverer.active && <div className={styles.inactiveBanner}><div><strong>Livreur désactivé</strong><p>La création de nouvelles tournées est indisponible. La fiche, les tournées et les montants dus sont conservés.</p></div>{canUpdateDelivererStatus && <DelivererStatusButton key={currentHref} deliverer={deliverer} returnHref={currentHref} />}</div>}
-        <nav className={styles.tabs} aria-label='Sections de la fiche livreur'>{sections.map(([key, label]) => <EditingLink key={key} href={hrefForSection(key)} aria-current={section === key ? 'page' : undefined}>{label}</EditingLink>)}</nav>
-        {section === 'ensemble' && <div className={styles.overview}>
+        <Tabs activeTab={activeTab} buildHref={hrefForTab} label='Sections de la fiche livreur' tabs={tabs} />
+        {activeTab === 'ensemble' && <div className={styles.overview}>
           {cashSummary && <DelivererCashSummary summary={cashSummary} />}
           {creditLimitResult && <div className={styles.creditGrid}>
             <DelivererCreditLimitForm canUpdate={canUpdateCreditLimit} creditLimit={creditLimitResult.creditLimit} delivererId={deliverer.id} />
@@ -104,14 +105,14 @@ const DelivererPage = async ({ params, searchParams }) => {
           </div>}
           {canReadTours && <EditingLink className={styles.overviewLink} href={hrefForSection('tournees')}>Consulter les tournées ↗</EditingLink>}
         </div>}
-        {section === 'tournees' && tourList && <><DelivererTourList delivererId={deliverer.id} delivererName={deliverer.name} returnHref={returnHref} {...tourList} /><p className={styles.scope}>Le statut décrit l’avancement de la tournée. Il ne représente pas son état de paiement.</p></>}
-        {section === 'objectifs' && objectives && <div className={styles.overview}>
+        {activeTab === 'tournees' && tourList && <><DelivererTourList delivererId={deliverer.id} delivererName={deliverer.name} returnHref={returnHref} {...tourList} /><p className={styles.scope}>Le statut décrit l’avancement de la tournée. Il ne représente pas son état de paiement.</p></>}
+        {activeTab === 'objectifs' && objectives && <div className={styles.overview}>
           {dashboard?.achievement && <DelivererMonthlyAchievement achievement={dashboard.achievement} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />}
           <DelivererObjectiveForm canUpdate={canUpdateObjectives} objectives={objectives} delivererId={deliverer.id} />
           {dashboard?.monthlyHistory && <DelivererMonthlyHistory history={dashboard.monthlyHistory} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />}
           <DelivererObjectiveHistory objectives={objectives} delivererId={deliverer.id} returnHref={returnHref} navigationState={objectiveNavigationState} />
         </div>}
-        {section === 'identification' && <>
+        {activeTab === 'identification' && <>
           <div className={styles.identityGrid}>
             <DelivererEditForm deliverer={deliverer} canUpdate={canUpdateDeliverer} initiallyOpen={editing} returnHref={currentHref} />
             <aside className={styles.card} aria-labelledby='deliverer-trace-title'><div className={styles.cardHead}><h2 id='deliverer-trace-title'>Traçabilité</h2><p>Les derniers événements disponibles.</p></div>

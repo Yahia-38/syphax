@@ -9,6 +9,7 @@ import DelivererCashAllocationPreview from './deliverer-cash-allocation-preview.
 import { CashFilterForm, CashResetLink, CashPageLink } from './cash-workspace.js';
 import { useCashNotice } from './cash-form-context.js';
 import styles from './cash.module.css';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
 
 const Money = ({ value }) => formatCashSignedAmount(value);
 const STATUS_LABELS = { CLOSED: 'Terminée', COUNTED: 'Comptée' };
@@ -90,7 +91,7 @@ const CashRemainders = ({ anomalies, anomalyCount, canCreatePayment, canReadDeli
       <span className={styles.sectionMeta}>Indépendant des dates du journal</span>
     </div>
     <CashFilterForm view='restes' className={styles.remainderFilters} role='search'>
-      <input type='hidden' name='vue' value='restes' />
+      <input type='hidden' name={TAB_PARAMETER} value='restes' />
       {[['q', journalState.query], ['livreur', journalState.delivererId], ['du', journalState.dateFrom], ['au', journalState.dateTo], ['page', journalState.page]].filter(([, value]) => value).map(([name, value]) => <input key={name} type='hidden' name={name} value={value} />)}
       <div><label htmlFor='cash-remainder-search'>Rechercher un livreur</label><input id='cash-remainder-search' name='resteRecherche' type='search' defaultValue={query} maxLength={100} placeholder='Code ou nom du livreur' /></div>
       <button type='submit'>Rechercher</button>

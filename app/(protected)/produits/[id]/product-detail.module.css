@@ -24,11 +24,6 @@
 .heroSummary dd .quantityPart { margin-left: 0; font: inherit; letter-spacing: inherit; color: inherit; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
-.tabs { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 1px solid #dce3ed; position: sticky; top: 0; background: var(--surface); z-index: 20; padding-top: 3px; margin-bottom: 26px; }
-.tabs a { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: #65758b; font-size: 13px; font-weight: 500; }
-.tabs svg { width: 17px; height: 17px; }
-.tabs a[aria-current='page'] { color: var(--blue); border-bottom-color: var(--blue); font-weight: 650; }
-.tabs a:hover { color: var(--blue); background: #edf2fc; text-decoration: none; }
 .sectionHeading { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 16px; }
 .sectionHeading h2 { font-size: 17px; font-weight: 650; letter-spacing: -.25px; }
 .sectionHeading p { margin-top: 5px; font-size: 12px; color: var(--muted); }

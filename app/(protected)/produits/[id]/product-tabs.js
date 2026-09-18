@@ -1,55 +1,35 @@
 import { buildProductHref } from '../../../../lib/product-list-navigation.js';
-import { EditingLink } from '../../components/editing-session.js';
+import Tabs from '../../components/tabs.js';
 import ProductIcon from './product-icon.js';
-import styles from './product-detail.module.css';
 
-const TABS = [
-  { label: 'Stock', section: 'stock' },
-  { label: 'Identification & traçabilité', section: 'identification' },
-  { label: 'Tarification', section: 'tarification' },
-  { label: 'Conditionnements', section: 'conditionnements' },
+const TAB_ICONS = { conditionnements: 'box', tarification: 'price' };
+
+const ALL_TABS = [
+  { key: 'stock', label: 'Stock' },
+  { key: 'identification', label: 'Identification & traçabilité' },
+  { key: 'tarification', label: 'Tarification' },
+  { key: 'conditionnements', label: 'Conditionnements' },
 ];
 
-const ProductTabs = ({
-  activeSection,
-  canReadPackaging,
-  canReadPricing,
-  canReadPurchaseCosts,
-  productId,
-  returnHref,
-}) => (
-  <nav
-    aria-label='Sections de la fiche produit'
-    className={styles.tabs}
-  >
-    {TABS
-      .filter((tab) => (
-        (tab.section !== 'conditionnements' || canReadPackaging)
-        && (
-          tab.section !== 'tarification'
-          || canReadPricing
-          || canReadPurchaseCosts
-        )
-      ))
-      .map((tab) => {
-        const isActive = tab.section === activeSection;
+// The page reads the address against the same list the bar renders, so a tab
+// the reader cannot open is never selected.
+export const getProductTabs = ({ canReadPackaging, canReadTarification }) =>
+  ALL_TABS.filter(({ key }) => (
+    (key !== 'conditionnements' || canReadPackaging)
+    && (key !== 'tarification' || canReadTarification)
+  ));
 
-        return (
-          <EditingLink
-            aria-current={isActive ? 'page' : undefined}
-            href={buildProductHref({
-              productId,
-              returnHref,
-              section: tab.section,
-            })}
-            id={`${tab.section}-tab`}
-            key={tab.section}
-          >
-            <ProductIcon name={tab.section === 'conditionnements' ? 'box' : tab.section === 'tarification' ? 'price' : tab.section} />{tab.label}
-          </EditingLink>
-        );
-      })}
-  </nav>
+const ProductTabs = ({ activeTab, productId, returnHref, tabs }) => (
+  <Tabs
+    activeTab={activeTab}
+    buildHref={(tab) => buildProductHref({ productId, returnHref, tab })}
+    label='Sections de la fiche produit'
+    sticky
+    tabs={tabs.map((tab) => ({
+      ...tab,
+      icon: <ProductIcon name={TAB_ICONS[tab.key] ?? tab.key} />,
+    }))}
+  />
 );
 
 export default ProductTabs;

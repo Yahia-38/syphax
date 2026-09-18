@@ -718,7 +718,7 @@ test('le changement de statut conserve la section et les filtres avec un retour 
   const { token, userId } = await createUserSession('statut-contexte', ['deliverers.status.update']);
   const delivererId = new ObjectId();
   await database.collection('deliverers').insertOne({ _id: delivererId, code: 'LIV-CONTEXTE', name: 'Contexte', createdBy: userId });
-  const context = `/livreurs/${delivererId}?retour=%2Flivreurs%3Fq%3DAtlas%26page%3D2&section=identification&tourneeRecherche=TRN&tourneeDate=2026-09-14&tourneePage=3`;
+  const context = `/livreurs/${delivererId}?retour=%2Flivreurs%3Fq%3DAtlas%26page%3D2&onglet=identification&tourneeRecherche=TRN&tourneeDate=2026-09-14&tourneePage=3`;
   await assert.rejects(callWithSession(token, () => deactivateDeliverer(delivererId.toString(), context, { revision: 0 })),
     (error) => error.digest?.includes(context));
 });

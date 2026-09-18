@@ -7,6 +7,7 @@ import CashJournalAllocations from './cash-journal-allocations.js';
 import {
   formatCashAmount,
 } from '../../../lib/cash-payments.js';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
 
 const PaginationLink = ({ children, disabled, page }) => disabled ? (
   <span
@@ -67,7 +68,7 @@ const CashJournal = ({
           method='get'
           role='search'
         >
-          <input type='hidden' name='vue' value='journal' />
+          <input type='hidden' name={TAB_PARAMETER} value='journal' />
           {remainderState.query && (
             <input
               name='resteRecherche'

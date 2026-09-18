@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { buildDelivererListHref } from '../../../lib/deliverers.js';
 import { formatObjectiveMonth, formatObjectivePercentage, OBJECTIVE_ACHIEVEMENT_STATUSES } from '../../../lib/deliverer-objective-calculations.js';
 import { formatReceptionMoney } from '../../../lib/receptions.js';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
 import DelivererDirectory from './deliverer-directory.js';
 import DelivererIcon from './deliverer-icon.js';
 import styles from './deliverer-list.module.css';
@@ -23,13 +24,13 @@ const DelivererList = ({
   const allHref = href({ page: 1, status: 'all' });
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + deliverers.length - 1;
-  const detailHref = (id, section, editing = false) => {
+  const detailHref = (id, tab, editing = false) => {
     const parameters = new URLSearchParams({ retour: returnHref });
-    if (section) parameters.set('section', section);
+    if (tab) parameters.set(TAB_PARAMETER, tab);
     if (editing) parameters.set('modifier', '1');
     if (canReadObjectives) {
       parameters.set('bilanMois', month);
-      if (!section) parameters.set('section', 'objectifs');
+      if (!tab) parameters.set(TAB_PARAMETER, 'objectifs');
     }
     return `/livreurs/${id}?${parameters.toString()}`;
   };

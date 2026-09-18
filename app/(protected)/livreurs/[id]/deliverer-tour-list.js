@@ -1,4 +1,5 @@
 import { buildDelivererToursHref, formatTourDate, formatTourStatus } from '../../../../lib/tours.js';
+import { TAB_PARAMETER } from '../../../../lib/tab-navigation.js';
 import { EditingLink } from '../../components/editing-session.js';
 import styles from './deliverer-detail.module.css';
 
@@ -8,14 +9,14 @@ const PaginationLink = ({ children, disabled, href }) => disabled
 
 const DelivererTourList = ({ delivererId, delivererName, page, pageSize, plannedDate, query, returnHref, totalItems, totalPages, tours }) => {
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
-  const href = (changes = {}) => buildDelivererToursHref({ delivererId, page, plannedDate, query, returnHref, section: 'tournees', ...changes });
+  const href = (changes = {}) => buildDelivererToursHref({ delivererId, page, plannedDate, query, returnHref, tab: 'tournees', ...changes });
   const tourHref = (id) => `/tournees/${id}?${new URLSearchParams({ retour: href() })}`;
   return (
     <section className={styles.card} aria-labelledby='deliverer-tours-title'>
       <div className={styles.cardHead}><h2 id='deliverer-tours-title'>Tournées</h2><p>Retrouvez les tournées de ce livreur, quel que soit leur statut.</p></div>
       <form className={styles.filters} action={`/livreurs/${delivererId}`} method='get' role='search'>
         <input name='retour' type='hidden' value={returnHref} />
-        <input name='section' type='hidden' value='tournees' />
+        <input name={TAB_PARAMETER} type='hidden' value='tournees' />
         <div><label htmlFor='tour-search'>Référence de tournée</label><input id='tour-search' name='tourneeRecherche' type='search' maxLength={100} defaultValue={query} placeholder='Rechercher par référence' /></div>
         <div><label htmlFor='tour-date-filter'>Date prévue</label><input id='tour-date-filter' name='tourneeDate' type='date' defaultValue={plannedDate} /></div>
         <button type='submit'>Rechercher</button>

@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { buildReceptionHistoryHref, formatReceptionDate, readReceptionHistoryState } from '../../../lib/receptions.js';
-import { EditingLink } from '../components/editing-session.js';
+import { buildReceptionHistoryHref, formatReceptionDate, getReceptionTabs, readReceptionHistoryState } from '../../../lib/receptions.js';
+import { withTab } from '../../../lib/tab-navigation.js';
+import Tabs from '../components/tabs.js';
 import styles from './receptions.module.css';
 
 export const formatReceptionShortDate = (value) => {
@@ -12,19 +13,20 @@ export const formatReceptionShortDate = (value) => {
 
 export const WorkspaceHeader = ({ activeTab, canReadReceptions, canReadSuppliers, children }) => {
   const parameters = useSearchParams();
+  // Both tabs share the history filters; réceptions is the default, so it
+  // stays out of the address.
   const historyHref = buildReceptionHistoryHref(readReceptionHistoryState(Object.fromEntries(parameters)));
-  const supplierParameters = new URLSearchParams(historyHref.split('?')[1]);
-  supplierParameters.set('onglet', 'fournisseurs');
+  const buildHref = (tab) => tab === 'receptions'
+    ? historyHref
+    : `/receptions?${withTab(historyHref.split('?')[1] ?? '', tab)}`;
   return (
     <>
       <header className={styles.hero}>
         <div><p className={styles.eyebrow}>Approvisionnement</p><h1>Réceptions</h1><p>Enregistrez les marchandises reçues et retrouvez vos documents fournisseurs.</p></div>
         {children}
       </header>
-      <nav className={styles.tabs} aria-label='Sections des réceptions'>
-        {canReadReceptions && <EditingLink aria-current={activeTab === 'receptions' ? 'page' : undefined} href={historyHref}>Réceptions</EditingLink>}
-        {canReadSuppliers && <EditingLink aria-current={activeTab === 'fournisseurs' ? 'page' : undefined} href={`/receptions?${supplierParameters}`}>Fournisseurs</EditingLink>}
-      </nav>
+      <Tabs activeTab={activeTab} buildHref={buildHref} label='Sections des réceptions'
+        tabs={getReceptionTabs({ canReadReceptions, canReadSuppliers })} />
     </>
   );
 };

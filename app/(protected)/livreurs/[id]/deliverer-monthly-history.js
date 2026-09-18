@@ -11,7 +11,7 @@ const money = (value) => value === null ? '—' : formatReceptionMoney(value);
 
 const DelivererMonthlyHistory = ({ history, delivererId, returnHref, navigationState }) => {
   const { rows, years, historyYear, historyStatus, historyQuery, historyPage, totalItems, totalPages } = history;
-  const href = (changes = {}) => buildDelivererToursHref({ delivererId, returnHref, section: 'objectifs', ...navigationState, ...changes });
+  const href = (changes = {}) => buildDelivererToursHref({ delivererId, returnHref, tab: 'objectifs', ...navigationState, ...changes });
   return (
     <section className={styles.card} aria-labelledby='monthly-history-title'>
       <div className={styles.cardHead}><h2 id='monthly-history-title'>Historique mensuel</h2><p>Objectifs et ventes de chaque mois, y compris les mois sans ventes.</p></div>

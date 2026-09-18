@@ -13,12 +13,15 @@ import {
   validateReceptionLine,
 } from '../../../lib/receptions.js';
 import { summarizeReceptionDraft, validateReceptionDocument } from '../../../lib/reception-draft.js';
+import { TAB_PARAMETER } from '../../../lib/tab-navigation.js';
 import ConfirmationDialog from '../confirmation-dialog.js';
 import { useInlineSave } from '../components/editable-card.js';
 import { EditingLink, useEditingSession } from '../components/editing-session.js';
 import { Pagination, ReadError, formatReceptionShortDate } from './reception-ui.js';
 import styles from './receptions.module.css';
 import { createReception } from './actions.js';
+
+const SUPPLIERS_TAB_HREF = `/receptions?${new URLSearchParams({ [TAB_PARAMETER]: 'fournisseurs' })}`;
 
 const INITIAL_RECEPTION_STATE = {
   errors: {},
@@ -299,7 +302,7 @@ const ReceptionDraftForm = ({
         <div className={styles.prerequisite}>
           {!suppliers.length && <p>Ajoutez un fournisseur actif avant de préparer une réception.</p>}
           {!products.length && <p>Ajoutez un produit au catalogue avant de préparer les lignes.</p>}
-          {!suppliers.length && canReadSuppliers && <EditingLink href='/receptions?onglet=fournisseurs'>Consulter les fournisseurs</EditingLink>}
+          {!suppliers.length && canReadSuppliers && <EditingLink href={SUPPLIERS_TAB_HREF}>Consulter les fournisseurs</EditingLink>}
         </div>
       </section> : (
         <form ref={formRef} action={save} onSubmit={verify} noValidate aria-busy={pending} id='new-reception-form'>
@@ -318,7 +321,7 @@ const ReceptionDraftForm = ({
                     <div><label htmlFor='reception-date'>Date de réception</label><input id='reception-date' type='date' value={documentDraft.receptionDate} onChange={(event) => changeDocument('receptionDate', event.target.value)} aria-invalid={Boolean(documentErrors.receptionDate)} aria-describedby={documentErrors.receptionDate ? 'reception-date-error' : undefined} />{documentErrors.receptionDate && <p className='mt-2 text-xs text-red-700' id='reception-date-error'>{documentErrors.receptionDate}</p>}</div>
                     <div><label htmlFor='supplier-reference'>Référence du document</label><input id='supplier-reference' maxLength={100} value={documentDraft.supplierReference} onChange={(event) => changeDocument('supplierReference', event.target.value)} placeholder='Ex. BL-2026-0042' aria-invalid={Boolean(documentErrors.supplierReference)} aria-describedby={documentErrors.supplierReference ? 'supplier-reference-error' : undefined} />{documentErrors.supplierReference && <p className='mt-2 text-xs text-red-700' id='supplier-reference-error'>{documentErrors.supplierReference}</p>}</div>
                   </div>
-                  {!suppliers.length && <div className={styles.prerequisite}><p>Aucun fournisseur actif disponible. Un fournisseur actif est nécessaire pour enregistrer la réception.</p>{canReadSuppliers && <EditingLink href='/receptions?onglet=fournisseurs'>Consulter les fournisseurs</EditingLink>}</div>}
+                  {!suppliers.length && <div className={styles.prerequisite}><p>Aucun fournisseur actif disponible. Un fournisseur actif est nécessaire pour enregistrer la réception.</p>{canReadSuppliers && <EditingLink href={SUPPLIERS_TAB_HREF}>Consulter les fournisseurs</EditingLink>}</div>}
                   <div className={styles.localActions}><small>Informations du brouillon</small>{documentValidated && <button className={styles.secondary} onClick={cancelDocument} type='button'>Annuler</button>}<button className={styles.primary} onClick={validateDocument} type='button'>Valider les informations</button></div>
                 </> : <dl className={styles.documentSummary}><div><dt>Fournisseur</dt><dd>{supplier?.name ?? 'À renseigner'}</dd></div><div><dt>Date de réception</dt><dd>{formatReceptionShortDate(document.receptionDate)}</dd></div><div><dt>Référence fournisseur</dt><dd>{document.supplierReference || 'À renseigner'}</dd></div></dl>}
               </section>

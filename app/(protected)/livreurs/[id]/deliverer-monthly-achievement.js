@@ -9,7 +9,7 @@ import styles from './deliverer-detail.module.css';
 const money = (value) => value === null ? '—' : formatReceptionMoney(value);
 
 const DelivererMonthlyAchievement = ({ achievement, delivererId, returnHref, navigationState }) => {
-  const href = buildDelivererToursHref({ delivererId, returnHref, section: 'objectifs', ...navigationState });
+  const href = buildDelivererToursHref({ delivererId, returnHref, tab: 'objectifs', ...navigationState });
   return (
     <section className={styles.card} aria-labelledby='monthly-achievement-title'>
       <div className={styles.cardHead}><h2 id='monthly-achievement-title'>Objectif et réalisation du mois</h2><p>{formatObjectiveMonth(achievement.month)} · Selon la date du comptage en Algérie.</p></div>
