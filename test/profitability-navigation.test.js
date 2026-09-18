@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildProfitabilityCountingHref,
   buildProfitabilityHref,
+  getProfitabilityMonth,
   isProfitabilityHref,
   readProfitabilityState,
   toProfitabilityReportFilters,
@@ -71,6 +72,31 @@ test('une valeur invalide est ignorée et une période inversée est remise dans
   assert.equal(buildProfitabilityHref({ page: 1, query: '   ' }), '/rentabilite');
 });
 
+test('sans période dans l’adresse, la rentabilité s’ouvre sur le mois en cours', () => {
+  assert.deepEqual(getProfitabilityMonth('2026-09-18'), { dateFrom: '2026-09-01', dateTo: '2026-09-30' });
+  assert.deepEqual(getProfitabilityMonth('2028-02-10'), { dateFrom: '2028-02-01', dateTo: '2028-02-29' });
+  assert.deepEqual(getProfitabilityMonth('2026-12-31'), { dateFrom: '2026-12-01', dateTo: '2026-12-31' });
+  assert.deepEqual(getProfitabilityMonth(''), { dateFrom: '', dateTo: '' });
+
+  const state = readProfitabilityState({ page: '2' }, { today: '2026-09-18' });
+
+  assert.equal(state.dateFrom, '2026-09-01');
+  assert.equal(state.dateTo, '2026-09-30');
+  // The page keeps the month in the address it links back to.
+  assert.equal(buildProfitabilityHref(state), '/rentabilite?du=2026-09-01&au=2026-09-30&page=2');
+
+  // A period cleared in the form (du=&au=) covers every period, and stays so.
+  const everyPeriod = readProfitabilityState({ au: '', du: '' }, { today: '2026-09-18' });
+
+  assert.equal(everyPeriod.dateFrom, '');
+  assert.equal(everyPeriod.dateTo, '');
+  assert.equal(buildProfitabilityHref(everyPeriod), '/rentabilite?du=');
+  assert.equal(readProfitabilityState({ du: '' }, { today: '2026-09-18' }).dateTo, '');
+
+  // A single bound is kept as given, without the other bound of the month.
+  assert.equal(readProfitabilityState({ du: '2026-08-15' }, { today: '2026-09-18' }).dateTo, '');
+});
+
 test('seule la page de rentabilité est reconnue, et sa requête est reconstruite', () => {
   assert.equal(isProfitabilityHref('/rentabilite?page=2'), true);
 
@@ -79,6 +105,7 @@ test('seule la page de rentabilité est reconnue, et sa requête est reconstruit
   }
 
   assert.equal(validateProfitabilityHref('/rentabilite?q=%20brahim%20&page=2'), '/rentabilite?q=brahim&page=2');
+  assert.equal(validateProfitabilityHref('/rentabilite?du=&page=2'), '/rentabilite?du=&page=2');
 
   for (const value of ['/rentabilite?retour=https://example.com', '/rentabilite?page=2&page=3', '/rentabilite#comptage', '/caisse']) {
     assert.equal(validateProfitabilityHref(value), '/rentabilite');

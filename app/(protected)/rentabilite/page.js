@@ -1,4 +1,5 @@
 import { getUserPermissions } from '../../../lib/access.js';
+import { todayInAlgiers } from '../../../lib/day-recap.js';
 import { PERMISSIONS } from '../../../lib/permissions.js';
 import {
   PROFITABILITY_READ_PERMISSION,
@@ -7,6 +8,7 @@ import {
 } from '../../../lib/profitability.js';
 import {
   buildProfitabilityHref,
+  getProfitabilityMonth,
   readProfitabilityState,
   toProfitabilityReportFilters,
 } from '../../../lib/profitability-navigation.js';
@@ -35,7 +37,8 @@ const ProfitabilityPage = async ({ searchParams }) => {
   const missingPermissions = PROFITABILITY_READ_PERMISSIONS.filter(
     (permission) => !permissions.includes(permission),
   );
-  const state = readProfitabilityState(query);
+  const today = todayInAlgiers();
+  const state = readProfitabilityState(query, { today });
   const report = missingPermissions.length === 0
     ? await getProfitabilityReport({
         ...toProfitabilityReportFilters(state),
@@ -53,7 +56,7 @@ const ProfitabilityPage = async ({ searchParams }) => {
         </div>
       </header>
       {report
-        ? <ProfitabilityReport currentHref={buildProfitabilityHref({ ...state, page: report.page })} report={report} state={state} />
+        ? <ProfitabilityReport currentHref={buildProfitabilityHref({ ...state, page: report.page })} currentMonth={getProfitabilityMonth(today)} report={report} state={state} />
         : (
           <div className={styles.denied} role='alert'>
             <strong>La rentabilité réunit des données protégées par d’autres droits.</strong>

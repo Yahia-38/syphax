@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import {
+  PROFITABILITY_PATHNAME,
   PROFITABILITY_STATUS_FILTERS,
   buildProfitabilityCountingHref,
   buildProfitabilityHref,
@@ -93,11 +94,13 @@ const PaginationLink = ({ children, disabled, href }) => disabled
   ? <span aria-disabled='true' className={styles.disabled}>{children}</span>
   : <Link href={href}>{children}</Link>;
 
-const ProfitabilityReport = ({ currentHref, report, state }) => {
+const ProfitabilityReport = ({ currentHref, currentMonth, report, state }) => {
   const { delivererOptions, page, pageSize, totalItems, totalPages, totals, tours } = report;
   const href = (changes = {}) => buildProfitabilityHref({ ...state, page, ...changes });
-  const filtered = Boolean(state.dateFrom || state.dateTo || state.delivererId || state.status || state.query);
-  const resetHref = buildProfitabilityHref();
+  // The current month is the default period, not a filter.
+  const onCurrentMonth = state.dateFrom === currentMonth.dateFrom && state.dateTo === currentMonth.dateTo;
+  const filtered = Boolean(!onCurrentMonth || state.delivererId || state.status || state.query);
+  const resetHref = PROFITABILITY_PATHNAME;
   const firstItem = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const lastItem = firstItem + tours.length - 1;
   const selectedDeliverer = delivererOptions.find(({ id }) => id === state.delivererId);
@@ -250,13 +253,15 @@ const ProfitabilityReport = ({ currentHref, report, state }) => {
         </>
       ) : (
         <div className={styles.empty}>
-          <h3>{filtered ? 'Aucune tournée pour ces critères' : 'Aucune tournée comptée'}</h3>
+          <h3>{filtered ? 'Aucune tournée pour ces critères' : 'Aucune tournée comptée ce mois-ci'}</h3>
           <p>
             {filtered
               ? 'Élargissez la période ou retirez un filtre.'
               : 'La rentabilité d’une tournée apparaît ici dès que son comptage est enregistré.'}
           </p>
-          {filtered && <Link href={resetHref}>Réinitialiser les filtres</Link>}
+          {filtered
+            ? <Link href={resetHref}>Réinitialiser les filtres</Link>
+            : <Link href={buildProfitabilityHref({ dateFrom: '', dateTo: '' })}>Voir toutes les périodes</Link>}
         </div>
       )}
 
