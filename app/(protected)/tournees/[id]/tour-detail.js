@@ -14,6 +14,13 @@ const TourNavigation = ({ tourId, returnHref, defaultTab, header, operations, pr
   const tab = readTab(query, TOUR_TABS, initialTab);
   const session = useEditingSession();
   const destinationRef = useRef(null);
+  // A link that names an operation card, such as the profitability page's
+  // link to the counting, lands on that card with its reading unfolded.
+  useEffect(() => {
+    const target = window.location.hash.slice(1);
+    const reading = target ? document.getElementById(target)?.querySelector('details') : null;
+    if (reading) reading.open = true;
+  }, []);
   useEffect(() => {
     const destination = destinationRef.current;
     if (!destination) return;

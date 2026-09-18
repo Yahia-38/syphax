@@ -187,7 +187,7 @@ const TourPage = async ({ params, searchParams }) => {
 
   return <TourDetail tourId={tour.id} returnHref={returnHref} defaultTab={readTourTab(query[TAB_PARAMETER], tour.status)} priority={priority}
     header={<header>
-      {(back.target === 'dayRecap' || canReadDeliverer) && <EditingLink className={styles.back} href={returnHref}>{back.label}</EditingLink>}
+      {(back.target !== 'deliverer' || canReadDeliverer) && <EditingLink className={styles.back} href={returnHref}>{back.label}</EditingLink>}
       <p className={styles.eyebrow}>Fiche tournée</p>
       <h1>{tour.reference}</h1>
       <p className={styles.meta}><span className={styles.badge} data-status={tour.status}>{formatTourStatus(tour.status)}</span><span>{tour.delivererName} · {tour.delivererCode}</span><span>Prévue le {formatTourDate(tour.plannedDate)}</span></p>

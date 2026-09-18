@@ -440,6 +440,13 @@ test('seules les tournées comptées entrent dans la sélection, filtrée par p�
   assert.deepEqual(counted.tours.map(({ id }) => id), [firstOctober.tourId]);
   assert.equal((await read({ status: 'LOADED' })).totalItems, 3);
 
+  // The deliverer choices come from counted tours only, whatever the filters.
+  assert.deepEqual(september.delivererOptions.map(({ id, name }) => ({ id, name })), [
+    { id: ahmed.delivererId.toString(), name: 'Ahmed' },
+    { id: brahimId.toString(), name: 'Brahim' },
+  ]);
+  assert.deepEqual(counted.delivererOptions, all.delivererOptions);
+
   assert.deepEqual(
     (await read({ query: 'septembre' })).tours.map(({ id }) => id),
     [lastSeptember.tourId],
